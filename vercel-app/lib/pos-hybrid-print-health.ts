@@ -2,6 +2,7 @@ export type PosHybridPrinterRow = { name: string; displayName: string; isDefault
 
 export type PosHybridPrintConfig = {
   silent?: boolean
+  rasterEscPos?: boolean
   deviceName?: string | null
   receiptDeviceName?: string | null
   kitchen1DeviceName?: string | null

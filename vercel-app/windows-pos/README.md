@@ -204,6 +204,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/merge-windows-pos-ru
 
 설정한 프린터 이름이 이 PC에 없으면(프린터 기종 교체 등) 0.1.20부터 영수증·주방 모두 **Windows 기본 프린터**로 무인쇄한다(영수증은 백그라운드로 받아 둔 프린터 목록으로 확인 — 인쇄 대기 없음). 교체 후에는 `Printer check`에서 새 이름으로 다시 저장하는 것을 권장.
 
+**래스터 인쇄 모드** `print.rasterEscPos: true` (0.1.21+, `Printer check` → 「이미지로 전송 (ESC/POS)」): 메모장은 되는데 POS 전표만 **백지**로 나오는 드라이버(예: AIMO QF300 + 범용 `POS-80 11.3.0.1`)용. 숨김 인쇄 창을 80mm × 8dots/mm(640)로 캡처 → 왼쪽 2mm부터 576 dots → `GS v 0` + 절단(`ESC J 24`, `GS V 66 0`)을 `scripts/send-thermal-escpos-raw-file.ps1`로 WinSpool RAW 전송. Android 앱 무음 인쇄와 같은 형식(`escpos-raster.js`). 켜면 드라이버 무인쇄·대화상자 폴백을 쓰지 않고, 절단도 같은 작업에 포함된다.
+
 적용(프로젝트 루트 `vercel-app/`에서):
 
 ```powershell

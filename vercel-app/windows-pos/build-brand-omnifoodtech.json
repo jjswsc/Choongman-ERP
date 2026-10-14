@@ -9,6 +9,7 @@
     "preload.js",
     "offline.html",
     "pos-shell-recovery.js",
+    "escpos-raster.js",
     "runtime-config.json",
     "linkpos-bridge-server.js",
     {

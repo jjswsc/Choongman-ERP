@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.20",
+    "version":  "0.1.21",
     "files":  [
                   {
                       "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "050c1e8a76831df638730f97b11c3ae78fec3faee952571009a3644e48aa5f51"
+                      "sha256":  "631d01eb1ec5e259ad30e6e78b2fcd7a6506fecf4e064f1291f2480f95f3f185"
                   },
                   {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-0.1.20-setup.exe",
-                      "name":  "cm-pos-windows-0.1.20-setup.exe",
-                      "sha256":  "050c1e8a76831df638730f97b11c3ae78fec3faee952571009a3644e48aa5f51"
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-0.1.21-setup.exe",
+                      "name":  "cm-pos-windows-0.1.21-setup.exe",
+                      "sha256":  "631d01eb1ec5e259ad30e6e78b2fcd7a6506fecf4e064f1291f2480f95f3f185"
                   }
               ],
-    "installerSha256":  "050c1e8a76831df638730f97b11c3ae78fec3faee952571009a3644e48aa5f51",
-    "publishedAtUtc":  "2026-10-14T03:41:13.7743591Z",
+    "installerSha256":  "631d01eb1ec5e259ad30e6e78b2fcd7a6506fecf4e064f1291f2480f95f3f185",
+    "publishedAtUtc":  "2026-10-14T04:24:53.0701457Z",
     "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
     "brand":  "omnifoodtech",
-    "notes":  "If the saved printer name is missing on this PC (e.g. printer model replaced), receipts and kitchen slips now print to the Windows default printer instead of silently failing (0.1.20)."
+    "notes":  "New Printer check option \u0027Send as image (ESC/POS)\u0027: fixes printers that output blank paper from POS while Notepad prints fine (0.1.21)."
 }

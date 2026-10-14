@@ -3252,4 +3252,6 @@ export const I18N_POS_LA: Record<string, string> = {
     posAndroidPrintTypeUsb: 'USB',
     posAndroidPrintUsbEmpty: 'ບໍ່ພົບເຄື່ອງພິມ USB.',
     posAndroidPrintUsbGrant: 'ອະນຸຍາດ USB',
+    posShellPrintDiagnosticsRasterHint: 'Turn on only if receipts or kitchen slips come out blank while Notepad prints fine. The POS sends the slip as an image straight to the printer, bypassing the Windows driver. Applies to all printers on this PC.',
+    posShellPrintDiagnosticsRasterLabel: 'Send as image (ESC/POS) (`rasterEscPos`)',
 }

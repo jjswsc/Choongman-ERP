@@ -20,6 +20,7 @@ import {
 
 type EditablePrintConfig = {
   silent: boolean
+  rasterEscPos: boolean
   deviceName: string
   receiptDeviceName: string
   kitchenDeviceName: string
@@ -28,7 +29,7 @@ type EditablePrintConfig = {
   kitchen3DeviceName: string
 }
 
-type EditableStringField = Exclude<keyof EditablePrintConfig, 'silent'>
+type EditableStringField = Exclude<keyof EditablePrintConfig, 'silent' | 'rasterEscPos'>
 
 type AutoRepairSummary = {
   next: EditablePrintConfig
@@ -90,6 +91,7 @@ function autoRepairDraft(params: {
 function normalizeConfigForEdit(cfg: PrintConfig | null): EditablePrintConfig {
   return {
     silent: cfg?.silent !== false,
+    rasterEscPos: cfg?.rasterEscPos === true,
     deviceName: String(cfg?.deviceName || '').trim(),
     receiptDeviceName: String(cfg?.receiptDeviceName || '').trim(),
     kitchenDeviceName: String(cfg?.kitchenDeviceName || '').trim(),
@@ -122,6 +124,8 @@ export function PosHybridPrintDiagnosticsButton() {
   const shell = typeof window !== 'undefined' ? window.cmPosShell : undefined
   const canRun = typeof shell?.listPrinters === 'function' && typeof shell?.getPrintConfig === 'function'
   const canSave = typeof shell?.savePrintConfig === 'function'
+  /** 구버전 Windows POS 셸은 rasterEscPos 를 돌려주지 않음 → 체크박스 숨김 */
+  const supportsRasterEscPos = typeof config?.rasterEscPos === 'boolean'
 
   const load = React.useCallback(async () => {
     if (!shell?.listPrinters || !shell?.getPrintConfig) return
@@ -148,7 +152,7 @@ export function PosHybridPrintDiagnosticsButton() {
   const onChangeField = React.useCallback(
     (key: keyof EditablePrintConfig, value: string | boolean) => {
       setDraft((prev) => {
-        if (key === 'silent') return { ...prev, silent: Boolean(value) }
+        if (key === 'silent' || key === 'rasterEscPos') return { ...prev, [key]: Boolean(value) }
         return { ...prev, [key]: String(value) }
       })
       setSaveMessage(null)
@@ -167,6 +171,7 @@ export function PosHybridPrintDiagnosticsButton() {
     try {
       const res = await shell.savePrintConfig({
         silent: draft.silent,
+        ...(supportsRasterEscPos ? { rasterEscPos: draft.rasterEscPos } : {}),
         deviceName: draft.deviceName,
         receiptDeviceName: draft.receiptDeviceName,
         kitchenDeviceName: draft.kitchenDeviceName,
@@ -189,7 +194,7 @@ export function PosHybridPrintDiagnosticsButton() {
     } finally {
       setSaving(false)
     }
-  }, [draft, shell, t])
+  }, [draft, shell, supportsRasterEscPos, t])
 
   const onAutoRepair = React.useCallback(() => {
     const repaired = autoRepairDraft({ draft, printers })
@@ -303,6 +308,17 @@ export function PosHybridPrintDiagnosticsButton() {
               : t('posShellPrintDiagnosticsSilentOff')
             : '-',
       },
+      ...(typeof config?.rasterEscPos === 'boolean'
+        ? [
+            {
+              label: t('posShellPrintDiagnosticsRasterLabel'),
+              code: 'rasterEscPos',
+              value: config.rasterEscPos
+                ? t('posShellPrintDiagnosticsSilentOn')
+                : t('posShellPrintDiagnosticsSilentOff'),
+            },
+          ]
+        : []),
       { label: t('posShellPrintDiagnosticsFieldDeviceName'), code: 'deviceName', value: config?.deviceName || '-' },
       { label: t('posShellPrintDiagnosticsFieldReceipt'), code: 'receiptDeviceName', value: config?.receiptDeviceName || '-' },
       { label: t('posShellPrintDiagnosticsFieldKitchenAny'), code: 'kitchenDeviceName', value: config?.kitchenDeviceName || '-' },
@@ -515,6 +531,22 @@ export function PosHybridPrintDiagnosticsButton() {
                 />
                 <span>{t('posShellPrintDiagnosticsSilentLabel')}</span>
               </label>
+              {supportsRasterEscPos ? (
+                <label className="flex items-start gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={draft.rasterEscPos}
+                    onChange={(e) => onChangeField('rasterEscPos', e.currentTarget.checked)}
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block font-medium text-foreground">{t('posShellPrintDiagnosticsRasterLabel')}</span>
+                    <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                      {t('posShellPrintDiagnosticsRasterHint')}
+                    </span>
+                  </span>
+                </label>
+              ) : null}
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {fieldDefs.map((f) => {
                   const current = String(draft[f.key] || '').trim()

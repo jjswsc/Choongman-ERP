@@ -1744,6 +1744,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posShellPrintDiagnosticsSilentOn: '사용',
     posShellPrintDiagnosticsSilentOff: '미사용',
     posShellPrintDiagnosticsSilentLabel: '무인쇄 우선 사용 (`silent`)',
+    posShellPrintDiagnosticsRasterLabel: '이미지로 전송 (ESC/POS) (`rasterEscPos`)',
+    posShellPrintDiagnosticsRasterHint:
+      '메모장은 정상 인쇄되는데 영수증·주방전이 백지로만 나올 때만 켜세요. Windows 드라이버를 거치지 않고 전표를 이미지로 프린터에 직접 보냅니다. 이 PC의 모든 프린터에 적용됩니다.',
     posShellPrintDiagnosticsPrinterDefaultBadge: '[기본]',
     posShellPrintDiagnosticsFieldDeviceName: '공통 기본 프린터',
     posShellPrintDiagnosticsFieldReceipt: '영수증 프린터',

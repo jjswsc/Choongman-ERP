@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.20",
+    "version":  "0.1.21",
     "files":  [
                   {
                       "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
                       "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "7062ffb90c6866e07fee8cb577e5c2959eb12caaf307b005f79d7fa2e18b8f62"
+                      "sha256":  "2dc0d0c57e0726b034baa1aebf3d14fde6034cf94811f2933f4d2b945dcffd60"
                   },
                   {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.20-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.20-setup.exe",
-                      "sha256":  "7062ffb90c6866e07fee8cb577e5c2959eb12caaf307b005f79d7fa2e18b8f62"
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.21-setup.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.21-setup.exe",
+                      "sha256":  "2dc0d0c57e0726b034baa1aebf3d14fde6034cf94811f2933f4d2b945dcffd60"
                   }
               ],
-    "installerSha256":  "7062ffb90c6866e07fee8cb577e5c2959eb12caaf307b005f79d7fa2e18b8f62",
-    "publishedAtUtc":  "2026-10-14T03:15:59.9396064Z",
+    "installerSha256":  "2dc0d0c57e0726b034baa1aebf3d14fde6034cf94811f2933f4d2b945dcffd60",
+    "publishedAtUtc":  "2026-10-14T04:25:39.5963096Z",
     "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
     "brand":  "choongman",
-    "notes":  "If the saved printer name is missing on this PC (e.g. printer model replaced), receipts and kitchen slips now print to the Windows default printer instead of silently failing (0.1.20)."
+    "notes":  "New Printer check option \u0027Send as image (ESC/POS)\u0027: fixes printers that output blank paper from POS while Notepad prints fine (0.1.21)."
 }

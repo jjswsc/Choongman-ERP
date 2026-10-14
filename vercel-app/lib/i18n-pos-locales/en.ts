@@ -1757,6 +1757,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posShellPrintDiagnosticsSilentOn: 'On',
     posShellPrintDiagnosticsSilentOff: 'Off',
     posShellPrintDiagnosticsSilentLabel: 'Prefer silent printing (`silent`)',
+    posShellPrintDiagnosticsRasterLabel: 'Send as image (ESC/POS) (`rasterEscPos`)',
+    posShellPrintDiagnosticsRasterHint:
+      'Turn on only if receipts or kitchen slips come out blank while Notepad prints fine. The POS sends the slip as an image straight to the printer, bypassing the Windows driver. Applies to all printers on this PC.',
     posShellPrintDiagnosticsPrinterDefaultBadge: '[Default]',
     posShellPrintDiagnosticsFieldDeviceName: 'Default shared printer',
     posShellPrintDiagnosticsFieldReceipt: 'Receipt printer',

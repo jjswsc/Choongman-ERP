@@ -39,6 +39,8 @@ declare global {
       }>
       getPrintConfig?: () => Promise<{
         silent: boolean
+        /** Windows POS 0.1.21+: 드라이버 대신 ESC/POS 이미지로 직접 전송 */
+        rasterEscPos?: boolean
         deviceName: string | null
         receiptDeviceName?: string | null
         kitchen1DeviceName?: string | null
@@ -48,6 +50,7 @@ declare global {
       } | null>
       savePrintConfig?: (payload: {
         silent?: boolean
+        rasterEscPos?: boolean
         deviceName?: string | null
         receiptDeviceName?: string | null
         kitchen1DeviceName?: string | null
@@ -59,6 +62,7 @@ declare global {
         reason?: string
         config?: {
           silent: boolean
+          rasterEscPos?: boolean
           deviceName: string | null
           receiptDeviceName?: string | null
           kitchen1DeviceName?: string | null

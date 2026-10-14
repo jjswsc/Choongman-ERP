@@ -19,6 +19,7 @@ function requireDeployPublicOrigin() {
 const { resolveDeployPublicOrigin } = requireDeployPublicOrigin();
 const DEPLOY_ORIGIN = resolveDeployPublicOrigin();
 const posShellRecovery = require("./pos-shell-recovery");
+const { renderHiddenWindowToEscPosRaster } = require("./escpos-raster");
 
 let linkposBridgeApi = null;
 try {
@@ -2462,6 +2463,33 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         };
       }
 
+      if (options.rasterEscPos) {
+        let rasterDevice = resolvedDevice || (isReceiptRole ? printerListCache.defaultName : "");
+        if (!rasterDevice) rasterDevice = await getWindowsDefaultPrinterName();
+        let raster;
+        try {
+          raster = await renderHiddenWindowToEscPosRaster(printWindow, Boolean(options.rasterCut));
+        } catch (e) {
+          raster = { ok: false, reason: `render_failed:${String(e && e.message ? e.message : e)}` };
+        }
+        const sent = raster.ok
+          ? await sendEscPosRawBytesForPrinter(rasterDevice, raster.data)
+          : { ok: false, reason: raster.reason };
+        if (sent.ok) htmlPrintFailureStreak = 0;
+        else htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
+        console.log(
+          `[cm-pos] printHtml raster role=${isReceiptRole ? "receipt" : "other"} totalMs=${Date.now() - t0} ok=${Boolean(sent.ok)} device=${rasterDevice || "(none)"} bytes=${raster.data ? raster.data.length : 0}`
+        );
+        return {
+          ok: Boolean(sent.ok),
+          reason: sent.ok ? "" : String(sent.reason || "raster_print_failed"),
+          printStage: "raster_escpos",
+          warnings,
+          usedDevice: rasterDevice || "",
+          cutIncluded: true,
+        };
+      }
+
       let printStage = "thermal";
       const thermalOpts = getThermalHtmlPrintOptions(resolvedDevice);
       // #region agent log
@@ -2746,6 +2774,7 @@ function getPrintConfigSnapshotForIpc() {
   );
   return {
     silent,
+    rasterEscPos: readConfigBool(p.rasterEscPos, false),
     deviceName: legacyDefault || null,
     receiptDeviceName: String(p.receiptDeviceName || "").trim() || legacyDefault || null,
     kitchen1DeviceName: String(p.kitchen1DeviceName || "").trim() || null,
@@ -2777,6 +2806,7 @@ function savePrintConfigSnapshotFromIpc(payload) {
   const nextPrint = {
     ...prevPrint,
     silent: readConfigBool(payload.silent, readConfigBool(prevPrint.silent, true)),
+    rasterEscPos: readConfigBool(payload.rasterEscPos, readConfigBool(prevPrint.rasterEscPos, false)),
     deviceName: normalizePrinterNameValue(payload.deviceName),
     receiptDeviceName: normalizePrinterNameValue(payload.receiptDeviceName),
     kitchenDeviceName: normalizePrinterNameValue(payload.kitchenDeviceName),
@@ -2819,6 +2849,64 @@ function getEscPosDrawerScriptPath() {
     return path.join(process.resourcesPath, "scripts", name);
   }
   return path.join(__dirname, "scripts", name);
+}
+
+function getEscPosRawFileScriptPath() {
+  const name = "send-thermal-escpos-raw-file.ps1";
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "scripts", name);
+  }
+  return path.join(__dirname, "scripts", name);
+}
+
+function isRasterEscPosEnabled() {
+  const p = readRuntimeConfig().print || {};
+  return readConfigBool(p.rasterEscPos, false);
+}
+
+function sendEscPosRawBytesForPrinter(printerName, data, opts = {}) {
+  return new Promise((resolve) => {
+    const name = String(printerName || "").trim();
+    if (!name) {
+      resolve({ ok: false, reason: "no_printer" });
+      return;
+    }
+    const script = getEscPosRawFileScriptPath();
+    if (!fs.existsSync(script)) {
+      console.warn("[cm-pos] ESC/POS raw script missing:", script);
+      resolve({ ok: false, reason: "no_script" });
+      return;
+    }
+    const tmpPath = path.join(
+      app.getPath("temp"),
+      `cm-pos-raster-${Date.now()}-${Math.random().toString(16).slice(2)}.bin`
+    );
+    try {
+      fs.writeFileSync(tmpPath, data);
+    } catch (e) {
+      resolve({ ok: false, reason: String(e && e.message ? e.message : e) });
+      return;
+    }
+    const timeoutMs = Math.max(3000, Math.min(60000, Math.trunc(Number(opts.timeoutMs) || 20000)));
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-PrinterName", name, "-FilePath", tmpPath],
+      { windowsHide: true, timeout: timeoutMs, maxBuffer: 256 * 1024 },
+      (err, _stdout, stderr) => {
+        try {
+          fs.unlinkSync(tmpPath);
+        } catch {
+          /* ignore */
+        }
+        if (err) {
+          console.warn("[cm-pos] ESC/POS raster send failed:", err.message, stderr ? String(stderr) : "");
+          resolve({ ok: false, reason: String(err.message || err) });
+          return;
+        }
+        resolve({ ok: true });
+      }
+    );
+  });
 }
 
 /** HTML 인쇄 후 RAW ESC/POS로 용지 절단 — 실패해도 인쇄 성공은 유지
@@ -3504,13 +3592,20 @@ if (!gotLock) {
           ? payload.printRole
           : undefined;
       const isReceiptRole = printRole === "receipt";
-      const { pendingPrintJob, ...result } = await printHtmlDocumentInHiddenWindow(html, {
+      const sendCut = shouldSendEscPosRawCut(payload);
+      const { pendingPrintJob, cutIncluded, ...result } = await printHtmlDocumentInHiddenWindow(html, {
         preferDialog: Boolean(payload?.preferDialog),
         printRole,
         kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
         deviceName: typeof payload?.deviceName === "string" ? payload.deviceName : "",
+        rasterEscPos: isRasterEscPosEnabled(),
+        rasterCut: sendCut,
       });
       const out = { ...result };
+      if (cutIncluded) {
+        if (result.ok && sendCut) out.cutOk = true;
+        return out;
+      }
       /**
        * 영수증 early-return(2.2s) 시 HTML 작업이 아직 스풀러에 안 들어갔을 수 있음.
        * 그때 RAW 절단을 먼저 보내면 절단이 전표보다 앞서 나가 "가끔 안 잘림"이 된다(QR 비트맵 전표에서 빈발).
@@ -3526,7 +3621,6 @@ if (!gotLock) {
         await delayMs(POST_HTML_PRINT_SPOOL_FLUSH_MS_RECEIPT);
         return true;
       };
-      const sendCut = shouldSendEscPosRawCut(payload);
       /** 스풀 안정화는 printHtmlDocumentInHiddenWindow 성공 시 이미 수행됨(절단 직전 중복 대기 제거) */
       if (result.ok && !Boolean(payload?.preferDialog) && sendCut) {
         try {

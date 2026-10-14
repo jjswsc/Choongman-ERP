@@ -2620,6 +2620,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posShellPrintDiagnosticsSilentOn: 'เปิด',
     posShellPrintDiagnosticsSilentOff: 'ปิด',
     posShellPrintDiagnosticsSilentLabel: 'ใช้โหมดพิมพ์เงียบก่อน (`silent`)',
+    posShellPrintDiagnosticsRasterLabel: 'ส่งเป็นรูปภาพ (ESC/POS) (`rasterEscPos`)',
+    posShellPrintDiagnosticsRasterHint:
+      'เปิดเฉพาะเมื่อใบเสร็จหรือใบครัวออกมาเป็นกระดาษเปล่า แต่ Notepad ปริ้นได้ปกติ ระบบจะส่งใบเป็นรูปภาพตรงไปที่เครื่องพิมพ์โดยไม่ผ่านไดรเวอร์ Windows ใช้กับทุกเครื่องพิมพ์ในเครื่องนี้',
     posShellPrintDiagnosticsPrinterDefaultBadge: '[ค่าเริ่มต้น]',
     posShellPrintDiagnosticsFieldDeviceName: 'เครื่องพิมพ์เริ่มต้น (ใช้ร่วม)',
     posShellPrintDiagnosticsFieldReceipt: 'เครื่องพิมพ์ใบเสร็จ',
