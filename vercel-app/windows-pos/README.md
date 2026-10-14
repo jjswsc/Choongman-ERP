@@ -202,6 +202,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/merge-windows-pos-ru
 - `print.kitchenDeviceName`: 주방 공통 폴백
 - `print.deviceName`: 레거시/전체 기본 폴백
 
+설정한 프린터 이름이 이 PC에 없으면(프린터 기종 교체 등) 0.1.20부터 영수증·주방 모두 **Windows 기본 프린터**로 무인쇄한다(영수증은 백그라운드로 받아 둔 프린터 목록으로 확인 — 인쇄 대기 없음). 교체 후에는 `Printer check`에서 새 이름으로 다시 저장하는 것을 권장.
+
 적용(프로젝트 루트 `vercel-app/`에서):
 
 ```powershell

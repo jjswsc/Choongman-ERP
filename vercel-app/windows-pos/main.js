@@ -2017,14 +2017,10 @@ async function checkForUpdateManual() {
 }
 
 function getQuickPrintOptions() {
-  const options = {
+  return {
     silent: DEFAULT_PRINT_SILENT,
     printBackground: true,
   };
-  if (DEFAULT_PRINT_DEVICE) {
-    options.deviceName = DEFAULT_PRINT_DEVICE;
-  }
-  return options;
 }
 
 function getDialogPrintOptions() {
@@ -2040,7 +2036,7 @@ function getDialogPrintOptions() {
  * @param {string} [resolvedDevice] runtime-config 매칭 프린터(있으면 대화상자에도 동일 기기 우선)
  */
 function getThermalHtmlDialogPrintOptions(resolvedDevice) {
-  const dev = String(resolvedDevice || "").trim() || DEFAULT_PRINT_DEVICE || "";
+  const dev = String(resolvedDevice || "").trim();
   const options = {
     silent: false,
     printBackground: true,
@@ -2058,8 +2054,12 @@ function getThermalHtmlDialogPrintOptions(resolvedDevice) {
   return options;
 }
 
-/** 영수증/주방전 HTML 전용: A4 기본값으로 축소되는 현상 방지 */
-function getThermalHtmlPrintOptions() {
+/**
+ * 영수증/주방전 HTML 전용: A4 기본값으로 축소되는 현상 방지
+ * deviceName은 매 인쇄 시 검증된 이름만 넣는다(시작 시 캡처한 DEFAULT_PRINT_DEVICE는 프린터 교체 후 stale).
+ * 비우면 Windows 기본 프린터.
+ */
+function getThermalHtmlPrintOptions(deviceName) {
   const options = {
     silent: DEFAULT_PRINT_SILENT,
     printBackground: true,
@@ -2076,9 +2076,8 @@ function getThermalHtmlPrintOptions() {
       height: THERMAL_PAGE_HEIGHT_600MM,
     },
   };
-  if (DEFAULT_PRINT_DEVICE) {
-    options.deviceName = DEFAULT_PRINT_DEVICE;
-  }
+  const dev = String(deviceName || "").trim();
+  if (dev) options.deviceName = dev;
   return options;
 }
 
@@ -2087,16 +2086,15 @@ function getThermalHtmlPrintOptions() {
  * 그때도 무인쇄를 유지하려면 pageSize/margins 없이 드라이버 기본 용지(보통 80mm)로 한 번 더 시도.
  * (기본 프린터가 A4면 레이아웃이 어긋날 수 있어, 운영 시에는 print.deviceName 으로 영수증기 지정 권장)
  */
-function getHtmlSilentDriverDefaultPrintOptions() {
+function getHtmlSilentDriverDefaultPrintOptions(deviceName) {
   const options = {
     silent: true,
     printBackground: true,
     scaleFactor: 100,
     landscape: false,
   };
-  if (DEFAULT_PRINT_DEVICE) {
-    options.deviceName = DEFAULT_PRINT_DEVICE;
-  }
+  const dev = String(deviceName || "").trim();
+  if (dev) options.deviceName = dev;
   return options;
 }
 
@@ -2266,16 +2264,69 @@ async function getPrintersAsyncWithTimeout(timeoutMs = 2500) {
   if (!mainWindow || mainWindow.isDestroyed()) return [];
   const ms = Math.max(200, Math.trunc(Number(timeoutMs) || 2500));
   try {
-    return await Promise.race([
+    const printers = await Promise.race([
       mainWindow.webContents.getPrintersAsync(),
       delayMs(ms).then(() => {
         throw new Error("getPrintersAsync_timeout");
       }),
     ]);
+    updatePrinterListCache(printers);
+    return printers;
   } catch (e) {
     console.warn("[cm-pos] getPrintersAsync:", String(e && e.message ? e.message : e));
     return [];
   }
+}
+
+/**
+ * 영수증 경로는 getPrintersAsync를 기다리지 않으므로, 백그라운드로 채운 목록으로만 설정 프린터명을 검증한다.
+ * (프린터 기종 교체 후 runtime-config에 옛 이름이 남으면 영수증이 존재하지 않는 큐로 가서 전부 미인쇄)
+ */
+const PRINTER_LIST_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
+let printerListCache = { names: [], defaultName: "", at: 0 };
+let printerListRefreshPromise = null;
+
+function updatePrinterListCache(printers) {
+  if (!Array.isArray(printers) || printers.length === 0) return;
+  const names = printers.map((p) => String((p && p.name) || "").trim()).filter(Boolean);
+  if (names.length === 0) return;
+  const def = printers.find((p) => p && p.isDefault);
+  printerListCache = {
+    names,
+    defaultName: def && def.name ? String(def.name).trim() : "",
+    at: Date.now(),
+  };
+}
+
+function refreshPrinterListCacheInBackground(force = false) {
+  if (printerListRefreshPromise) return;
+  if (!force && printerListCache.at && Date.now() - printerListCache.at < PRINTER_LIST_CACHE_MAX_AGE_MS) return;
+  printerListRefreshPromise = getPrintersAsyncWithTimeout(10000)
+    .catch(() => [])
+    .finally(() => {
+      printerListRefreshPromise = null;
+    });
+}
+
+/**
+ * 캐시에 없는 설정 프린터명이면 "" (호출부에서 Windows 기본 프린터 사용). 캐시가 아직 비었으면 설정명 신뢰.
+ * @param {string[]} [warnings]
+ */
+function dropStalePrinterNameByCache(name, warnings) {
+  const n = String(name || "").trim();
+  if (!n) return "";
+  const names = printerListCache.names;
+  if (names.length === 0) {
+    refreshPrinterListCacheInBackground(true);
+    return n;
+  }
+  if (names.includes(n)) return n;
+  const ci = names.find((x) => x.toLowerCase() === n.toLowerCase());
+  if (ci) return ci;
+  refreshPrinterListCacheInBackground(true);
+  if (Array.isArray(warnings)) warnings.push(`configured device not found: ${n}`);
+  console.warn(`[cm-pos] configured printer not found on this PC, using Windows default: ${n}`);
+  return "";
 }
 
 /**
@@ -2304,8 +2355,11 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
     try {
       const warnings = [];
       let resolvedDevice = resolveThermalDeviceForHtmlPrintSync(options);
-      /** 영수증: getPrintersAsync 스킵 — 설정명 그대로 사용(미설정이면 deviceName 없이 무인쇄) */
-      if (!isReceiptRole) {
+      /** 영수증: getPrintersAsync 대기 없이 캐시로만 검증(없는 이름이면 deviceName 없이 Windows 기본으로 무인쇄) */
+      if (isReceiptRole) {
+        resolvedDevice = dropStalePrinterNameByCache(resolvedDevice, warnings);
+        refreshPrinterListCacheInBackground();
+      } else {
         if (!resolvedDevice) {
           try {
             resolvedDevice = await getWindowsDefaultPrinterName();
@@ -2409,8 +2463,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       }
 
       let printStage = "thermal";
-      const thermalOpts = getThermalHtmlPrintOptions();
-      if (resolvedDevice) thermalOpts.deviceName = resolvedDevice;
+      const thermalOpts = getThermalHtmlPrintOptions(resolvedDevice);
       // #region agent log
       debugLog("H1_silent_flag", "windows-pos/main.js:printHtmlDocumentInHiddenWindow:thermal_opts", "thermal_options", {
         silent: Boolean(thermalOpts.silent),
@@ -2454,8 +2507,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
       // #endregion
       if (!r.success && DEFAULT_PRINT_SILENT && !isReceiptRole) {
         printStage = "silent_driver_default";
-        const driverDefaultOpts = getHtmlSilentDriverDefaultPrintOptions();
-        if (resolvedDevice) driverDefaultOpts.deviceName = resolvedDevice;
+        const driverDefaultOpts = getHtmlSilentDriverDefaultPrintOptions(resolvedDevice);
         r = await printWebContentsPromise(printWindow.webContents, driverDefaultOpts);
         let driverAttempts = 1;
         while (!r.success && driverAttempts <= silentRetryMax) {
@@ -2488,7 +2540,7 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
           printWindow.webContents,
           getThermalHtmlDialogPrintOptions(resolvedDevice)
         );
-        if (!DEFAULT_PRINT_DEVICE) {
+        if (!resolvedDevice) {
           warnings.push("print dialog fallback used without explicit thermal device");
         }
       }
@@ -2511,7 +2563,10 @@ async function printHtmlDocumentInHiddenWindow(htmlString, options = {}) {
         htmlPrintFailureStreak = Math.min(htmlPrintFailureStreak + 1, 6);
       }
       let usedDeviceOut = resolvedDevice || "";
-      /** 영수증은 getPrintersAsync 금지 — 미설정이면 빈 문자열(무인쇄는 OS 기본으로 이미 성공했을 수 있음) */
+      /** 영수증은 getPrintersAsync 금지 — 캐시된 기본 프린터명만(없으면 빈 문자열, 절단 생략) */
+      if (isReceiptRole && !String(usedDeviceOut).trim() && printStage !== "dialog") {
+        usedDeviceOut = printerListCache.defaultName || "";
+      }
       if (
         !isReceiptRole &&
         r.success &&
@@ -2668,7 +2723,7 @@ async function getWindowsDefaultPrinterName() {
 
 /** runtime-config에 deviceName이 없을 때 Windows 무인쇄가 실패·대화상자로 떨어지는 경우가 많아 OS 기본 프린터를 사용 */
 async function resolvePrintDeviceNameForJob() {
-  const configured = resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" });
+  const configured = dropStalePrinterNameByCache(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" }));
   if (configured) return configured;
   return getWindowsDefaultPrinterName();
 }
@@ -3092,6 +3147,7 @@ function createWindow() {
         clearPosMainLoadRetryTimer();
         clearPosMainLoadWatchdog();
         schedulePosDomBlankWatchdog();
+        refreshPrinterListCacheInBackground();
       }
     } catch {
       /* ignore */
@@ -3335,9 +3391,12 @@ if (!gotLock) {
       }
       /**
        * getPrintersAsync(기본 프린터 조회) 금지 — 네트워크 프린터 PC에서 수 초~10초 지연.
-       * runtime-config의 receiptDeviceName(또는 legacy deviceName)만 사용.
+       * runtime-config의 receiptDeviceName(또는 legacy deviceName), 이 PC에 없으면 캐시된 Windows 기본 프린터.
        */
-      const device = String(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" }) || "").trim();
+      const device =
+        dropStalePrinterNameByCache(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" })) ||
+        printerListCache.defaultName ||
+        "";
       if (!device) {
         return { ok: false, reason: "no_printer" };
       }
@@ -3471,10 +3530,14 @@ if (!gotLock) {
       /** 스풀 안정화는 printHtmlDocumentInHiddenWindow 성공 시 이미 수행됨(절단 직전 중복 대기 제거) */
       if (result.ok && !Boolean(payload?.preferDialog) && sendCut) {
         try {
-          let device = String(result.usedDevice || "").trim() || resolveThermalDeviceForHtmlPrintSync({
-            printRole,
-            kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
-          });
+          let device =
+            String(result.usedDevice || "").trim() ||
+            dropStalePrinterNameByCache(
+              resolveThermalDeviceForHtmlPrintSync({
+                printRole,
+                kitchenStation: Number.isFinite(kitchenStation) ? Math.min(3, Math.max(1, kitchenStation)) : undefined,
+              })
+            );
           /** 영수증: getPrintersAsync(기본프린터 조회)로 절단을 지연시키지 않음 */
           if (!device && !isReceiptRole) {
             device = String((await resolvePrintDeviceNameForJob()) || "").trim();

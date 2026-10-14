@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.15",
+    "version":  "0.1.20",
     "files":  [
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
                       "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "0da9938e5232504f0e573700652e4195e26dd131bafd2036fbb6f9b74df8c87a"
+                      "sha256":  "050c1e8a76831df638730f97b11c3ae78fec3faee952571009a3644e48aa5f51"
                   },
                   {
-                      "url":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-0.1.15-setup.exe",
-                      "name":  "cm-pos-windows-0.1.15-setup.exe",
-                      "sha256":  "0da9938e5232504f0e573700652e4195e26dd131bafd2036fbb6f9b74df8c87a"
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-0.1.20-setup.exe",
+                      "name":  "cm-pos-windows-0.1.20-setup.exe",
+                      "sha256":  "050c1e8a76831df638730f97b11c3ae78fec3faee952571009a3644e48aa5f51"
                   }
               ],
-    "installerSha256":  "0da9938e5232504f0e573700652e4195e26dd131bafd2036fbb6f9b74df8c87a",
-    "publishedAtUtc":  "2026-07-27T04:28:45.9076653Z",
-    "installerUrl":  "https://app.omnifoodtech.com/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
+    "installerSha256":  "050c1e8a76831df638730f97b11c3ae78fec3faee952571009a3644e48aa5f51",
+    "publishedAtUtc":  "2026-10-14T03:41:13.7743591Z",
+    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
     "brand":  "omnifoodtech",
-    "notes":  "Cash drawer ESC/POS script packaging fix (0.1.15). Reinstall required for drawer open."
+    "notes":  "If the saved printer name is missing on this PC (e.g. printer model replaced), receipts and kitchen slips now print to the Windows default printer instead of silently failing (0.1.20)."
 }

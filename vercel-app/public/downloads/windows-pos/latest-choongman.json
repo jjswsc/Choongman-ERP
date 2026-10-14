@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.19",
+    "version":  "0.1.20",
     "files":  [
                   {
                       "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
                       "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "30cd00e24b0f12b645964e99272e981b86feed469fbf0c49c5edeee82c016b2d"
+                      "sha256":  "7062ffb90c6866e07fee8cb577e5c2959eb12caaf307b005f79d7fa2e18b8f62"
                   },
                   {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.19-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.19-setup.exe",
-                      "sha256":  "30cd00e24b0f12b645964e99272e981b86feed469fbf0c49c5edeee82c016b2d"
+                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.20-setup.exe",
+                      "name":  "cm-pos-windows-choongman-0.1.20-setup.exe",
+                      "sha256":  "7062ffb90c6866e07fee8cb577e5c2959eb12caaf307b005f79d7fa2e18b8f62"
                   }
               ],
-    "installerSha256":  "30cd00e24b0f12b645964e99272e981b86feed469fbf0c49c5edeee82c016b2d",
-    "publishedAtUtc":  "2026-10-09T14:23:46.8083659Z",
-    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.19-setup.exe",
+    "installerSha256":  "7062ffb90c6866e07fee8cb577e5c2959eb12caaf307b005f79d7fa2e18b8f62",
+    "publishedAtUtc":  "2026-10-14T03:15:59.9396064Z",
+    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
     "brand":  "choongman",
-    "notes":  "QR/hall slip paper cut no longer fires before the slip prints (fixes intermittent no-cut)."
+    "notes":  "If the saved printer name is missing on this PC (e.g. printer model replaced), receipts and kitchen slips now print to the Windows default printer instead of silently failing (0.1.20)."
 }
