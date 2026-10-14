@@ -28,6 +28,7 @@ import { rollbackPosOrderCouponRedemptions, redeemMemberCouponIssuesForPaidOrder
 import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 import { notifyMemberPortalPickupReady } from '@/lib/member-portal-pickup-notify'
 import { POS_PAID_STATUS_DOWNGRADE_BLOCKED_MESSAGE } from '@/lib/pos-takeout-pack-status'
+import { createServerTiming } from '@/lib/server-timing'
 import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
 import {
   shouldRunPosAccountingSideEffectsForStore,
@@ -74,6 +75,7 @@ function hasPositivePaymentAmount(order: {
 /** POS 주문 상태 변경 */
 export async function POST(req: NextRequest) {
   const headers = posApiCorsHeaders()
+  const timing = createServerTiming()
 
   try {
     const authResult = await requireAuth(req, 'any')
@@ -82,6 +84,7 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth!
+    timing.mark('auth')
     let body: Record<string, unknown>
     try {
       body = (await req.json()) as Record<string, unknown>
@@ -351,7 +354,9 @@ export async function POST(req: NextRequest) {
       patch.paid_at = new Date().toISOString()
     }
 
+    timing.mark('load')
     await supabaseUpdate('pos_orders', id, patch)
+    timing.mark('update')
 
     await writePosOrderAuditTrail({
       orderId: id,
@@ -379,6 +384,7 @@ export async function POST(req: NextRequest) {
       },
       reason: memoAppend || null,
     })
+    timing.mark('audit')
 
     const storeCode = String(prev?.store_code ?? '').trim()
     const salesDate = await resolvePosBusinessAccountingDateForStore(
@@ -405,6 +411,7 @@ export async function POST(req: NextRequest) {
           console.error('processPosStockDeduction:', e)
         }
       }
+      timing.mark('stock')
 
       const total = Number(prev?.total || 0)
       const vat = Number(prev?.vat || 0)
@@ -424,6 +431,7 @@ export async function POST(req: NextRequest) {
       } catch (depApplyErr) {
         console.error('updatePosOrderStatus deposit apply:', depApplyErr)
       }
+      timing.mark('deposit')
       if (allowAccounting) {
         try {
           const alreadyPosted = await hasJournalForSource('pos_order', id)
@@ -465,6 +473,7 @@ export async function POST(req: NextRequest) {
           pushFailedStep(failedSideEffects, 'vat_draft')
           console.error('updatePosOrderStatus vat draft:', vatErr)
         }
+        timing.mark('accounting')
       }
     } else if (isPosReversalStatus(nextStatus) && isPosPaidLikeStatus(prevStatus)) {
       try {
@@ -546,6 +555,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (failedSideEffects.length > 0) {
+      timing.apply(headers)
       return NextResponse.json(
         {
           success: false,
@@ -579,11 +589,13 @@ export async function POST(req: NextRequest) {
       } catch (couponRedeemErr) {
         console.error('updatePosOrderStatus coupon redeem:', couponRedeemErr)
       }
+      timing.mark('coupon')
       try {
         await ensurePosOrderLoyaltyApplied(id)
       } catch (loyaltyErr) {
         console.error('updatePosOrderStatus loyalty:', loyaltyErr)
       }
+      timing.mark('loyalty')
     }
 
     if (
@@ -597,8 +609,10 @@ export async function POST(req: NextRequest) {
       } catch (qrCloseErr) {
         console.error('updatePosOrderStatus qr session close:', qrCloseErr)
       }
+      timing.mark('qr_session')
     }
 
+    timing.apply(headers)
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('updatePosOrderStatus:', e)

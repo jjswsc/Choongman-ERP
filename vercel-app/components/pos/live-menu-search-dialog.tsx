@@ -433,6 +433,8 @@ export function LiveMenuSearchDialog({
         return
       }
       setServingBusyMap((prev) => ({ ...prev, [key]: true }))
+      setServingMap((prev) => ({ ...prev, [key]: true }))
+      let serverMarked = false
       try {
         const res = await markPosOrderItemServed({
           id: target.orderId,
@@ -440,10 +442,11 @@ export function LiveMenuSearchDialog({
           served: true,
         })
         if (!res.success) {
+          setServingMap((prev) => ({ ...prev, [key]: false }))
           await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
           return
         }
-        setServingMap((prev) => ({ ...prev, [key]: true }))
+        serverMarked = true
         if (
           Number(res.totalCount ?? 0) > 0 &&
           Number(res.servedCount ?? 0) >= Number(res.totalCount ?? 0)
@@ -459,6 +462,7 @@ export function LiveMenuSearchDialog({
         if (onServedUpdated) await onServedUpdated()
         await loadAll()
       } catch (e) {
+        if (!serverMarked) setServingMap((prev) => ({ ...prev, [key]: false }))
         await appAlert(String(e))
       } finally {
         setServingBusyMap((prev) => ({ ...prev, [key]: false }))

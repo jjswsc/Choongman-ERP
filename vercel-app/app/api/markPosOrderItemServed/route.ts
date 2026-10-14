@@ -7,6 +7,7 @@ import {
 } from '@/lib/pos-set-children-state'
 import { reserveRequestIdempotencyKey } from '@/lib/request-idempotency'
 import { posApiCorsHeaders, requirePosOrderWriteAuth } from '@/lib/pos-api-write-auth'
+import { createServerTiming } from '@/lib/server-timing'
 
 function nowBangkokIso(): string {
   const dtf = new Intl.DateTimeFormat('sv-SE', {
@@ -33,6 +34,7 @@ function nowBangkokIso(): string {
 /** POS 주문 라인별 서빙/취소 상태 저장 (items_json servedAt/cancelledAt 등) */
 export async function POST(req: NextRequest) {
   const headers = posApiCorsHeaders()
+  const timing = createServerTiming()
 
   try {
     let body: Record<string, unknown>
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
 
     const authGate = await requirePosOrderWriteAuth(req, id, headers)
     if (!authGate.ok) return authGate.response
+    timing.mark('auth')
 
     if (idempotencyKey) {
       const duplicated = await reserveRequestIdempotencyKey({
@@ -76,6 +79,7 @@ export async function POST(req: NextRequest) {
       `id=eq.${id}`,
       { limit: 1, select: 'id,status,items_json' }
     )) as { id?: number; status?: string; items_json?: string }[] | null
+    timing.mark('load')
 
     if (!rows?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
@@ -213,6 +217,8 @@ export async function POST(req: NextRequest) {
     await supabaseUpdate('pos_orders', id, {
       items_json: JSON.stringify(items),
     })
+    timing.mark('update')
+    timing.apply(headers)
 
     const activeItems = items.filter((it) => !String(it?.cancelledAt ?? '').trim())
     const servedCount = activeItems.filter((it) => Boolean(String(it?.servedAt ?? '').trim())).length

@@ -38,6 +38,7 @@ import {
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
 import { mapPosOrderAdvanceFieldsFromRow } from '@/lib/pos-deposit-domain'
+import { createServerTiming } from '@/lib/server-timing'
 
 async function selectPosOrders(
   filter: string,
@@ -242,6 +243,7 @@ async function loadPromoComponentMenuMap(
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const timing = createServerTiming()
   const saasBlocked = await verifyBearerWithSaasGate(request, '/api/getPosOrders')
   if (saasBlocked.blocked) {
     saasBlocked.blocked.headers.set('Access-Control-Allow-Origin', '*')
@@ -279,6 +281,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([], { headers })
   }
   const caller = await resolveBearerCaller(request)
+  timing.mark('auth')
   let effectiveStoreCode = requestedStore
   if (caller && !isOfficeRole(caller.role)) {
     const own = caller.store.trim()
@@ -783,6 +786,8 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+    timing.mark('query')
+    timing.apply(headers)
     if (pollLight && sinceId != null && sinceId > 0 && list.length === 0) {
       headers.set('X-Pos-Orders-Count', '0')
       return new NextResponse(null, { status: 204, headers })

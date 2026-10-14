@@ -3,7 +3,7 @@
 > 이 파일은 `npm run api:inventory`로 생성합니다. 직접 수정하지 마세요.
 > 신규 라우트 규칙: [`.cursor/rules/api-route-conventions.mdc`](../../.cursor/rules/api-route-conventions.mdc) · 검사: `npm run api:check`
 
-- 라우트 수: **899**
+- 라우트 수: **900**
 - 도메인 그룹 수: **177** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
 - 외부 호출(웹훅·크론): **22** — 경로 변경 금지
 
@@ -36,7 +36,7 @@
 
 ## 도메인별
 
-- [pos](#pos) (126)
+- [pos](#pos) (127)
 - [member-portal](#member-portal) (56)
 - [interior](#interior) (41)
 - [store](#store) (26)
@@ -279,6 +279,7 @@
 | `/api/pos/kbank/void-for-order` | OPTIONS, POST |  |
 | `/api/pos/kbank/void-payment` | OPTIONS, POST |  |
 | `/api/pos/member-tier-rates` | GET |  |
+| `/api/pos/perf-beacon` | POST |  |
 | `/api/posAdvanceCheckIn` | POST |  |
 | `/api/posBusinessDaySettings` | GET, POST |  |
 | `/api/posCancelReasonSummary` | GET |  |
