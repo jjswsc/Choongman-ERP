@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **755**개 · 접두어 그룹 **96**개
+- `sql/` 최상위: **758**개 · 접두어 그룹 **96**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **62**개
 
-<details><summary><code>pos_*</code> (214)</summary>
+<details><summary><code>pos_*</code> (217)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -283,6 +283,9 @@
 - [`pos_qr_table_order_omni_pilot.sql`](../sql/pos_qr_table_order_omni_pilot.sql)
 - [`pos_qr_table_order_ops_upgrade.sql`](../sql/pos_qr_table_order_ops_upgrade.sql)
 - [`pos_qr_table_order_print_brand.sql`](../sql/pos_qr_table_order_print_brand.sql)
+- [`pos_queue_tickets_01_table.sql`](../sql/pos_queue_tickets_01_table.sql) — log
+- [`pos_queue_tickets_02_enable_union_mall.sql`](../sql/pos_queue_tickets_02_enable_union_mall.sql) — log
+- [`pos_queue_tickets_03_verify.sql`](../sql/pos_queue_tickets_03_verify.sql) — verify
 - [`pos_sales_payment_tender_gap_diagnostic.sql`](../sql/pos_sales_payment_tender_gap_diagnostic.sql) — diagnose
 - [`pos_settlements_align_app_columns.sql`](../sql/pos_settlements_align_app_columns.sql)
 - [`pos_settlements_bootstrap.sql`](../sql/pos_settlements_bootstrap.sql)
