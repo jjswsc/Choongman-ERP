@@ -975,6 +975,7 @@ export async function POST(req: NextRequest) {
           memo,
           guestCount: guest_count,
           ...(delivery_app_code ? { deliveryAppCode: delivery_app_code } : {}),
+          ...(idempotencyBody ? { localOrderNo: idempotencyBody.slice(0, 120) } : {}),
         },
       })
       if (deferNonCriticalAck) {

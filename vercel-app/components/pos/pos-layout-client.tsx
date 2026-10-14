@@ -20,6 +20,7 @@ import { useT } from "@/lib/i18n"
 import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { PosBusinessDayHydrate } from "@/components/pos/pos-business-day-hydrate"
 import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-host"
+import { PosOfflineQueueSyncRunner } from "@/components/pos/pos-offline-queue-sync-runner"
 
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
 import { PosStoreProvider } from "@/lib/pos-store-provider"
@@ -489,6 +490,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       <PosDrawerPinProvider>
       <PosBusinessDayHydrate />
       <PosMainDeviceSyncHost />
+      <PosOfflineQueueSyncRunner />
       {topBarRevealStrip}
       {showTopChrome(effectiveShowPosHeader) ? (
         <header

@@ -14,6 +14,8 @@ import {
   type PosMainDeviceAutoprintCtx,
 } from '@/lib/pos-main-device-autoprint'
 import { printQrTableThermalSlip } from '@/lib/print-qr-table-thermal-slip'
+import { wasPosQueuedOrderLocallyPrinted } from '@/lib/offline/pos-local-order-records'
+import { claimKitchenPrintBacklogJob, getKitchenPrintBacklogCount } from '@/lib/api-client/pos-kitchen-backlog'
 import { tableQrPayloadFromPrintJob } from '@/lib/pos-table-qr-print-job'
 import {
   getKitchenPrintWorkerId,
@@ -26,6 +28,12 @@ import {
   resolveKitchenPrintJobPollMs,
 } from '@/lib/pos-kitchen-print-job-worker'
 import { subscribePosPrintJobsInsert } from '@/lib/supabase-client'
+
+const KITCHEN_BACKLOG_FIRST_CHECK_DELAY_MS = 8_000
+const KITCHEN_BACKLOG_PROMPT_COOLDOWN_MS = 10 * 60 * 1000
+const KITCHEN_BACKLOG_PRINT_MAX = 30
+/** 탭 리마운트마다 다시 묻지 않게 모듈 단위로 유지 */
+let lastBacklogPromptAt = 0
 
 async function printClaimedKitchenJob(
   job: PosKitchenPrintJobClaim,
@@ -45,6 +53,12 @@ async function printClaimedKitchenJob(
       jobId: job.id,
       action: String(payload?.action ?? ''),
     })
+    return
+  }
+  const localOrderNo = String(payload?.localOrderNo ?? '').trim()
+  if (String(payload?.action ?? '') === 'create_order' && wasPosQueuedOrderLocallyPrinted(localOrderNo)) {
+    await markKitchenPrintJob({ jobId: job.id, status: 'printed' })
+    ctx.logPosPrintDebug?.('kitchen_job_skip_local_printed_queue', { orderId, jobId: job.id, localOrderNo })
     return
   }
   const dedupeKey = resolveKitchenPrintJobDedupeKey(orderId, payload)
@@ -168,6 +182,8 @@ export function usePosKitchenPrintJobWorker(opts: {
   kitchenOnOrder: boolean
   autoprintCtxRef: MutableRefObject<PosMainDeviceAutoprintCtx | null>
   pauseIntervalPollRef?: MutableRefObject<boolean>
+  /** 8분 넘게 밀린 주방 job 이 있을 때 직원 확인 — true 면 오래된 순으로 출력 */
+  confirmKitchenBacklogRef?: MutableRefObject<((count: number) => Promise<boolean>) | null>
 }): () => void {
   const drainNowRef = useRef<() => void>(() => {})
 
@@ -280,9 +296,41 @@ export function usePosKitchenPrintJobWorker(opts: {
       document.addEventListener('visibilitychange', onVisibility)
     }
 
+    let backlogBusy = false
+    const checkKitchenBacklog = async () => {
+      const confirmBacklog = opts.confirmKitchenBacklogRef?.current
+      if (cancelled || backlogBusy || !opts.kitchenOnOrder || !confirmBacklog) return
+      if (opts.pauseIntervalPollRef?.current) return
+      if (Date.now() - lastBacklogPromptAt < KITCHEN_BACKLOG_PROMPT_COOLDOWN_MS) return
+      backlogBusy = true
+      try {
+        const count = await getKitchenPrintBacklogCount(opts.storeCode)
+        if (cancelled || count <= 0) return
+        lastBacklogPromptAt = Date.now()
+        if (!(await confirmBacklog(count))) return
+        const ctx = opts.autoprintCtxRef.current
+        if (!ctx) return
+        for (let i = 0; i < Math.min(count, KITCHEN_BACKLOG_PRINT_MAX); i += 1) {
+          if (cancelled) return
+          const job = await claimKitchenPrintBacklogJob({ storeCode: opts.storeCode, workerId })
+          if (!job?.id) break
+          await printClaimedKitchenJob(job, ctx)
+        }
+      } catch (e) {
+        console.error('kitchen print backlog:', e)
+      } finally {
+        backlogBusy = false
+      }
+    }
+    const backlogStartTimer = window.setTimeout(() => void checkKitchenBacklog(), KITCHEN_BACKLOG_FIRST_CHECK_DELAY_MS)
+    const onOnline = () => void checkKitchenBacklog()
+    window.addEventListener('online', onOnline)
+
     return () => {
       cancelled = true
       drainNowRef.current = () => {}
+      window.clearTimeout(backlogStartTimer)
+      window.removeEventListener('online', onOnline)
       window.clearTimeout(safetyPollTimer)
       tableQrLane.dispose()
       kitchenLane.dispose()
@@ -298,6 +346,7 @@ export function usePosKitchenPrintJobWorker(opts: {
     opts.kitchenOnOrder,
     opts.autoprintCtxRef,
     opts.pauseIntervalPollRef,
+    opts.confirmKitchenBacklogRef,
   ])
 
   return useCallback(() => {

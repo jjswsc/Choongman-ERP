@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { claimQueuedKitchenPrintJob } from '@/lib/pos-print-job-queue'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
-/** 주방 인쇄 큐에서 다음 작업 1건 claim */
+/** 메인 POS 주방 인쇄 큐에서 1건 claim */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -16,7 +16,11 @@ export async function POST(req: NextRequest) {
     const workerId =
       String(body.workerId ?? '').trim() ||
       `${String(auth?.store ?? storeCode).trim()}:${String(auth?.name ?? 'worker').trim()}`
-    const job = await claimQueuedKitchenPrintJob({ storeCode, workerId })
+    const job = await claimQueuedKitchenPrintJob({
+      storeCode,
+      workerId,
+      includeBacklog: body.includeBacklog === true,
+    })
     return NextResponse.json({ success: true, job }, { headers })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

@@ -6843,6 +6843,9 @@ orderItemQty: 'Qty',
   offlineBannerRemoveDeadLetter: 'Clear alert',
   offlineBannerRemoveDeadLetterConfirm:
     'Clear this alert? The order may not be on the server — check at the store if needed. Continue?',
+  offlineBannerDeadOrderPrintFirst:
+    '{count} order(s) could not be sent to the server. Print their contents on the receipt printer before clearing? (Re-enter them from the printout.)',
+  offlineBannerDeadOrderPrintTitle: 'Unsent orders (re-enter)',
   offlineBannerSyncMetaLine: 'Last successful send {time} | +{synced} / !{failed}',
   offlineBannerLastError: 'Latest error: {reason}',
   offlineBannerViewQueueDetails: 'View pending requests',

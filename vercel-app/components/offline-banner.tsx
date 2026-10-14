@@ -379,12 +379,26 @@ export function OfflineBanner({
               size="sm"
               className="h-7 gap-1 border-destructive/40 text-destructive hover:bg-destructive/10"
               onClick={() => {
-                const ok = window.confirm(t('offlineBannerRemoveDeadLetterConfirm'))
-                if (!ok) return
-                void removeDeadLetterFromQueue().then(() => {
+                void (async () => {
+                  /** 전송 실패 주문은 삭제하면 매출·주방 기록이 사라짐 — 먼저 종이로 남길 기회 */
+                  const deadPrint = await import('@/lib/offline/print-dead-queued-orders').catch(() => null)
+                  const deadOrders = deadPrint ? await deadPrint.countDeadQueuedOrders().catch(() => 0) : 0
+                  if (deadPrint && deadOrders > 0) {
+                    const printFirst = window.confirm(
+                      t('offlineBannerDeadOrderPrintFirst').split('{count}').join(String(deadOrders))
+                    )
+                    if (printFirst) {
+                      await deadPrint.printDeadQueuedOrders(t('offlineBannerDeadOrderPrintTitle')).catch((e) =>
+                        console.error('print dead queued orders:', e)
+                      )
+                    }
+                  }
+                  const ok = window.confirm(t('offlineBannerRemoveDeadLetterConfirm'))
+                  if (!ok) return
+                  await removeDeadLetterFromQueue()
                   refreshPending()
                   onSync?.()
-                })
+                })()
               }}
             >
               {t('offlineBannerRemoveDeadLetter')}

@@ -166,6 +166,7 @@ import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/po
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
 import { recordPosPerf } from '@/lib/pos-perf-log'
+import { wasPosQueuedOrderLocallyPrintedByHash } from '@/lib/offline/pos-local-order-records'
 import {
   getPosDeliveryPlatformName,
   isApiInboundDeliveryOrderMemo,
@@ -5025,7 +5026,10 @@ export default function PosTerminalPage() {
         })
         return
       }
-      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
+      if (
+        consumeSuppressMainPosAutoPrintForQueuedSync(orderId) ||
+        wasPosQueuedOrderLocallyPrintedByHash(row.idempotency_key_hash)
+      ) {
         seenOrderIdsRef.current.add(orderId)
         bumpLastSeenOrderId(orderId)
         logPosPrintDebug('realtime_insert_suppress_queued_sync', { orderId })

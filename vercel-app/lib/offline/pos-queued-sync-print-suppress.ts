@@ -7,6 +7,12 @@
  *   메인 POS Realtime/폴링이 정상 인쇄를 수행하도록 한다.
  */
 
+import {
+  markPosQueuedOrderLocallyPrinted,
+  rememberPosLocalOrderServerId,
+  wasPosQueuedOrderLocallyPrinted,
+} from '@/lib/offline/pos-local-order-records'
+
 const syncedServerOrderIds = new Set<number>()
 const locallyPrintedQueuedLocalNos = new Set<string>()
 
@@ -19,6 +25,7 @@ export function registerLocallyPrintedQueuedOrderNo(localOrderNo: string | null 
   const no = normalizeLocalOrderNo(localOrderNo)
   if (!no) return
   locallyPrintedQueuedLocalNos.add(no)
+  markPosQueuedOrderLocallyPrinted(no)
 }
 
 export function registerQueuedSavePosOrderSyncedServerId(
@@ -27,9 +34,10 @@ export function registerQueuedSavePosOrderSyncedServerId(
 ) {
   if (!Number.isFinite(orderId) || orderId <= 0) return
   const no = normalizeLocalOrderNo(localOrderNo)
-  // localOrderNo가 있으면 "로컬 인쇄 시도된 큐 주문"일 때만 suppress 후보로 등록
+  if (no) rememberPosLocalOrderServerId(no, orderId)
+  // localOrderNo가 있으면 "로컬 인쇄 시도된 큐 주문"일 때만 suppress 후보로 등록 (새로고침 후에도 영구 기록으로 판정)
   if (no) {
-    if (!locallyPrintedQueuedLocalNos.has(no)) return
+    if (!locallyPrintedQueuedLocalNos.has(no) && !wasPosQueuedOrderLocallyPrinted(no)) return
     locallyPrintedQueuedLocalNos.delete(no)
   }
   syncedServerOrderIds.add(orderId)
