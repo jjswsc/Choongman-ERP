@@ -14,6 +14,7 @@ import {
 } from '@/lib/outbound-order-line-match'
 import { getStockLocationPatterns } from '@/lib/stock-location-patterns'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
+import { createAsyncTtlShare } from '@/lib/async-ttl-share'
 
 const OFFICE_STORE_LABELS = new Set(['본사', 'Office', '오피스', '본점'])
 
@@ -178,8 +179,14 @@ async function fetchOutboundLogsPage(
   }
 }
 
+const itemPriceByCodeShare = createAsyncTtlShare<Record<string, number>>(60_000, 2)
+
+function loadItemPriceByCode(): Promise<Record<string, number>> {
+  return itemPriceByCodeShare('items:price', loadItemPriceByCodeUncached)
+}
+
 /** 품목 마스터 판매가(items.price) — 매장 매입 단가 폴백(본사 내부 원가 items.cost 아님) */
-async function loadItemPriceByCode(): Promise<Record<string, number>> {
+async function loadItemPriceByCodeUncached(): Promise<Record<string, number>> {
   const rows = (await supabaseSelect('items', {
     order: 'id.asc',
     select: 'code,price',
@@ -218,6 +225,23 @@ async function loadOrderCartsById(orderIds: number[]): Promise<Record<string, Or
     }
   }
   return out
+}
+
+type HqOutboundProcessedResult = { lines: HqOutboundProcessedLine[]; hitRowCap: boolean; dedupedCount: number }
+
+const hqOutboundProcessedShare = createAsyncTtlShare<HqOutboundProcessedResult>(60_000, 200)
+
+/**
+ * 손익 집계 전용(결과를 읽기만 하는 호출자) — 같은 매장·기간을 매입 합계·VAT 버킷·관리마진이 각각 다시 읽지 않도록 공유.
+ * 반환 lines를 정렬·수정하는 화면용 호출자는 loadHqOutboundProcessedLines를 쓴다.
+ */
+export function loadHqOutboundProcessedLinesShared(params: {
+  startStr: string
+  endStr: string
+  storeFilter: string | null
+}): Promise<HqOutboundProcessedResult> {
+  const key = JSON.stringify([params.startStr, params.endStr, params.storeFilter ?? null])
+  return hqOutboundProcessedShare(key, () => loadHqOutboundProcessedLines(params))
 }
 
 /** 본사 창고 실제 출고 로그 — 출고 관리·손익·상세 펼침 공통 */
@@ -378,7 +402,7 @@ export async function sumHqOutboundSalesMatchingOutboundManagement(params: {
   storeFilter: string | null
 }): Promise<HqOutboundSalesAggregate> {
   const customerFilter = resolveHqOutboundSalesCustomerFilter(params.storeFilter)
-  const { lines, hitRowCap } = await loadHqOutboundProcessedLines({
+  const { lines, hitRowCap } = await loadHqOutboundProcessedLinesShared({
     startStr: params.startStr,
     endStr: params.endStr,
     storeFilter: customerFilter,
@@ -416,7 +440,7 @@ export async function sumHqOutboundSubtotalMatchingOutboundManagement(params: {
   endStr: string
   storeFilter: string | null
 }): Promise<HqOutboundIncomeSplit> {
-  const { lines, hitRowCap, dedupedCount } = await loadHqOutboundProcessedLines({
+  const { lines, hitRowCap, dedupedCount } = await loadHqOutboundProcessedLinesShared({
     startStr: params.startStr,
     endStr: params.endStr,
     storeFilter: params.storeFilter,

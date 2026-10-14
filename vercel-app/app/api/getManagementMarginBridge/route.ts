@@ -3,7 +3,8 @@ import { computeManagementMarginBridge } from '@/lib/management-margin-bridge'
 import { isAccountingStoreScopeForbidden } from '@/lib/accounting-store-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
-export const maxDuration = 120
+/** 조회 기간 + 직전 동기간 월별 손익 × 매장 */
+export const maxDuration = 300
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()

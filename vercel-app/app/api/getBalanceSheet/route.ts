@@ -3,8 +3,8 @@ import { computeBalanceSheetReport } from '@/lib/accounting-reports'
 import { isAccountingStoreScopeForbidden } from '@/lib/accounting-store-scope'
 import { requireAuth } from '@/lib/verify-auth'
 
-/** 연초~해당월 손익 반복 집계로 계산 시간이 길 수 있음 */
-export const maxDuration = 120
+/** 연초~해당월 × 매장 손익 반복 집계 — 복수 매장·12월 조회는 120초를 넘을 수 있음 */
+export const maxDuration = 300
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()

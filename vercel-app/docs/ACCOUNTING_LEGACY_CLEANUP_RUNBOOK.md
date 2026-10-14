@@ -36,4 +36,6 @@
 
 ## 7. GL RPC 배포
 
-`sql/get_gl_balance_as_of.sql` 미적용 시 재무상태표는 보조원장 폴백·JS 합산으로 동작하나, 대규모 분개 시 `get_gl_balance_as_of` RPC 배포 권장.
+`sql/get_gl_balance_by_store_as_of.sql`을 배포한다(조회 전용, 영업 중 실행 가능). 앱(`lib/gl-balance-as-of.ts`)은 이 RPC를 먼저 쓰고, DB는 매장명별 차·대 합계만 돌려주며 매장 매칭·잔액 부호는 앱이 select 폴백과 같은 기준으로 처리한다. 미배포 시 분개 헤더 전체를 페이지로 읽어 JS로 합산하므로 재무상태표·장부 대사가 느리다.
+
+구 `sql/get_gl_balance_as_of.sql`은 매장명 없는 분개를 모든 매장에 포함하고 2150(차입금) 부호가 달라 폴백과 숫자가 다르다 — 새로 배포하지 않는다.

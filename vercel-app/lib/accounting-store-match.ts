@@ -32,6 +32,10 @@ function storeMatchesIncomeFilterLegacy(storeValue: string, filter: string): boo
   return false
 }
 
+/** 분개·출고 수만 행 루프에서 같은 매장명을 반복 판정하면 수십 초 CPU를 쓴다 → 인덱스별 결과 메모 */
+const MATCH_MEMO_MAX_ENTRIES = 50_000
+const matchMemoByIndex = new WeakMap<ErpStoreMatchIndex, Map<string, boolean>>()
+
 /** 손익·통장·시산 — erp_stores 단일 store_code 기준(마스터 없으면 CM 접두 폴백) */
 export function storeMatchesIncomeFilterWithIndex(
   storeValue: string,
@@ -41,11 +45,22 @@ export function storeMatchesIncomeFilterWithIndex(
   if (!filter || filter.trim().toLowerCase() === 'all') return true
   const v = String(storeValue || '').trim()
   if (!v) return false
-  const terms = storeFilterSearchTerms(filter)
-  if (terms.length > 1) {
-    return terms.some((f) => matchesAccountingStoreScopeRow(v, f, index.masters, index.legacyToCanonical))
+  let memo = matchMemoByIndex.get(index)
+  if (!memo) {
+    memo = new Map()
+    matchMemoByIndex.set(index, memo)
   }
-  return matchesAccountingStoreScopeRow(v, filter, index.masters, index.legacyToCanonical)
+  const memoKey = `${filter}\u0000${v}`
+  const hit = memo.get(memoKey)
+  if (hit !== undefined) return hit
+  const terms = storeFilterSearchTerms(filter)
+  const matched =
+    terms.length > 1
+      ? terms.some((f) => matchesAccountingStoreScopeRow(v, f, index.masters, index.legacyToCanonical))
+      : matchesAccountingStoreScopeRow(v, filter, index.masters, index.legacyToCanonical)
+  if (memo.size >= MATCH_MEMO_MAX_ENTRIES) memo.clear()
+  memo.set(memoKey, matched)
+  return matched
 }
 
 /** @deprecated 가능하면 ensureErpStoreMatchIndex + storeMatchesIncomeFilterWithIndex 사용 */

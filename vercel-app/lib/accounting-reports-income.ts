@@ -10,6 +10,8 @@ import { sumCompletedPosSalesTotal } from '@/lib/accounting-pos-sales'
 import { sumHqOutboundSalesMatchingOutboundManagement } from '@/lib/hq-outbound-income-total'
 import { resolveAccountingRollupStores } from '@/lib/accounting-store-scope'
 import { mergeIncomeStatementReports } from '@/lib/accounting-income-statement-merge'
+import { createAsyncTtlShare } from '@/lib/async-ttl-share'
+import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import { loadCardBillAllocationLinesForPl } from '@/lib/card-bill-income-statement'
 import {
   sumEbitdaAddBacksFromExpenseSubjects,
@@ -102,13 +104,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   const scope = normalizeIncomeScope(input)
   const rollupStores = resolveAccountingRollupStores(scope)
   if (rollupStores && rollupStores.length > 1) {
-    const perStore = await Promise.all(
-      rollupStores.map((store) =>
-        computeIncomeStatementReport({
-          ...input,
-          storeFilter: store,
-        })
-      )
+    const perStore = await mapWithConcurrency(rollupStores, ROLLUP_STORE_CONCURRENCY, (store) =>
+      computeIncomeStatementReportShared({
+        ...input,
+        storeFilter: store,
+      })
     )
     return mergeIncomeStatementReports(perStore, {
       yearMonth: scope.yearMonth,
@@ -1140,13 +1140,14 @@ export function getMonthsFromYearStart(yearMonth: string): string[] {
 /** 월별 손익 1건이 Supabase 조회를 여러 번 하므로 병렬은 소수로 제한 (maxDuration 120초 내 연초~12월) */
 export const MONTHLY_INCOME_REPORT_CONCURRENCY = 3
 
-const INCOME_REPORT_SHARE_TTL_MS = 30_000
-const INCOME_REPORT_SHARE_MAX_ENTRIES = 200
-const incomeReportShare = new Map<string, { at: number; promise: Promise<IncomeStatementReport> }>()
+/** 복수 매장 롤업도 매장 수만큼 한꺼번에 돌리면 Supabase 커넥션이 밀려 단순 조회도 수 초씩 걸린다 */
+export const ROLLUP_STORE_CONCURRENCY = 3
+
+const incomeReportShare = createAsyncTtlShare<IncomeStatementReport>(60_000, 400)
 
 /**
- * 같은 인스턴스에 동시에 들어온 대차대조표(월별 비교 → 월마다 연초~해당월)·관리마진 요청이
- * 동일 조건의 월 손익을 반복 계산하지 않도록 진행 중·직후(30초) 결과를 공유한다.
+ * 같은 인스턴스에 동시에 들어온 손익·대차대조표(월별 비교 → 월마다 연초~해당월)·관리마진 요청이
+ * 동일 조건(매장·월)의 손익을 반복 계산하지 않도록 진행 중·직후(60초) 결과를 공유한다.
  */
 export function computeIncomeStatementReportShared(input: IncomeScopeInput): Promise<IncomeStatementReport> {
   const key = JSON.stringify([
@@ -1158,25 +1159,5 @@ export function computeIncomeStatementReportShared(input: IncomeScopeInput): Pro
     input.tenantId ?? null,
     Boolean(input.includeDebug),
   ])
-  const now = Date.now()
-  const hit = incomeReportShare.get(key)
-  if (hit && now - hit.at < INCOME_REPORT_SHARE_TTL_MS) return hit.promise
-
-  if (incomeReportShare.size >= INCOME_REPORT_SHARE_MAX_ENTRIES) {
-    for (const [k, v] of incomeReportShare) {
-      if (now - v.at >= INCOME_REPORT_SHARE_TTL_MS) incomeReportShare.delete(k)
-    }
-    while (incomeReportShare.size >= INCOME_REPORT_SHARE_MAX_ENTRIES) {
-      const oldest = incomeReportShare.keys().next().value
-      if (oldest === undefined) break
-      incomeReportShare.delete(oldest)
-    }
-  }
-
-  const promise = computeIncomeStatementReport(input)
-  incomeReportShare.set(key, { at: now, promise })
-  promise.catch(() => {
-    if (incomeReportShare.get(key)?.promise === promise) incomeReportShare.delete(key)
-  })
-  return promise
+  return incomeReportShare(key, () => computeIncomeStatementReport(input))
 }

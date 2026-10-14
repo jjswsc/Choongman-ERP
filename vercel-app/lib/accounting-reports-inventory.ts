@@ -1,5 +1,5 @@
-import {
-  loadHqOutboundProcessedLines,
+﻿import {
+  loadHqOutboundProcessedLinesShared,
   resolveHqOutboundSalesCustomerFilter,
 } from '@/lib/hq-outbound-income-total'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
@@ -11,6 +11,7 @@ import {
 } from '@/lib/accounting-inventory-asof'
 import { appendInventoryTenantFilter } from '@/lib/inventory-tenant-scope'
 import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
+import { createAsyncTtlShare } from '@/lib/async-ttl-share'
 import {
   accumulateNetByItemTax,
   sumInventoryQtyCostBuckets,
@@ -58,13 +59,27 @@ async function resolveInventoryLocationPatterns(
   }
 }
 
-/** get_store_stock RPC 우선, 미배포 시 getAppData와 동일한 select fallback */
-async function fetchStoreStockQtyByItem(
+/** 손익 1건이 기초·기말 × 금액·VAT 버킷으로 같은 시점 재고를 4번, 연초~월 반복 시 전월 기말=당월 기초를 또 조회 */
+const storeStockQtyShare = createAsyncTtlShare<Record<string, number>>(60_000, 400)
+const itemValuationUnitCostShare = createAsyncTtlShare<Record<string, number>>(60_000, 2)
+
+function fetchStoreStockQtyByItem(
   locationPatterns: string[],
   asOfUtcIso: string,
   tenantId?: string
 ): Promise<Record<string, number>> {
-  if (locationPatterns.length === 0) return {}
+  if (locationPatterns.length === 0) return Promise.resolve({})
+  return storeStockQtyShare(JSON.stringify([locationPatterns, asOfUtcIso, tenantId ?? null]), () =>
+    fetchStoreStockQtyByItemUncached(locationPatterns, asOfUtcIso, tenantId)
+  )
+}
+
+/** get_store_stock RPC 우선, 미배포 시 getAppData와 동일한 select fallback */
+async function fetchStoreStockQtyByItemUncached(
+  locationPatterns: string[],
+  asOfUtcIso: string,
+  tenantId?: string
+): Promise<Record<string, number>> {
   try {
     const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>('get_store_stock', {
       p_location_patterns: locationPatterns,
@@ -95,7 +110,11 @@ async function fetchStoreStockQtyByItem(
   }
 }
 
-export async function loadItemValuationUnitCostMap(): Promise<Record<string, number>> {
+export function loadItemValuationUnitCostMap(): Promise<Record<string, number>> {
+  return itemValuationUnitCostShare('all', loadItemValuationUnitCostMapUncached)
+}
+
+async function loadItemValuationUnitCostMapUncached(): Promise<Record<string, number>> {
   const rows = (await supabaseSelectAllPages('items', {
     order: 'id.asc',
     pageSize: 8000,
@@ -154,7 +173,7 @@ export async function getHqOutboundSalesVatBuckets(
   itemTaxMap: Map<string, ItemTaxType>
 ): Promise<NetVatBuckets> {
   const customerFilter = resolveHqOutboundSalesCustomerFilter(storeFilter)
-  const { lines } = await loadHqOutboundProcessedLines({
+  const { lines } = await loadHqOutboundProcessedLinesShared({
     startStr,
     endStr,
     storeFilter: customerFilter,
@@ -174,7 +193,7 @@ export async function getHqOutboundPurchaseVatBuckets(
   endStr: string,
   itemTaxMap: Map<string, ItemTaxType>
 ): Promise<NetVatBuckets> {
-  const { lines } = await loadHqOutboundProcessedLines({
+  const { lines } = await loadHqOutboundProcessedLinesShared({
     startStr,
     endStr,
     storeFilter,

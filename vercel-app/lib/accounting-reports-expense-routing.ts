@@ -8,6 +8,7 @@ import type { FranchiseBillingPlSlice } from '@/lib/accounting-po-franchise-bill
 import { PL_FRANCHISE_EXPENSE_SUBJECT_CODES } from '@/lib/accounting-po-franchise-billing-pl-shared'
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purchase-drill-nav'
 import { safePlCashVat } from '@/lib/income-statement-cash-vat'
+import { createAsyncTtlShare } from '@/lib/async-ttl-share'
 import {
   ACCOUNTING_ROWS_MAX,
   type IncomeStatementReport,
@@ -46,14 +47,19 @@ export function feeAccountSubjectIdsFromMeta(
   return { deliveryIds, cardIds, allIds: [...deliveryIds, ...cardIds] }
 }
 
+/** 매장×월 손익을 반복 계산할 때 같은 마스터를 매번 다시 읽지 않도록 원본 행만 잠깐 공유 */
+const referenceRowsShare = createAsyncTtlShare<unknown>(60_000, 8)
+
 export async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubjectMetaRow>> {
   const out = new Map<number, AccountSubjectMetaRow>()
   try {
-    const rows = (await supabaseSelect('account_subjects', {
-      select: 'id,code,name,name_en,name_th,type,p_and_l_section,statement_type',
-      limit: 2000,
-      order: 'sort_order.asc,code.asc',
-    })) as
+    const rows = (await referenceRowsShare('account_subjects', () =>
+      supabaseSelect('account_subjects', {
+        select: 'id,code,name,name_en,name_th,type,p_and_l_section,statement_type',
+        limit: 2000,
+        order: 'sort_order.asc,code.asc',
+      })
+    )) as
       | {
           id?: number
           code?: string
@@ -94,12 +100,14 @@ export async function loadAccountSubjectMeta(): Promise<Map<number, AccountSubje
 export async function loadItemAccountSubjectMap(): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   try {
-    const rows = (await supabaseSelectAllPages('items', {
-      select: 'code,account_subject_id',
-      order: 'id.asc',
-      pageSize: 8000,
-      maxRows: ACCOUNTING_ROWS_MAX,
-    })) as { code?: string; account_subject_id?: number | null }[] | null
+    const rows = (await referenceRowsShare('items:account_subject_id', () =>
+      supabaseSelectAllPages('items', {
+        select: 'code,account_subject_id',
+        order: 'id.asc',
+        pageSize: 8000,
+        maxRows: ACCOUNTING_ROWS_MAX,
+      })
+    )) as { code?: string; account_subject_id?: number | null }[] | null
     for (const r of rows || []) {
       const code = String(r.code || '').trim()
       const sid = r.account_subject_id != null ? Number(r.account_subject_id) : NaN

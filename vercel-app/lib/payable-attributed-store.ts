@@ -7,6 +7,7 @@ import { ensureErpStoreMatchIndex } from '@/lib/accounting-store-match'
 import type { ErpStoreMatchIndex } from '@/lib/erp-store-identity'
 import { matchesAccountingStoreScopeRow } from '@/lib/accounting-store-row-match'
 import { rowMatchesInvoiceFilter } from '@/lib/receivable-payable-invoice-filter'
+import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import {
   appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
@@ -17,6 +18,22 @@ import {
 
 const PAYABLE_LEDGER_SELECT =
   'id,vendor_code,amount,ref_type,ref_id,trans_date,memo,bank_transaction_id,expense_accrual_id,petty_cash_transaction_id'
+
+/** id 수천 개를 한 URL에 넣으면 16KB를 넘어 응답 헤더 파싱(HPE_HEADER_OVERFLOW)·414로 실패한다 */
+const ID_IN_FILTER_CHUNK = 200
+const ID_IN_FILTER_CONCURRENCY = 4
+
+async function selectRowsByIdChunks<T>(table: string, ids: number[], select: string): Promise<T[]> {
+  const chunks: number[][] = []
+  for (let i = 0; i < ids.length; i += ID_IN_FILTER_CHUNK) chunks.push(ids.slice(i, i + ID_IN_FILTER_CHUNK))
+  const parts = await mapWithConcurrency(chunks, ID_IN_FILTER_CONCURRENCY, async (chunk) =>
+    ((await supabaseSelectFilter(table, `id=in.(${chunk.join(',')})`, {
+      select,
+      limit: chunk.length,
+    })) as T[] | null) || []
+  )
+  return parts.flat()
+}
 
 export type PayableTransactionRow = {
   id?: number
@@ -132,11 +149,12 @@ export async function loadBankCategoryByIdForPayables(
   ]
   const out = new Map<number, string>()
   if (!bankIds.length) return out
-  const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIds.join(',')})`, {
-    select: 'id,category',
-    limit: 10000,
-  })) as { id?: number; category?: string | null }[] | null
-  for (const bt of banks || []) {
+  const banks = await selectRowsByIdChunks<{ id?: number; category?: string | null }>(
+    'bank_transactions',
+    bankIds,
+    'id,category'
+  )
+  for (const bt of banks) {
     if (bt.id == null) continue
     out.set(Number(bt.id), String(bt.category || '').trim().toLowerCase())
   }
@@ -266,11 +284,12 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
   ]
   const locationByInboundId = new Map<number, string>()
   if (inboundIdsAll.length > 0) {
-    const batches = (await supabaseSelectFilter('inbound_batches', `id=in.(${inboundIdsAll.join(',')})`, {
-      select: 'id,location',
-      limit: 10000,
-    })) as { id?: number; location?: string }[] | null
-    for (const b of batches || []) {
+    const batches = await selectRowsByIdChunks<{ id?: number; location?: string }>(
+      'inbound_batches',
+      inboundIdsAll,
+      'id,location'
+    )
+    for (const b of batches) {
       if (b.id != null) locationByInboundId.set(Number(b.id), String(b.location || '').trim())
     }
   }
@@ -280,11 +299,12 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
   ]
   const storeByPoId = new Map<number, string>()
   if (poIdsAll.length > 0) {
-    const pos = (await supabaseSelectFilter('purchase_orders', `id=in.(${poIdsAll.join(',')})`, {
-      select: 'id,location_name,cart_json',
-      limit: 5000,
-    })) as { id?: number; location_name?: string; cart_json?: string }[] | null
-    for (const p of pos || []) {
+    const pos = await selectRowsByIdChunks<{ id?: number; location_name?: string; cart_json?: string }>(
+      'purchase_orders',
+      poIdsAll,
+      'id,location_name,cart_json'
+    )
+    for (const p of pos) {
       if (p.id == null) continue
       const s = poAttributedStore(p)
       if (s) storeByPoId.set(Number(p.id), s)
@@ -300,11 +320,12 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
   ]
   const storeByAccrualId = new Map<number, string>()
   if (eids.length > 0) {
-    const accr = (await supabaseSelectFilter('expense_accruals', `id=in.(${eids.join(',')})`, {
-      select: 'id,store_name',
-      limit: 10000,
-    })) as { id?: number; store_name?: string | null }[] | null
-    for (const a of accr || []) {
+    const accr = await selectRowsByIdChunks<{ id?: number; store_name?: string | null }>(
+      'expense_accruals',
+      eids,
+      'id,store_name'
+    )
+    for (const a of accr) {
       if (a.id == null) continue
       const sn = String(a.store_name || '').trim()
       if (sn) storeByAccrualId.set(Number(a.id), sn)
@@ -320,11 +341,12 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
   ]
   const storeByPettyId = new Map<number, string>()
   if (pettyIds.length > 0) {
-    const petty = (await supabaseSelectFilter('petty_cash_transactions', `id=in.(${pettyIds.join(',')})`, {
-      select: 'id,store',
-      limit: 10000,
-    })) as { id?: number; store?: string | null }[] | null
-    for (const p of petty || []) {
+    const petty = await selectRowsByIdChunks<{ id?: number; store?: string | null }>(
+      'petty_cash_transactions',
+      pettyIds,
+      'id,store'
+    )
+    for (const p of petty) {
       if (p.id == null) continue
       const st = String(p.store || '').trim()
       if (st) storeByPettyId.set(Number(p.id), st)
@@ -340,12 +362,13 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
   ]
   const storeByBankId = new Map<number, string>()
   if (bankIdsAll.length > 0) {
-    const banks = (await supabaseSelectFilter('bank_transactions', `id=in.(${bankIdsAll.join(',')})`, {
-      select: 'id,store,account_id',
-      limit: 5000,
-    })) as { id?: number; store?: string | null; account_id?: number | null }[] | null
+    const banks = await selectRowsByIdChunks<{ id?: number; store?: string | null; account_id?: number | null }>(
+      'bank_transactions',
+      bankIdsAll,
+      'id,store,account_id'
+    )
     const missingAccountIds: number[] = []
-    for (const bt of banks || []) {
+    for (const bt of banks) {
       if (bt.id == null) continue
       const st = String(bt.store || '').trim()
       if (st) {
@@ -367,7 +390,7 @@ export async function buildPayableAttributionMaps(rows: PayableTransactionRow[])
         const st = String(a.store || '').trim()
         if (st) storeByAccountId.set(Number(a.id), st)
       }
-      for (const bt of banks || []) {
+      for (const bt of banks) {
         if (bt.id == null || storeByBankId.has(Number(bt.id))) continue
         const accountId = Number(bt.account_id || 0)
         const st = accountId > 0 ? storeByAccountId.get(accountId) : undefined

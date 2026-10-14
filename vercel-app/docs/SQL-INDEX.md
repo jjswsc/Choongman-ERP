@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **761**개 · 접두어 그룹 **96**개
+- `sql/` 최상위: **762**개 · 접두어 그룹 **96**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **67**개
 
@@ -467,7 +467,7 @@
 
 </details>
 
-<details><summary><code>get_*</code> (23)</summary>
+<details><summary><code>get_*</code> (24)</summary>
 
 - [`get_collab_discount_usage_by_store_daily_rpc.sql`](../sql/get_collab_discount_usage_by_store_daily_rpc.sql) — rpc
 - [`get_collab_discount_usage_rpc.sql`](../sql/get_collab_discount_usage_rpc.sql) — rpc
@@ -475,6 +475,7 @@
 - [`get_evaluation_analytics_rpc.sql`](../sql/get_evaluation_analytics_rpc.sql) — rpc
 - [`get_evaluation_distinct_store_names.sql`](../sql/get_evaluation_distinct_store_names.sql)
 - [`get_gl_balance_as_of.sql`](../sql/get_gl_balance_as_of.sql)
+- [`get_gl_balance_by_store_as_of.sql`](../sql/get_gl_balance_by_store_as_of.sql) — log
 - [`get_ingredient_usage_actual.sql`](../sql/get_ingredient_usage_actual.sql)
 - [`get_login_data_employees_rpc.sql`](../sql/get_login_data_employees_rpc.sql) — rpc
 - [`get_member_line_reach.sql`](../sql/get_member_line_reach.sql)

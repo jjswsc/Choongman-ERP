@@ -8,6 +8,8 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { buildStoreFieldOrIlikeFragment } from '@/lib/accounting-store-match'
 import { channelSettlementAllowsReceivableReceive } from '@/lib/pos-bank-chip-settlement'
 
+const SETTLEMENT_LINK_CHUNK = 150
+
 export type SubledgerGlReconciliationReport = {
   yearMonth: string
   endStr: string
@@ -261,27 +263,42 @@ export async function computeSubledgerGlReconciliation(
     note?: string | null
   }[]
 
-  const receivableReceiveWithSettlementLink: SubledgerGlReconciliationReport['receivableReceiveWithSettlementLink'] =
-    []
-  for (const b of recvBankRows || []) {
-    const bankId = Number(b.id || 0)
-    if (bankId <= 0) continue
-    if (channelSettlementAllowsReceivableReceive({ memo: b.memo, note: b.note })) continue
+  const recvBankCandidates = (recvBankRows || []).filter(
+    (b) => Number(b.id || 0) > 0 && !channelSettlementAllowsReceivableReceive({ memo: b.memo, note: b.note })
+  )
+  const settlementIdsByBankId = new Map<number, number[]>()
+  const candidateBankIds = recvBankCandidates.map((b) => Number(b.id))
+  for (let i = 0; i < candidateBankIds.length; i += SETTLEMENT_LINK_CHUNK) {
+    const chunk = candidateBankIds.slice(i, i + SETTLEMENT_LINK_CHUNK)
     const linked = (await supabaseSelectFilter(
       'pos_channel_settlements',
-      `bank_transaction_id=eq.${bankId}`,
-      { select: 'id', limit: 10 }
-    )) as { id?: number }[] | null
-    if (linked?.length) {
-      receivableReceiveWithSettlementLink.push({
-        bankId,
-        transDate: String(b.trans_date || '').slice(0, 10),
-        amount: Math.abs(Number(b.amount) || 0),
-        storeName: b.store_name != null ? String(b.store_name) : b.store != null ? String(b.store) : null,
-        accountId: b.account_id != null ? Number(b.account_id) : null,
-        settlementIds: (linked || []).map((x) => Number(x.id || 0)).filter((id) => id > 0),
-      })
+      `bank_transaction_id=in.(${chunk.join(',')})`,
+      { select: 'id,bank_transaction_id', order: 'id.asc', limit: chunk.length * 10 }
+    )) as { id?: number; bank_transaction_id?: number | null }[] | null
+    for (const row of linked || []) {
+      const bankId = Number(row.bank_transaction_id || 0)
+      const id = Number(row.id || 0)
+      if (bankId <= 0 || id <= 0) continue
+      const ids = settlementIdsByBankId.get(bankId)
+      if (ids) ids.push(id)
+      else settlementIdsByBankId.set(bankId, [id])
     }
+  }
+
+  const receivableReceiveWithSettlementLink: SubledgerGlReconciliationReport['receivableReceiveWithSettlementLink'] =
+    []
+  for (const b of recvBankCandidates) {
+    const bankId = Number(b.id)
+    const settlementIds = settlementIdsByBankId.get(bankId)
+    if (!settlementIds?.length) continue
+    receivableReceiveWithSettlementLink.push({
+      bankId,
+      transDate: String(b.trans_date || '').slice(0, 10),
+      amount: Math.abs(Number(b.amount) || 0),
+      storeName: b.store_name != null ? String(b.store_name) : b.store != null ? String(b.store) : null,
+      accountId: b.account_id != null ? Number(b.account_id) : null,
+      settlementIds,
+    })
   }
 
   return {

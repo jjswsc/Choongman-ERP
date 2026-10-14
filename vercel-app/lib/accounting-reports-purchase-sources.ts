@@ -47,6 +47,7 @@ import {
 } from '@/lib/income-statement-item-vat'
 import { INBOUND_HQ_LOCATION } from '@/lib/stock-location-patterns'
 import { safePlCashVat } from '@/lib/income-statement-cash-vat'
+import { createAsyncTtlShare } from '@/lib/async-ttl-share'
 import {
   type AccountSubjectMetaRow,
   addToSubjectMap,
@@ -61,11 +62,24 @@ import {
   round2,
 } from '@/lib/accounting-reports-shared'
 
+type VendorMasterRow = { code?: string; name?: string; gps_name?: string | null; type?: string }
+
+/** 매장×월 손익 반복 시 거래처 마스터를 한 번만 읽는다 (실패는 공유하지 않음) */
+const vendorRowsShare = createAsyncTtlShare<VendorMasterRow[] | null>(60_000, 2)
+
+function loadVendorMasterRows(): Promise<VendorMasterRow[] | null> {
+  return vendorRowsShare(
+    'vendors',
+    () =>
+      supabaseSelect('vendors', { select: 'code,name,gps_name,type', limit: 20000 }) as Promise<
+        VendorMasterRow[] | null
+      >
+  )
+}
+
 export async function loadVendorPurchaseKeyIndex(): Promise<VendorPurchaseKeyIndex> {
   try {
-    const rows = (await supabaseSelect('vendors', { select: 'code,name,gps_name', limit: 20000 })) as
-      | VendorRowForPurchaseKey[]
-      | null
+    const rows = (await loadVendorMasterRows()) as VendorRowForPurchaseKey[] | null
     return buildVendorPurchaseKeyIndex(rows || [])
   } catch {
     return buildVendorPurchaseKeyIndex([])
@@ -75,9 +89,7 @@ export async function loadVendorPurchaseKeyIndex(): Promise<VendorPurchaseKeyInd
 /** vendors.code(대소문자 무시) → 표시용 이름 */
 export async function loadVendorCodeNormToNameMap(): Promise<Record<string, string>> {
   try {
-    const rows = (await supabaseSelect('vendors', { select: 'code,name', limit: 20000 })) as
-      | { code?: string; name?: string }[]
-      | null
+    const rows = await loadVendorMasterRows()
     const m: Record<string, string> = {}
     for (const r of rows || []) {
       const c = String(r.code || '').trim()
@@ -145,10 +157,7 @@ export function sumVendorMap(m: Record<string, number>): number {
 /** 본사 법인 거래처 — 코드·상호명(입고 vendor_target) 매칭용 */
 export async function loadHqVendorMatchIndex(): Promise<HqVendorMatchIndex> {
   try {
-    const rows = (await supabaseSelect('vendors', {
-      select: 'code,name,gps_name,type',
-      limit: 20000,
-    })) as { code?: string; name?: string; gps_name?: string | null; type?: string }[] | null
+    const rows = await loadVendorMasterRows()
     return buildHqVendorMatchIndex(rows || [])
   } catch {
     return { codes: new Set(), names: new Set() }

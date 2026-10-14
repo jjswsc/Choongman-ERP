@@ -1,6 +1,7 @@
 import { supabaseRpc, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
-import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import { ensureErpStoreMatchIndex, storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import { CHART_OF_ACCOUNTS_BY_CODE } from '@/lib/chart-of-accounts-mapping'
+import { createAsyncTtlShare } from '@/lib/async-ttl-share'
 
 const GL_FALLBACK_MAX_ROWS = 1_000_000
 
@@ -18,11 +19,86 @@ function isMissingGlBalanceRpc(e: unknown): boolean {
   return msg.includes('get_gl_balance_as_of') || msg.includes('42883')
 }
 
+function isMissingGlBalanceByStoreRpc(e: unknown): boolean {
+  const msg = String(e || '').toLowerCase()
+  return msg.includes('get_gl_balance_by_store_as_of') || msg.includes('42883') || msg.includes('pgrst202')
+}
+
 function signedBalanceForCode(accountCode: string, debit: number, credit: number): number {
   const meta = CHART_OF_ACCOUNTS_BY_CODE[accountCode]
   const normal = meta?.normalSide || 'debit'
   if (normal === 'credit') return credit - debit
   return debit - credit
+}
+
+function toGlBalanceRows(
+  accountCodes: string[],
+  agg: Record<string, { debit: number; credit: number }>
+): GlBalanceRow[] {
+  return accountCodes.map((accountCode) => {
+    const { debit, credit } = agg[accountCode] || { debit: 0, credit: 0 }
+    return {
+      accountCode,
+      debitTotal: debit,
+      creditTotal: credit,
+      balance: signedBalanceForCode(accountCode, debit, credit),
+    }
+  })
+}
+
+/**
+ * DB에서 매장명(store_name)별로만 합산하고 매장 매칭은 JS(storeMatchesIncomeFilter)로 —
+ * select 폴백과 같은 기준. RPC: sql/get_gl_balance_by_store_as_of.sql
+ */
+async function sumGlBalancesByStoreRpc(params: {
+  endStr: string
+  storeFilter: string
+  accountCodes: string[]
+}): Promise<GlBalanceRow[]> {
+  const { endStr, storeFilter, accountCodes } = params
+  const rows = (await supabaseRpc<{
+    store_name?: string | null
+    account_code?: string
+    debit_total?: number
+    credit_total?: number
+  }[]>('get_gl_balance_by_store_as_of', {
+    p_end_date: endStr,
+    p_account_codes: accountCodes,
+  })) as {
+    store_name?: string | null
+    account_code?: string
+    debit_total?: number
+    credit_total?: number
+  }[] | null
+
+  const agg: Record<string, { debit: number; credit: number }> = {}
+  for (const code of accountCodes) agg[code] = { debit: 0, credit: 0 }
+  for (const r of rows || []) {
+    const code = String(r.account_code || '').trim()
+    if (!code || !agg[code]) continue
+    if (!storeMatchesIncomeFilter(String(r.store_name || ''), storeFilter)) continue
+    agg[code].debit += Number(r.debit_total) || 0
+    agg[code].credit += Number(r.credit_total) || 0
+  }
+  return toGlBalanceRows(accountCodes, agg)
+}
+
+type JournalEntryStoreRow = { id?: number; store_name?: string | null }
+
+const journalEntriesShare = createAsyncTtlShare<JournalEntryStoreRow[]>(60_000, 24)
+
+/** 복수 매장 롤업(매장마다 호출)에서 같은 기말일 분개 헤더를 한 번만 읽는다 */
+function loadJournalEntryStoresAsOf(endStr: string): Promise<JournalEntryStoreRow[]> {
+  return journalEntriesShare(
+    endStr,
+    () =>
+      supabaseSelectFilterAllPages('journal_entries', `accounting_date=lte.${encodeURIComponent(endStr)}`, {
+        select: 'id,store_name',
+        order: 'id.asc',
+        pageSize: 5000,
+        maxRows: GL_FALLBACK_MAX_ROWS,
+      }) as Promise<JournalEntryStoreRow[]>
+  )
 }
 
 /** journal_lines 페이지 합산 폴백 (RPC 미배포 시) */
@@ -32,17 +108,23 @@ async function sumGlBalancesSelectFallback(params: {
   accountCodes: string[]
 }): Promise<GlBalanceRow[]> {
   const { endStr, storeFilter, accountCodes } = params
-  const jeFilter = `accounting_date=lte.${encodeURIComponent(endStr)}`
-  const entries = (await supabaseSelectFilterAllPages('journal_entries', jeFilter, {
-    select: 'id,store_name',
-    pageSize: 5000,
-    maxRows: GL_FALLBACK_MAX_ROWS,
-  })) as { id?: number; store_name?: string | null }[]
+  const entries = await loadJournalEntryStoresAsOf(endStr)
 
-  const ids = (entries || [])
-    .filter((e) => storeMatchesIncomeFilter(String(e.store_name || ''), storeFilter))
-    .map((e) => Number(e.id))
-    .filter((id) => id > 0)
+  const idsByStore = new Map<string, number[]>()
+  for (const e of entries || []) {
+    const id = Number(e.id)
+    if (!(id > 0)) continue
+    const store = String(e.store_name || '')
+    const bucket = idsByStore.get(store)
+    if (bucket) bucket.push(id)
+    else idsByStore.set(store, [id])
+  }
+  const ids: number[] = []
+  for (const [store, storeIds] of idsByStore) {
+    if (!storeMatchesIncomeFilter(store, storeFilter)) continue
+    for (const id of storeIds) ids.push(id)
+  }
+  ids.sort((a, b) => a - b)
 
   if (ids.length === 0) {
     return accountCodes.map((accountCode) => ({
@@ -77,15 +159,7 @@ async function sumGlBalancesSelectFallback(params: {
     }
   }
 
-  return accountCodes.map((accountCode) => {
-    const { debit, credit } = agg[accountCode] || { debit: 0, credit: 0 }
-    return {
-      accountCode,
-      debitTotal: debit,
-      creditTotal: credit,
-      balance: signedBalanceForCode(accountCode, debit, credit),
-    }
-  })
+  return toGlBalanceRows(accountCodes, agg)
 }
 
 export async function getGlBalancesAsOf(params: {
@@ -96,6 +170,20 @@ export async function getGlBalancesAsOf(params: {
   const endStr = String(params.endStr || '').slice(0, 10)
   const storeFilter = params.storeFilter && params.storeFilter !== '' ? params.storeFilter : 'All'
   const accountCodes = params.accountCodes?.length ? params.accountCodes : [...DEFAULT_CODES]
+  if (storeFilter !== 'All') {
+    try {
+      await ensureErpStoreMatchIndex()
+    } catch {
+      /* 매장 마스터 조회 실패 시 storeMatchesIncomeFilter 레거시 매칭 */
+    }
+  }
+
+  try {
+    const rows = await sumGlBalancesByStoreRpc({ endStr, storeFilter, accountCodes })
+    return { rows, source: 'rpc' }
+  } catch (e) {
+    if (!isMissingGlBalanceByStoreRpc(e)) throw e
+  }
 
   try {
     const rows = (await supabaseRpc<{

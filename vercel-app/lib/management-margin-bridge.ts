@@ -10,7 +10,7 @@ import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import { mergeIncomeStatementReports } from '@/lib/accounting-income-statement-merge'
 import { fetchStockLogPurchaseAgg, resolvePurchaseLocationPatterns } from '@/lib/accounting-stock-purchase-agg'
 import { getBangkokDateRangeUtc, getBangkokMonthRange, expandBangkokYearMonthsInclusive, priorBangkokPeriodMonths } from '@/lib/bangkok-time'
-import { loadHqOutboundProcessedLines } from '@/lib/hq-outbound-income-total'
+import { loadHqOutboundProcessedLinesShared } from '@/lib/hq-outbound-income-total'
 import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_MENU_ROW_SELECT,
@@ -199,7 +199,7 @@ async function sumPurchasesFoodPackaging(params: {
       packaging += split.packaging
     }
   } else {
-    const { lines } = await loadHqOutboundProcessedLines({
+    const { lines } = await loadHqOutboundProcessedLinesShared({
       startStr: params.startStr,
       endStr: params.endStr,
       storeFilter: params.storeFilter === 'All' ? null : params.storeFilter,

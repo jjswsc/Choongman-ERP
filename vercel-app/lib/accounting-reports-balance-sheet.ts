@@ -15,6 +15,7 @@ import {
   computeIncomeStatementReportShared,
   getMonthsFromYearStart,
   MONTHLY_INCOME_REPORT_CONCURRENCY,
+  ROLLUP_STORE_CONCURRENCY,
 } from '@/lib/accounting-reports-income'
 import { getInventoryValue, loadItemValuationUnitCostMap } from '@/lib/accounting-reports-inventory'
 import {
@@ -31,13 +32,11 @@ export async function computeBalanceSheetReport(input: IncomeScopeInput): Promis
   const scope = normalizeIncomeScope(input)
   const rollupStores = resolveAccountingRollupStores(scope)
   if (rollupStores && rollupStores.length > 1) {
-    const perStore = await Promise.all(
-      rollupStores.map((store) =>
-        computeBalanceSheetReport({
-          ...input,
-          storeFilter: store,
-        })
-      )
+    const perStore = await mapWithConcurrency(rollupStores, ROLLUP_STORE_CONCURRENCY, (store) =>
+      computeBalanceSheetReport({
+        ...input,
+        storeFilter: store,
+      })
     )
     return mergeBalanceSheetReports(perStore, {
       yearMonth: scope.yearMonth,
