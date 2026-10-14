@@ -9,6 +9,10 @@ import {
   tableQrPayloadFromPrintJob,
   type TableQrPrintJobPayload,
 } from '@/lib/pos-table-qr-print-job'
+import {
+  queueTicketPayloadFromPrintJob,
+  type QueueTicketPrintJobPayload,
+} from '@/lib/pos-queue-ticket-print-job'
 
 export type { TableQrPrintJobPayload } from '@/lib/pos-table-qr-print-job'
 export { tableQrPayloadFromPrintJob } from '@/lib/pos-table-qr-print-job'
@@ -257,7 +261,25 @@ export async function enqueueTableQrPrintJob(input: {
     scanEn: String(input.scanEn || '').trim() || undefined,
   }
   const dedupeKey = `table_qr:${storeCode}:${tableName}:${Date.now()}`
+  await enqueueReceiptLanePrintJob(storeCode, dedupeKey, payload_json)
+}
 
+/** 대기 번호표 → 메인 POS 영수증 프린터 (테이블 QR 과 같은 receipt 레인) */
+export async function enqueueQueueTicketPrintJob(input: {
+  storeCode: string
+  payload: QueueTicketPrintJobPayload
+}): Promise<void> {
+  const storeCode = normalizeStoreCode(input.storeCode)
+  if (!storeCode || !input.payload?.queueNo) return
+  const dedupeKey = `queue_ticket:${storeCode}:${input.payload.ticketId}:${Date.now()}`
+  await enqueueReceiptLanePrintJob(storeCode, dedupeKey, input.payload)
+}
+
+async function enqueueReceiptLanePrintJob(
+  storeCode: string,
+  dedupeKey: string,
+  payload_json: TableQrPrintJobPayload | QueueTicketPrintJobPayload
+): Promise<void> {
   try {
     await supabaseRpc('enqueue_pos_print_job', {
       p_store_code: storeCode,
@@ -324,7 +346,7 @@ export async function claimQueuedTableQrPrintJob(params: {
     for (const row of rows || []) {
       const id = Number(row.id || 0)
       if (!id) continue
-      if (!tableQrPayloadFromPrintJob(row.payload_json)) {
+      if (!tableQrPayloadFromPrintJob(row.payload_json) && !queueTicketPayloadFromPrintJob(row.payload_json)) {
         skipIds.push(id)
         continue
       }
@@ -335,7 +357,7 @@ export async function claimQueuedTableQrPrintJob(params: {
       await supabaseUpdateByFilter('pos_print_jobs', `id=in.(${skipIds.join(',')})&status=eq.queued`, {
         status: 'printed',
         printed_at: new Date().toISOString(),
-        last_error: 'skipped_not_table_qr',
+        last_error: 'skipped_not_receipt_lane',
       })
     }
     if (!picked?.id) return null

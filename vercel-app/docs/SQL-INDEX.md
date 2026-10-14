@@ -72,9 +72,9 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **752**개 · 접두어 그룹 **95**개
+- `sql/` 최상위: **755**개 · 접두어 그룹 **96**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **54**개
+- `sql/archive/` (진단 전용 등 보관): **62**개
 
 <details><summary><code>pos_*</code> (214)</summary>
 
@@ -942,6 +942,14 @@
 
 </details>
 
+<details><summary><code>cm030_*</code> (3)</summary>
+
+- [`cm030_direct_settlement_fix_01_vendor.sql`](../sql/cm030_direct_settlement_fix_01_vendor.sql) — apply, log
+- [`cm030_direct_settlement_fix_02_preview.sql`](../sql/cm030_direct_settlement_fix_02_preview.sql) — preview, apply
+- [`cm030_direct_settlement_fix_03_backfill.sql`](../sql/cm030_direct_settlement_fix_03_backfill.sql) — backfill, apply, log
+
+</details>
+
 <details><summary><code>crm_*</code> (3)</summary>
 
 - [`crm_coupon_campaigns_phase1.sql`](../sql/crm_coupon_campaigns_phase1.sql)
@@ -1452,7 +1460,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (54)</summary>
+<details><summary><code>archive/</code> (62)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1466,6 +1474,13 @@
 - [`archive/diagnose/diagnose_cm027_sep_stock_03_lines.sql`](../sql/archive/diagnose/diagnose_cm027_sep_stock_03_lines.sql)
 - [`archive/diagnose/diagnose_cm027_sep_stock_04_orphan_preview.sql`](../sql/archive/diagnose/diagnose_cm027_sep_stock_04_orphan_preview.sql)
 - [`archive/diagnose/diagnose_cm027_sep_stock_05_orphan_apply.sql`](../sql/archive/diagnose/diagnose_cm027_sep_stock_05_orphan_apply.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_01_stock_logs.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_01_stock_logs.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_02_order_cart.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_02_order_cart.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_03_direct_settlement.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_03_direct_settlement.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_04_direct_items.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_04_direct_items.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_05_vendors.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_05_vendors.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_06_missing_outbound.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_06_missing_outbound.sql)
+- [`archive/diagnose/diagnose_cm030_zero_amount_07_orders_missing.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_07_orders_missing.sql)
 - [`archive/diagnose/diagnose_employee_phone_dup_0953845476.sql`](../sql/archive/diagnose/diagnose_employee_phone_dup_0953845476.sql)
 - [`archive/diagnose/diagnose_force_outbound_reference_no_ivf72075.sql`](../sql/archive/diagnose/diagnose_force_outbound_reference_no_ivf72075.sql)
 - [`archive/diagnose/diagnose_hq_accounting_po_receivable.sql`](../sql/archive/diagnose/diagnose_hq_accounting_po_receivable.sql)
@@ -1496,6 +1511,7 @@
 - [`archive/diagnose/diagnose_pos_menus_store_1001_scope.sql`](../sql/archive/diagnose/diagnose_pos_menus_store_1001_scope.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql)
+- [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql)
 - [`archive/diagnose/diagnose_rpkm2026_promo_code.sql`](../sql/archive/diagnose/diagnose_rpkm2026_promo_code.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_01_status.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_01_status.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql)

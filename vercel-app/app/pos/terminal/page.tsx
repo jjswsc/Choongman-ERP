@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
+import { PosQueueWaitlistButton } from '@/components/pos/pos-queue-waitlist-button'
 import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
 import { useQrFloorSessionHints } from '@/lib/use-qr-floor-session-hints'
 import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
@@ -12074,6 +12075,13 @@ export default function PosTerminalPage() {
                     <Search className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
                   </Button>
+                  {!isPosDemo && currentStoreId ? (
+                    <PosQueueWaitlistButton
+                      storeCode={String(currentStoreId)}
+                      t={t}
+                      getPrinterSettings={getPrinterSettingsForStore}
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>

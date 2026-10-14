@@ -18,6 +18,11 @@ import { wasPosQueuedOrderLocallyPrinted } from '@/lib/offline/pos-local-order-r
 import { claimKitchenPrintBacklogJob, getKitchenPrintBacklogCount } from '@/lib/api-client/pos-kitchen-backlog'
 import { tableQrPayloadFromPrintJob } from '@/lib/pos-table-qr-print-job'
 import {
+  queueTicketPayloadFromPrintJob,
+  type QueueTicketPrintJobPayload,
+} from '@/lib/pos-queue-ticket-print-job'
+import { printPosQueueTicketSlip } from '@/lib/print-pos-queue-ticket-slip'
+import {
   getKitchenPrintWorkerId,
   kitchenLinesFromPrintJobPayload,
   kitchenPrintJobOrderFieldsFromPayload,
@@ -100,6 +105,11 @@ async function printClaimedTableQrJob(
   job: PosTableQrPrintJobClaim,
   ctx: PosMainDeviceAutoprintCtx
 ): Promise<void> {
+  const queuePayload = queueTicketPayloadFromPrintJob(job.payload_json)
+  if (queuePayload) {
+    await printClaimedQueueTicketJob(job.id, queuePayload, ctx)
+    return
+  }
   const payload = tableQrPayloadFromPrintJob(job.payload_json)
   if (!payload) {
     await markKitchenPrintJob({ jobId: job.id, status: 'printed' })
@@ -120,6 +130,30 @@ async function printClaimedTableQrJob(
     const reason = e instanceof Error ? e.message : String(e || 'print_failed')
     await markKitchenPrintJob({ jobId: job.id, status: 'failed', reason: reason.slice(0, 500) })
     console.error('table QR print job:', e)
+  }
+}
+
+async function printClaimedQueueTicketJob(
+  jobId: number,
+  payload: QueueTicketPrintJobPayload,
+  ctx: PosMainDeviceAutoprintCtx
+): Promise<void> {
+  try {
+    await printPosQueueTicketSlip({
+      queueNo: payload.queueNo,
+      partySize: payload.partySize,
+      teamsAhead: payload.teamsAhead,
+      issuedAt: payload.issuedAt,
+      url: payload.url,
+      storeLabel: payload.storeLabel || ctx.storeCode,
+      printerSettings: ctx.printerSettings,
+    })
+    await markKitchenPrintJob({ jobId, status: 'printed' })
+    ctx.logPosPrintDebug?.('queue_ticket_job_printed', { jobId, queueNo: payload.queueNo })
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e || 'print_failed')
+    await markKitchenPrintJob({ jobId, status: 'failed', reason: reason.slice(0, 500) })
+    console.error('queue ticket print job:', e)
   }
 }
 
