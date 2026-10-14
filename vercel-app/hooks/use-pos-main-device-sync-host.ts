@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { tOr, useT } from '@/lib/i18n'
 import { usePosBusinessOpenGate } from '@/lib/use-pos-business-open-gate'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { usePosStore } from '@/hooks/use-pos-store'
@@ -42,6 +42,7 @@ import {
 import { detectMainPosHeadPollChanges } from '@/lib/pos-main-head-poll'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { consumeSuppressMainPosAutoPrintForQueuedSync } from '@/lib/offline/pos-queued-sync-print-suppress'
+import { wasPosQueuedOrderLocallyPrintedByHash } from '@/lib/offline/pos-local-order-records'
 import {
   coercePosOrderIdFromRealtime,
   isPosPrintDebugEnabledInBrowser,
@@ -157,7 +158,7 @@ import {
 } from '@/lib/pos-main-device-grab-cancel-ui'
 import { playPosIncomingOrderBeep } from '@/lib/pos-incoming-order-sound'
 import { playPosPaymentCompleteBeep } from '@/lib/pos-payment-complete-sound'
-import { appAlert } from '@/lib/app-message'
+import { appAlert, appConfirm } from '@/lib/app-message'
 import { consumePosSelfInitiatedGrabCancel } from '@/lib/pos-grab-cancel-alert-suppress'
 import {
   hasRecentPosAutoPrintKey,
@@ -574,6 +575,14 @@ export function usePosMainDeviceSyncHost(): void {
   const autoprintCtxRef = useRef(autoprintCtx)
   autoprintCtxRef.current = autoprintCtx
 
+  const confirmKitchenBacklogRef = useRef<((count: number) => Promise<boolean>) | null>(null)
+  confirmKitchenBacklogRef.current = (count: number) =>
+    appConfirm(
+      tOr(t, 'posKitchenBacklogConfirm', '주방 주문서 {count}건이 출력되지 못하고 밀려 있습니다. 지금 출력할까요?')
+        .split('{count}')
+        .join(String(count))
+    )
+
   const pokeKitchenPrintJobs = usePosKitchenPrintJobWorker({
     enabled: isMainPosDevice,
     storeCode,
@@ -581,6 +590,7 @@ export function usePosMainDeviceSyncHost(): void {
     kitchenOnOrder: autoPrint.kitchenOnOrder,
     autoprintCtxRef,
     pauseIntervalPollRef,
+    confirmKitchenBacklogRef,
   })
 
   const prevPauseIntervalPollRef = useRef(pauseIntervalPoll)
@@ -852,7 +862,10 @@ export function usePosMainDeviceSyncHost(): void {
         return
       }
       if (!isCurrentStoreOrder(row.store_code)) return
-      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
+      if (
+        consumeSuppressMainPosAutoPrintForQueuedSync(orderId) ||
+        wasPosQueuedOrderLocallyPrintedByHash(row.idempotency_key_hash)
+      ) {
         seenOrderIdsRef.current.add(orderId)
         bumpLastSeenOrderId(storeCode, orderId)
         return
@@ -1702,7 +1715,10 @@ export function usePosMainDeviceSyncHost(): void {
             bumpLastSeenOrderId(storeCode, oid)
             continue
           }
-          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
+          if (
+            consumeSuppressMainPosAutoPrintForQueuedSync(oid) ||
+            wasPosQueuedOrderLocallyPrintedByHash(order.idempotencyKeyHash)
+          ) {
             seenOrderIdsRef.current.add(oid)
             bumpLastSeenOrderId(storeCode, oid)
             continue

@@ -268,6 +268,25 @@ const OFFLINE_FALLBACK: Record<string, unknown> = {
 /** 기본 fallback */
 const DEFAULT_FALLBACK = { success: true, queued: true }
 
+/**
+ * 응답이 오지 않는 회선(패킷 유실·캡티브 포털)에서 버튼이 무기한 잠기지 않게, 신규 주문 저장만 시간 제한 후 큐로.
+ * 서버가 실제로 저장했더라도 동기화 시 같은 localOrderNo(X-Idempotency-Key)로 중복 생성되지 않는다.
+ * 추가주문(updatePosOrder)·상태 변경은 재전송 멱등이 보장되지 않아 제외.
+ */
+const SAVE_POS_ORDER_QUEUE_TIMEOUT_MS = 10_000
+
+function resolveQueueTimeoutMs(path: string, init?: RequestInit): number {
+  if (path !== '/api/savePosOrder') return 0
+  const body = typeof init?.body === 'string' ? init.body : ''
+  if (!body) return 0
+  try {
+    const parsed = JSON.parse(body) as { localOrderNo?: unknown }
+    return String(parsed?.localOrderNo ?? '').trim() ? SAVE_POS_ORDER_QUEUE_TIMEOUT_MS : 0
+  } catch {
+    return 0
+  }
+}
+
 function canQueue(url: string, init?: RequestInit): boolean {
   const path = normalPath(url)
   const method = (init?.method || 'GET').toUpperCase()
@@ -380,8 +399,26 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
     }
   }
 
+  const timeoutMs = resolveQueueTimeoutMs(path, init)
+  let timeoutController: AbortController | null = null
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let timedOut = false
+  if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+    timeoutController = new AbortController()
+    const outer = init?.signal
+    if (outer) {
+      if (outer.aborted) timeoutController.abort()
+      else outer.addEventListener('abort', () => timeoutController?.abort(), { once: true })
+    }
+    timeoutId = setTimeout(() => {
+      timedOut = true
+      timeoutController?.abort()
+    }, timeoutMs)
+  }
+
   try {
-    const res = await apiFetch(input, init)
+    const res = await apiFetch(input, timeoutController ? { ...init, signal: timeoutController.signal } : init)
+    if (timeoutId) clearTimeout(timeoutId)
     if (res.ok) {
       const ct = (res.headers.get('content-type') || '').toLowerCase()
       if (ct.includes('application/json') && canQueue(url, init)) {
@@ -430,7 +467,8 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
     }
     return res
   } catch (e) {
-    if (!isNetworkError(e)) throw e
+    if (timeoutId) clearTimeout(timeoutId)
+    if (!timedOut && !isNetworkError(e)) throw e
     reportNetworkFailure()
     try {
       return await queueAndReturnFallback()

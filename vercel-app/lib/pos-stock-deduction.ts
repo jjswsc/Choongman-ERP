@@ -1,6 +1,11 @@
 import { supabaseSelectFilter, supabaseInsertMany, supabaseInsert } from '@/lib/supabase-server'
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
-import { explodeMenuIngredientsAsync } from '@/lib/pos-menu-bom-explode'
+import {
+  buildPosMenuBomIndexForMenus,
+  collectCartMenuRefsForBom,
+  explodeCartItemsToUsage,
+  isCartLineCancelledForBom,
+} from '@/lib/pos-menu-bom-explode'
 
 /** POS 주문 완료 시 재고 차감 실행 */
 export async function processPosStockDeduction(orderId: number): Promise<{ success: boolean; deductedCount: number }> {
@@ -40,46 +45,11 @@ export async function processPosStockDeduction(orderId: number): Promise<{ succe
     return { success: false, deductedCount: 0 }
   }
 
-  const usageByItem: Record<string, number> = {}
   const now = getBangkokDateTimeString()
-
-  for (const it of items) {
-    const cancelled = Boolean(
-      (it as { cancelledAt?: string; cancelled_at?: string }).cancelledAt ||
-        (it as { cancelled_at?: string }).cancelled_at
-    )
-    if (cancelled) continue
-
-    const cartQty = Math.max(0, Number(it.qty ?? 1))
-    if (cartQty <= 0) continue
-
-    if (it.promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0) {
-      for (const pi of it.promoItems) {
-        const menuId = String(pi.menuId ?? '').trim()
-        const optionId = pi.optionId ? String(pi.optionId) : null
-        if (!menuId) continue
-        const menuQty = cartQty * (Number(pi.quantity) ?? 1)
-        if (menuQty <= 0) continue
-        await explodeMenuIngredientsAsync(menuId, optionId, menuQty, usageByItem)
-      }
-    } else {
-      const itTyped = it as { id?: string; menuId1?: string; optionId1?: string; menuId2?: string; optionId2?: string }
-      if (itTyped.menuId1 && itTyped.menuId2) {
-        const halfQty = cartQty * 0.5
-        const opt1 = itTyped.optionId1 ? String(itTyped.optionId1) : null
-        const opt2 = itTyped.optionId2 ? String(itTyped.optionId2) : null
-        await explodeMenuIngredientsAsync(String(itTyped.menuId1), opt1, halfQty, usageByItem)
-        await explodeMenuIngredientsAsync(String(itTyped.menuId2), opt2, halfQty, usageByItem)
-      } else {
-        const parts = String(it.id ?? '').split('-')
-        const menuId = parts[0] ?? ''
-        const optionId = parts[1] || null
-        const menuQty = cartQty
-        if (!menuId) continue
-        await explodeMenuIngredientsAsync(menuId, optionId, menuQty, usageByItem)
-      }
-    }
-  }
+  const activeItems = (Array.isArray(items) ? items : []).filter((it) => !isCartLineCancelledForBom(it))
+  const { menuIds, optionIds } = collectCartMenuRefsForBom(activeItems)
+  const bomIndex = await buildPosMenuBomIndexForMenus(menuIds, optionIds)
+  const usageByItem = explodeCartItemsToUsage(bomIndex, activeItems)
 
   const rows = Object.entries(usageByItem)
     .filter(([, qty]) => qty > 0)

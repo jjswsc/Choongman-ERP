@@ -6807,6 +6807,9 @@ orderItemQty: 'จำนวน',
   offlineBannerRemoveDeadLetter: 'ลบแจ้งเตือน',
   offlineBannerRemoveDeadLetterConfirm:
     'ลบการแจ้งเตือนนี้? ออเดอร์อาจยังไม่ถึงเซิร์ฟเวอร์ — ตรวจสอบที่ร้านหากจำเป็น ดำเนินการต่อ?',
+  offlineBannerDeadOrderPrintFirst:
+    'มีออเดอร์ที่ส่งไปเซิร์ฟเวอร์ไม่สำเร็จ {count} รายการ พิมพ์รายละเอียดออเดอร์ที่เครื่องพิมพ์ใบเสร็จก่อนลบไหม (ใช้กระดาษที่พิมพ์ออกมาเพื่อคีย์ใหม่)',
+  offlineBannerDeadOrderPrintTitle: 'ออเดอร์ที่ส่งไม่สำเร็จ (ต้องคีย์ใหม่)',
   offlineBannerSyncMetaLine: 'ส่งสำเร็จล่าสุด {time} | +{synced} / !{failed}',
   offlineBannerLastError: 'ข้อผิดพลาดล่าสุด: {reason}',
   offlineBannerViewQueueDetails: 'ดูรายการที่รอส่ง',

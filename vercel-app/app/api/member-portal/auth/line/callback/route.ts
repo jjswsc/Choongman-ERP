@@ -13,6 +13,7 @@ import {
   buildMemberSessionCookie,
   createMemberPortalSessionForMember,
 } from '@/lib/member-portal-auth'
+import { buildPosQueueLinkClearCookie, readPosQueueLinkTokenFromCookieHeader } from '@/lib/pos-queue-link-cookie'
 
 function isProdLike(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
@@ -30,6 +31,7 @@ function redirectWithError(req: NextRequest, code: string): NextResponse {
   const res = NextResponse.redirect(new URL(`/m?error=${encodeURIComponent(code)}`, req.url))
   res.headers.append('Set-Cookie', buildLineOAuthStateClearCookie(isProdLike()))
   res.headers.append('Set-Cookie', buildLineJoinStoreClearCookie(isProdLike()))
+  res.headers.append('Set-Cookie', buildPosQueueLinkClearCookie(isProdLike()))
   return res
 }
 
@@ -74,7 +76,12 @@ export async function GET(req: NextRequest) {
       userAgent: req.headers.get('user-agent') || '',
       ip: clientIp(req),
     })
-    const res = NextResponse.redirect(buildSuccessRedirect(req, { friendshipStatusChanged, friendFlag }))
+    const queueLinkToken = readPosQueueLinkTokenFromCookieHeader(req.headers.get('cookie'))
+    const res = NextResponse.redirect(
+      queueLinkToken
+        ? new URL(`/api/pos/queue-public/${encodeURIComponent(queueLinkToken)}/line-link`, req.url)
+        : buildSuccessRedirect(req, { friendshipStatusChanged, friendFlag })
+    )
     res.headers.append('Set-Cookie', buildMemberSessionCookie(session.sessionToken))
     res.headers.append('Set-Cookie', buildLineOAuthStateClearCookie(secure))
     res.headers.append('Set-Cookie', buildLineJoinStoreClearCookie(secure))

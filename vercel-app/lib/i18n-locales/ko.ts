@@ -6849,6 +6849,9 @@ export const I18N_BASE_KO = {
   offlineBannerRemoveDeadLetter: '알림 지우기',
   offlineBannerRemoveDeadLetterConfirm:
     '전송 실패 알림을 지웁니다. 주문이 서버에 없을 수 있으니 필요하면 매장에서 확인하세요. 계속할까요?',
+  offlineBannerDeadOrderPrintFirst:
+    '서버로 보내지 못한 주문 {count}건이 있습니다. 지우기 전에 영수증 프린터로 주문 내용을 출력할까요? (출력한 종이로 다시 입력하세요)',
+  offlineBannerDeadOrderPrintTitle: '전송 실패 주문 (다시 입력 필요)',
   offlineBannerSyncMetaLine: '마지막 성공 전송 {time} | +{synced} / !{failed}',
   offlineBannerLastError: '원인: {reason}',
   offlineBannerViewQueueDetails: '대기 내용 보기',

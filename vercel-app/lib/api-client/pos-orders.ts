@@ -62,6 +62,8 @@ export interface PosOrder {
   orderType: string
   /** pos_orders.order_type (메모·채널 추론 전 DB 값) — 테이블 점유 매칭용 */
   dbOrderType?: string
+  /** pollMinimal 응답만 — 오프라인 큐 주문이 이 기기에서 이미 인쇄됐는지 판정 */
+  idempotencyKeyHash?: string
   tableName: string
   memo: string
   discountAmt?: number

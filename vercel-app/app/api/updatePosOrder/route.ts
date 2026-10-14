@@ -67,6 +67,7 @@ import {
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { settlePosOrderPaymentFast } from '@/lib/settle-pos-order-payment-fast'
+import { createServerTiming } from '@/lib/server-timing'
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 
 function isMissingServiceColumnsError(e: unknown): boolean {
@@ -82,6 +83,7 @@ const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', '
 /** POS 주문 수정 (항목·메모·할인·주문번호 등) - completed 전까지 수정 가능 */
 export async function POST(req: NextRequest) {
   const headers = posApiCorsHeaders()
+  const timing = createServerTiming()
   let idempotencyReserved = false
   let idempotencyKey = ''
   let idempotencyScope = ''
@@ -94,6 +96,7 @@ export async function POST(req: NextRequest) {
       return authResult.errorResponse
     }
     const auth = authResult.auth!
+    timing.mark('auth')
     idempotencyTenantId = String(auth.tenantId || '')
     const fromOfflineQueueSync =
       String(req.headers.get('x-cm-offline-queue-sync') ?? '').trim().toLowerCase() === '1'
@@ -632,6 +635,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    timing.mark('prepare')
     try {
       if (hasServiceColumns) {
         await supabaseUpdateByFilterWithPgrst204Fallback('pos_orders', `id=eq.${id}`, patch, 'updatePosOrder')
@@ -668,6 +672,7 @@ export async function POST(req: NextRequest) {
         logLabel: 'updatePosOrder',
       })
     }
+    timing.mark('update')
 
     const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryAppFinal + paymentCrypto
     const paymentComplete = isPosOrderCouponPaymentSettled({
@@ -770,6 +775,7 @@ export async function POST(req: NextRequest) {
       } catch (loyaltyErr) {
         console.error('updatePosOrder loyalty:', loyaltyErr)
       }
+      timing.mark('loyalty')
     }
     // 이미 적립된 주문은 body pointEarned가 0이어도 DB 적립분을 스냅샷 차감에 사용
     if (previousEarned > 0) {
@@ -810,6 +816,7 @@ export async function POST(req: NextRequest) {
       } catch (notifyErr) {
         console.error('updatePosOrder point line notify:', notifyErr)
       }
+      timing.mark('line_notify')
     }
 
     let couponsForRedeem = appliedPre.length > 0 ? appliedPre : appliedCoupons
@@ -919,11 +926,13 @@ export async function POST(req: NextRequest) {
       after: auditAfter,
       reason: fromOfflineQueueSync ? 'offline_sync_update' : 'manual_order_update',
     })
+    timing.mark('coupon')
     if (deferUnpaidSideEffects) {
       void auditPromise.catch((e) => console.error('updatePosOrder audit:', e))
     } else {
       await auditPromise
     }
+    timing.mark('audit')
 
     const prevOrderItems = (() => {
       const raw = current?.items_json
@@ -978,6 +987,7 @@ export async function POST(req: NextRequest) {
       } else {
         await kitchenEnqueuePromise
       }
+      timing.mark('kitchen_job')
     }
 
     let memberReceipt: Awaited<
@@ -1006,6 +1016,8 @@ export async function POST(req: NextRequest) {
     const receiptBalance =
       loyaltyReceipt?.pointBalanceExcludingEarn ?? memberReceipt?.memberPointBalance ?? undefined
 
+    timing.mark('member_receipt')
+    timing.apply(headers)
     return NextResponse.json(
       {
         success: true,

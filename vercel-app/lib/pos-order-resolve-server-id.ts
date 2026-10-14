@@ -8,6 +8,7 @@ import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
 import { isOnline } from '@/lib/offline/network'
 import { syncPending } from '@/lib/offline/sync'
+import { lookupPosLocalOrderServerId } from '@/lib/offline/pos-local-order-records'
 import {
   extractPosLocalOrderNo,
   isPosOfflineOnlyOrder,
@@ -124,8 +125,18 @@ export async function resolvePosOrderServerIdForAction(
     }
   }
 
+  const mappedBefore = lookupPosLocalOrderServerId(localOrderNo)
+  if (mappedBefore != null) {
+    return { serverId: mappedBefore, queueOnly: false, localOrderNo }
+  }
+
   if (options?.trySync !== false) {
     await trySyncPendingSaveOrders()
+  }
+
+  const mappedAfterSync = lookupPosLocalOrderServerId(localOrderNo)
+  if (mappedAfterSync != null) {
+    return { serverId: mappedAfterSync, queueOnly: false, localOrderNo }
   }
 
   if (localOrderNo) {

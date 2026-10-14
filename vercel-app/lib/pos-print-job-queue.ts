@@ -9,6 +9,10 @@ import {
   tableQrPayloadFromPrintJob,
   type TableQrPrintJobPayload,
 } from '@/lib/pos-table-qr-print-job'
+import {
+  queueTicketPayloadFromPrintJob,
+  type QueueTicketPrintJobPayload,
+} from '@/lib/pos-queue-ticket-print-job'
 
 export type { TableQrPrintJobPayload } from '@/lib/pos-table-qr-print-job'
 export { tableQrPayloadFromPrintJob } from '@/lib/pos-table-qr-print-job'
@@ -26,6 +30,15 @@ type EnqueueKitchenPrintJobInput = {
 function isMissingPrintJobsTableError(e: unknown): boolean {
   const msg = String(e ?? '').toLowerCase()
   return msg.includes('pos_print_jobs') || msg.includes('42p01')
+}
+
+/** claim 후 인쇄 완료/실패 보고 없이 이 시간이 지나면(기기 꺼짐·끊김) 다른 claim 이 다시 가져간다 */
+export const PRINT_JOB_CLAIM_LEASE_MS = 2 * 60 * 1000
+
+/** queued 이거나 lease 만료된 claimed — PostgREST 논리식 값은 예약문자(. :) 때문에 %22 로 감싼다 */
+export function claimableStatusFilter(nowMs = Date.now()): string {
+  const leaseExpiredIso = new Date(nowMs - PRINT_JOB_CLAIM_LEASE_MS).toISOString()
+  return `or=(status.eq.queued,and(status.eq.claimed,claimed_at.lt.%22${leaseExpiredIso}%22))`
 }
 
 function normalizeStoreCode(raw: unknown): string {
@@ -99,21 +112,47 @@ export async function enqueueKitchenPrintJob(input: EnqueueKitchenPrintJobInput)
   }
 }
 
+/** 직원이 확인한 경우에만 출력하는 밀린 주방 job 범위 (MAX_AGE 초과 ~ 이 시간 이내) */
+export const KITCHEN_PRINT_BACKLOG_WINDOW_MS = 3 * 60 * 60 * 1000
+
+/** MAX_AGE(8분)를 넘겨 자동 claim 에서 빠진 queued 주방 job 수 */
+export async function countKitchenPrintBacklog(storeCodeRaw: string, nowMs = Date.now()): Promise<number> {
+  const storeCode = normalizeStoreCode(storeCodeRaw)
+  if (!storeCode) return 0
+  try {
+    const autoGte = kitchenPrintJobClaimCreatedAtGteIso(nowMs)
+    const backlogGte = new Date(nowMs - KITCHEN_PRINT_BACKLOG_WINDOW_MS).toISOString()
+    const rows = (await supabaseSelectFilter(
+      'pos_print_jobs',
+      `store_code=eq.${encodeURIComponent(storeCode)}&status=eq.queued&job_type=eq.kitchen&created_at=gte.${encodeURIComponent(backlogGte)}&created_at=lt.${encodeURIComponent(autoGte)}`,
+      { limit: 50, select: 'id' }
+    )) as { id?: number }[] | null
+    return (rows || []).length
+  } catch (e) {
+    if (isMissingPrintJobsTableError(e)) return 0
+    throw e
+  }
+}
+
 export async function claimQueuedKitchenPrintJob(params: {
   storeCode: string
   workerId: string
+  /** true: 밀린 job(최대 3시간) 포함, 오래된 순으로 */
+  includeBacklog?: boolean
 }): Promise<{ id: number; order_id: number; payload_json: Record<string, unknown> | null } | null> {
   const storeCode = normalizeStoreCode(params.storeCode)
   const workerId = String(params.workerId ?? '').trim()
   if (!storeCode || !workerId) return null
   try {
-    const createdGte = kitchenPrintJobClaimCreatedAtGteIso()
+    const createdGte = params.includeBacklog
+      ? new Date(Date.now() - KITCHEN_PRINT_BACKLOG_WINDOW_MS).toISOString()
+      : kitchenPrintJobClaimCreatedAtGteIso()
     const rows = (await supabaseSelectFilter(
       'pos_print_jobs',
-      `store_code=eq.${encodeURIComponent(storeCode)}&status=eq.queued&job_type=eq.kitchen&created_at=gte.${encodeURIComponent(createdGte)}`,
+      `store_code=eq.${encodeURIComponent(storeCode)}&${claimableStatusFilter()}&job_type=eq.kitchen&created_at=gte.${encodeURIComponent(createdGte)}`,
       {
         limit: 25,
-        order: 'created_at.desc',
+        order: params.includeBacklog ? 'created_at.asc' : 'created_at.desc',
         select: 'id,order_id,payload_json',
       }
     )) as { id?: number; order_id?: number; payload_json?: Record<string, unknown> | null }[] | null
@@ -141,7 +180,7 @@ export async function claimQueuedKitchenPrintJob(params: {
       )
     }
     if (!picked?.id) return null
-    await supabaseUpdateByFilter('pos_print_jobs', `id=eq.${Number(picked.id)}&status=eq.queued`, {
+    await supabaseUpdateByFilter('pos_print_jobs', `id=eq.${Number(picked.id)}&${claimableStatusFilter()}`, {
       status: 'claimed',
       claimed_by: workerId,
       claimed_at: new Date().toISOString(),
@@ -222,7 +261,25 @@ export async function enqueueTableQrPrintJob(input: {
     scanEn: String(input.scanEn || '').trim() || undefined,
   }
   const dedupeKey = `table_qr:${storeCode}:${tableName}:${Date.now()}`
+  await enqueueReceiptLanePrintJob(storeCode, dedupeKey, payload_json)
+}
 
+/** 대기 번호표 → 메인 POS 영수증 프린터 (테이블 QR 과 같은 receipt 레인) */
+export async function enqueueQueueTicketPrintJob(input: {
+  storeCode: string
+  payload: QueueTicketPrintJobPayload
+}): Promise<void> {
+  const storeCode = normalizeStoreCode(input.storeCode)
+  if (!storeCode || !input.payload?.queueNo) return
+  const dedupeKey = `queue_ticket:${storeCode}:${input.payload.ticketId}:${Date.now()}`
+  await enqueueReceiptLanePrintJob(storeCode, dedupeKey, input.payload)
+}
+
+async function enqueueReceiptLanePrintJob(
+  storeCode: string,
+  dedupeKey: string,
+  payload_json: TableQrPrintJobPayload | QueueTicketPrintJobPayload
+): Promise<void> {
   try {
     await supabaseRpc('enqueue_pos_print_job', {
       p_store_code: storeCode,
@@ -277,7 +334,7 @@ export async function claimQueuedTableQrPrintJob(params: {
     const createdGte = kitchenPrintJobClaimCreatedAtGteIso()
     const rows = (await supabaseSelectFilter(
       'pos_print_jobs',
-      `store_code=eq.${encodeURIComponent(storeCode)}&status=eq.queued&job_type=eq.receipt&created_at=gte.${encodeURIComponent(createdGte)}`,
+      `store_code=eq.${encodeURIComponent(storeCode)}&${claimableStatusFilter()}&job_type=eq.receipt&created_at=gte.${encodeURIComponent(createdGte)}`,
       {
         limit: 25,
         order: 'created_at.desc',
@@ -289,7 +346,7 @@ export async function claimQueuedTableQrPrintJob(params: {
     for (const row of rows || []) {
       const id = Number(row.id || 0)
       if (!id) continue
-      if (!tableQrPayloadFromPrintJob(row.payload_json)) {
+      if (!tableQrPayloadFromPrintJob(row.payload_json) && !queueTicketPayloadFromPrintJob(row.payload_json)) {
         skipIds.push(id)
         continue
       }
@@ -300,11 +357,11 @@ export async function claimQueuedTableQrPrintJob(params: {
       await supabaseUpdateByFilter('pos_print_jobs', `id=in.(${skipIds.join(',')})&status=eq.queued`, {
         status: 'printed',
         printed_at: new Date().toISOString(),
-        last_error: 'skipped_not_table_qr',
+        last_error: 'skipped_not_receipt_lane',
       })
     }
     if (!picked?.id) return null
-    await supabaseUpdateByFilter('pos_print_jobs', `id=eq.${Number(picked.id)}&status=eq.queued`, {
+    await supabaseUpdateByFilter('pos_print_jobs', `id=eq.${Number(picked.id)}&${claimableStatusFilter()}`, {
       status: 'claimed',
       claimed_by: workerId,
       claimed_at: new Date().toISOString(),

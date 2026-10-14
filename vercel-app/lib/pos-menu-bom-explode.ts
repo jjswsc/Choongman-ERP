@@ -182,36 +182,114 @@ export function explodeSingleMenuLine(
   return usage
 }
 
+type BomIngredientRow = {
+  menu_id?: number
+  option_id?: number | null
+  item_code?: string
+  quantity?: number
+  loss_rate?: number
+  ingredient_type?: string
+}
+
+type BomOptionRow = {
+  id?: number
+  option_type?: string
+  item_code?: string | null
+  additive_source_menu_id?: number | null
+  quantity?: number
+}
+
+const BOM_INGREDIENT_SELECT = 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type'
+const BOM_OPTION_SELECT = 'id,option_type,item_code,additive_source_menu_id,quantity'
+
 /** DB에서 BOM·옵션 인덱스 로드 */
 export async function buildPosMenuBomIndex(): Promise<PosMenuBomIndex> {
   const [ingRows, optRows] = await Promise.all([
     supabaseSelectAllPages('pos_menu_ingredients', {
       order: 'menu_id.asc,id.asc',
-      select: 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
-    }).catch(() => []) as Promise<
-      {
-        menu_id?: number
-        option_id?: number | null
-        item_code?: string
-        quantity?: number
-        loss_rate?: number
-        ingredient_type?: string
-      }[]
-    >,
+      select: BOM_INGREDIENT_SELECT,
+    }).catch(() => []) as Promise<BomIngredientRow[]>,
     supabaseSelectAllPages('pos_menu_options', {
       order: 'id.asc',
-      select: 'id,option_type,item_code,additive_source_menu_id,quantity',
-    }).catch(() => []) as Promise<
-      {
-        id?: number
-        option_type?: string
-        item_code?: string | null
-        additive_source_menu_id?: number | null
-        quantity?: number
-      }[]
-    >,
+      select: BOM_OPTION_SELECT,
+    }).catch(() => []) as Promise<BomOptionRow[]>,
   ])
+  return buildPosMenuBomIndexFromRows(ingRows, optRows)
+}
 
+type CartLineForBom = {
+  id?: string
+  qty?: number
+  promoId?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  menuId1?: string
+  optionId1?: string
+  menuId2?: string
+  optionId2?: string
+  cancelledAt?: string | null
+  cancelled_at?: string | null
+}
+
+export function isCartLineCancelledForBom(it: CartLineForBom): boolean {
+  return Boolean(it.cancelledAt || it.cancelled_at)
+}
+
+const NUMERIC_ID = /^\d+$/
+
+/** 주문 줄에서 BOM 조회에 필요한 메뉴·옵션 id 수집 (숫자 id만) */
+export function collectCartMenuRefsForBom(items: CartLineForBom[]): { menuIds: string[]; optionIds: string[] } {
+  const menuIds = new Set<string>()
+  const optionIds = new Set<string>()
+  const add = (menuId: unknown, optionId: unknown) => {
+    const m = String(menuId ?? '').trim()
+    if (NUMERIC_ID.test(m)) menuIds.add(m)
+    const o = String(optionId ?? '').trim()
+    if (NUMERIC_ID.test(o)) optionIds.add(o)
+  }
+  for (const it of items || []) {
+    if (isCartLineCancelledForBom(it)) continue
+    if (it.promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0) {
+      for (const pi of it.promoItems) add(pi.menuId, pi.optionId)
+      continue
+    }
+    if (it.menuId1 && it.menuId2) {
+      add(it.menuId1, it.optionId1)
+      add(it.menuId2, it.optionId2)
+      continue
+    }
+    const parts = String(it.id ?? '').split('-')
+    add(parts[0], parts[1])
+  }
+  return { menuIds: [...menuIds], optionIds: [...optionIds] }
+}
+
+/**
+ * POS 주문 1건용 — 주문에 나온 메뉴·옵션만 `in.()` 2회로 로드 (줄 수와 무관하게 왕복 고정).
+ * 조회 실패는 throw — 빈 BOM으로 차감 완료 처리되지 않게.
+ */
+export async function buildPosMenuBomIndexForMenus(menuIds: string[], optionIds: string[]): Promise<PosMenuBomIndex> {
+  const optRows = optionIds.length
+    ? ((await supabaseSelectFilter('pos_menu_options', `id=in.(${optionIds.join(',')})`, {
+        limit: Math.max(50, optionIds.length * 2),
+        select: BOM_OPTION_SELECT,
+      })) as BomOptionRow[] | null) || []
+    : []
+  const allMenuIds = new Set(menuIds)
+  for (const o of optRows) {
+    const aid = Number(o.additive_source_menu_id)
+    if (Number.isFinite(aid) && aid > 0) allMenuIds.add(String(Math.trunc(aid)))
+  }
+  const ingRows = allMenuIds.size
+    ? ((await supabaseSelectFilter('pos_menu_ingredients', `menu_id=in.(${[...allMenuIds].join(',')})`, {
+        limit: 10000,
+        order: 'menu_id.asc,id.asc',
+        select: BOM_INGREDIENT_SELECT,
+      })) as BomIngredientRow[] | null) || []
+    : []
+  return buildPosMenuBomIndexFromRows(ingRows, optRows)
+}
+
+export function buildPosMenuBomIndexFromRows(ingRows: BomIngredientRow[], optRows: BomOptionRow[]): PosMenuBomIndex {
   const byMenuOption = new Map<string, BomLine[]>()
   const baseByMenu = new Map<string, BomLine[]>()
 
@@ -252,125 +330,4 @@ export async function buildPosMenuBomIndex(): Promise<PosMenuBomIndex> {
   }
 
   return { byMenuOption, baseByMenu, optionsById }
-}
-
-/**
- * POS 주문 1건용 — DB 조회 기반 (자동차감). buildPosMenuBomIndex 와 동일 식.
- */
-export async function explodeMenuIngredientsAsync(
-  menuId: string,
-  optionId: string | null,
-  menuQty: number,
-  usageByItem: Record<string, number>
-): Promise<void> {
-  let optionType = 'substitution'
-  let optionItemCode: string | null = null
-  let additiveSourceMenuId: number | null = null
-  let optionQty = 1
-
-  if (optionId) {
-    try {
-      const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
-        limit: 1,
-        select: 'option_type,item_code,additive_source_menu_id,quantity',
-      })) as {
-        option_type?: string
-        item_code?: string | null
-        additive_source_menu_id?: number | null
-        quantity?: number
-      }[] | null
-      const opt = optRows?.[0]
-      if (opt) {
-        optionType = (opt.option_type || 'substitution') as string
-        optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
-        const aid = opt.additive_source_menu_id
-        additiveSourceMenuId =
-          aid != null && Number.isFinite(Number(aid)) && Number(aid) > 0 ? Number(aid) : null
-        optionQty = Number(opt.quantity) ?? 1
-      }
-    } catch {
-      try {
-        const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
-          limit: 1,
-          select: 'option_type,item_code,quantity',
-        })) as { option_type?: string; item_code?: string | null; quantity?: number }[] | null
-        const opt = optRows?.[0]
-        if (opt) {
-          optionType = (opt.option_type || 'substitution') as string
-          optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
-          optionQty = Number(opt.quantity) ?? 1
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  let filter = `menu_id=eq.${encodeURIComponent(menuId)}`
-  if (optionId && optionType === 'substitution') {
-    filter += '&option_id=eq.' + encodeURIComponent(optionId)
-  } else {
-    filter += '&option_id=is.null'
-  }
-
-  let bomRows: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null
-  try {
-    bomRows = (await supabaseSelectFilter('pos_menu_ingredients', filter, {
-      limit: 200,
-      select: 'item_code,quantity,loss_rate,ingredient_type',
-    })) as typeof bomRows
-  } catch {
-    bomRows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${encodeURIComponent(menuId)}`, {
-      limit: 200,
-      select: 'item_code,quantity,loss_rate,ingredient_type',
-    })) as typeof bomRows
-  }
-
-  /** 대체형: 옵션 전용 BOM이 비면 기본 BOM으로 폴백 (sync explode·원가분석과 동일) */
-  if (
-    optionId &&
-    optionType === 'substitution' &&
-    !(bomRows || []).some((b) => String(b.item_code ?? '').trim())
-  ) {
-    try {
-      bomRows = (await supabaseSelectFilter(
-        'pos_menu_ingredients',
-        `menu_id=eq.${encodeURIComponent(menuId)}&option_id=is.null`,
-        { limit: 200, select: 'item_code,quantity,loss_rate,ingredient_type' }
-      )) as typeof bomRows
-    } catch {
-      /* keep empty */
-    }
-  }
-
-  const lines: BomLine[] = []
-  for (const b of bomRows || []) {
-    const line = asBomLine(b)
-    if (line) lines.push(line)
-  }
-  addBomLinesNeed(usageByItem, lines, menuQty)
-
-  if (optionType === 'additive' && optionId) {
-    const mult = menuQty * optionQty
-    if (additiveSourceMenuId && mult > 0) {
-      await explodeMenuIngredientsAsync(String(additiveSourceMenuId), null, mult, usageByItem)
-    } else if (optionItemCode && mult > 0) {
-      usageByItem[optionItemCode] = (usageByItem[optionItemCode] ?? 0) + mult
-    }
-    try {
-      const optBom = (await supabaseSelectFilter(
-        'pos_menu_ingredients',
-        `menu_id=eq.${encodeURIComponent(menuId)}&option_id=eq.${encodeURIComponent(optionId)}`,
-        { limit: 200, select: 'item_code,quantity,loss_rate,ingredient_type' }
-      )) as { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null
-      const optLines: BomLine[] = []
-      for (const b of optBom || []) {
-        const line = asBomLine(b)
-        if (line) optLines.push(line)
-      }
-      addBomLinesNeed(usageByItem, optLines, menuQty)
-    } catch {
-      /* ignore */
-    }
-  }
 }

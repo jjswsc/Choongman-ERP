@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
 import { TableOrderPanel } from '@/components/pos/table-order-panel'
+import { PosQueueWaitlistButton } from '@/components/pos/pos-queue-waitlist-button'
 import { QrTableSessionPanel } from '@/components/pos/qr-table-session-panel'
 import { useQrFloorSessionHints } from '@/lib/use-qr-floor-session-hints'
 import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
@@ -165,6 +166,8 @@ import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
 import { formatPosOrderNoForPrint } from '@/lib/pos-order-no'
+import { recordPosPerf } from '@/lib/pos-perf-log'
+import { wasPosQueuedOrderLocallyPrintedByHash } from '@/lib/offline/pos-local-order-records'
 import {
   getPosDeliveryPlatformName,
   isApiInboundDeliveryOrderMemo,
@@ -625,6 +628,17 @@ export default function PosTerminalPage() {
   useEffect(() => {
     authStoreRef.current = auth?.store
   }, [auth?.store])
+  const posBusyPerfRef = useRef<{ action: string; t0: number } | null>(null)
+  const markPosBusyPerf = useCallback((action: string) => {
+    posBusyPerfRef.current = { action, t0: performance.now() }
+  }, [])
+  useEffect(() => {
+    if (posCartBackendBusy) return
+    const started = posBusyPerfRef.current
+    if (!started) return
+    posBusyPerfRef.current = null
+    recordPosPerf(started.action, performance.now() - started.t0, { storeCode: currentStoreIdRef.current })
+  }, [posCartBackendBusy])
   useEffect(() => {
     if (isPosDemo) return
     if (loadingTables) return
@@ -769,6 +783,10 @@ export default function PosTerminalPage() {
   const refetchCurrentStore = useCallback(() => {
     return refetchStores({ scope: 'current', immediate: true })
   }, [refetchStores])
+  /** 서빙 체크 연속 탭 — 화면은 이미 낙관적 반영, 재조회는 600ms 디바운스로 1회 */
+  const refetchCurrentStoreSoon = useCallback(() => {
+    void refetchStores({ scope: 'current' })
+  }, [refetchStores])
 
   const dismissTerminalOrder = useCallback(
     (order: Order) => {
@@ -822,11 +840,8 @@ export default function PosTerminalPage() {
         })
       }
       await refetchStores({ scope: 'current', immediate: true })
-      /** DB·캐시 반영 지연 시 옛 스냅샷으로 덮어쓰는 레이스 완화 */
+      /** DB·캐시 반영 지연 시 옛 스냅샷으로 덮어쓰는 레이스 완화 (Realtime도 함께 갱신) */
       if (typeof window !== 'undefined') {
-        window.setTimeout(() => {
-          void refetchStores({ scope: 'current', immediate: true })
-        }, 700)
         window.setTimeout(() => {
           void refetchStores({ scope: 'current', immediate: true })
         }, 1800)
@@ -896,6 +911,7 @@ export default function PosTerminalPage() {
       }
       if (!(await ensureBusinessOpenForOrder())) return false
       posCartBackendBusyRef.current = true
+      markPosBusyPerf('deposit')
       setPosCartBackendBusy(true)
       try {
         const res = await receivePosDeposit({
@@ -945,7 +961,7 @@ export default function PosTerminalPage() {
         setPosCartBackendBusy(false)
       }
     },
-    [isPosDemo, t, lang, currentStoreId, ensureBusinessOpenForOrder, alertPaymentBackendBusy]
+    [isPosDemo, t, lang, currentStoreId, ensureBusinessOpenForOrder, alertPaymentBackendBusy, markPosBusyPerf]
   )
   const handleRefundPosDeposit = useCallback(
     async (holder: { memberId?: number; phone: string }) => {
@@ -5011,7 +5027,10 @@ export default function PosTerminalPage() {
         })
         return
       }
-      if (consumeSuppressMainPosAutoPrintForQueuedSync(orderId)) {
+      if (
+        consumeSuppressMainPosAutoPrintForQueuedSync(orderId) ||
+        wasPosQueuedOrderLocallyPrintedByHash(row.idempotency_key_hash)
+      ) {
         seenOrderIdsRef.current.add(orderId)
         bumpLastSeenOrderId(orderId)
         logPosPrintDebug('realtime_insert_suppress_queued_sync', { orderId })
@@ -6035,7 +6054,10 @@ export default function PosTerminalPage() {
             logPosPrintDebug('poll_skip_seen', { orderId: oid })
             continue
           }
-          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
+          if (
+            consumeSuppressMainPosAutoPrintForQueuedSync(oid) ||
+            wasPosQueuedOrderLocallyPrintedByHash(order.idempotencyKeyHash)
+          ) {
             seenOrderIdsRef.current.add(oid)
             bumpLastSeenOrderId(oid)
             logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
@@ -9335,6 +9357,7 @@ export default function PosTerminalPage() {
                 return false
               }
               posCartBackendBusyRef.current = true
+              markPosBusyPerf('delivery_payment')
               setPosCartBackendBusy(true)
               try {
                 if (isPosDemo) {
@@ -9527,6 +9550,7 @@ export default function PosTerminalPage() {
                 return false
               }
               posCartBackendBusyRef.current = true
+              markPosBusyPerf('takeout_payment')
               setPosCartBackendBusy(true)
               try {
                 if (isPosDemo) {
@@ -9710,6 +9734,7 @@ export default function PosTerminalPage() {
             onOrderSubmit={async (payload) => {
               if (posCartBackendBusyRef.current) return
               posCartBackendBusyRef.current = true
+              markPosBusyPerf('order_submit')
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
               /** `await getPosOrders` 등으로 한참 뒤에 맞추면 카트가 비거나 바뀐 뒤라 수량이 엇갈릴 수 있음 → 제출 직후 스냅샷 */
@@ -10646,12 +10671,10 @@ export default function PosTerminalPage() {
                 clearCartFromTerminal()
                 setSelectedTableId(null)
                 setServingTableId(submittedTableId)
-                /** Omni: refetch를 버튼 잠금에서 분리 — 저장 성공 직후 주문 버튼 해제 */
-                if (isOmniPaymentFastPath) {
-                  void refreshStoreListAfterOrderSave(refreshAfterSaveArgs)
-                } else {
-                  await refreshStoreListAfterOrderSave(refreshAfterSaveArgs)
-                }
+                /** refetch를 버튼 잠금에서 분리 — 추가주문·결제 merge는 서버 품목을 다시 받으므로 대기 불필요 */
+                void refreshStoreListAfterOrderSave(refreshAfterSaveArgs).catch((e) =>
+                  console.warn('refresh after dine-in save failed:', e)
+                )
               } catch (e) {
                 console.error('savePosOrder/updatePosOrder:', e)
               } finally {
@@ -10665,6 +10688,7 @@ export default function PosTerminalPage() {
                 return false
               }
               posCartBackendBusyRef.current = true
+              markPosBusyPerf('dinein_payment')
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
               try {
@@ -10974,6 +10998,7 @@ export default function PosTerminalPage() {
                 return false
               }
               posCartBackendBusyRef.current = true
+              markPosBusyPerf('nondine_payment')
               setPosCartBackendBusy(true)
               const posSaveClientKey = newPosOrderClientRequestId()
               try {
@@ -11664,11 +11689,10 @@ export default function PosTerminalPage() {
                   })),
                   queuedWithoutServerId,
                 }
-                if (isOmniPaymentFastPath) {
-                  void refreshStoreListAfterOrderSave(refreshNonDineArgs)
-                } else {
-                  await refreshStoreListAfterOrderSave(refreshNonDineArgs)
-                }
+                /** 낙관적 반영은 동기 — 방금 저장한 건 자동 선택이 refetch 완료를 기다릴 필요 없음 */
+                void refreshStoreListAfterOrderSave(refreshNonDineArgs).catch((e) =>
+                  console.warn('refresh after non-dine save failed:', e)
+                )
                 /** 배달·포장「주문」만 저장 시: 목록에서 다시 누르지 않도록 방금 저장한 건 자동 선택 */
                 if (payload.orderType === 'delivery') {
                   if (!hasPayment && newOrderId != null && newOrderId > 0) {
@@ -12054,6 +12078,13 @@ export default function PosTerminalPage() {
                     <Search className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
                   </Button>
+                  {!isPosDemo && currentStoreId ? (
+                    <PosQueueWaitlistButton
+                      storeCode={String(currentStoreId)}
+                      t={t}
+                      getPrinterSettings={getPrinterSettingsForStore}
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -12505,6 +12536,7 @@ export default function PosTerminalPage() {
                   : undefined
               }
               onServed={refetchCurrentStore}
+              onItemServedToggled={refetchCurrentStoreSoon}
               onAfterPartialLineRemoved={
                 isPosDemo
                   ? undefined
@@ -12927,7 +12959,7 @@ export default function PosTerminalPage() {
           open: liveSearchOpen,
           onOpenChange: setLiveSearchOpen,
           storeCode: currentStoreId,
-          onServedUpdated: refetchCurrentStore,
+          onServedUpdated: refetchCurrentStoreSoon,
         }}
         postPaymentCashChange={{
           amountBaht: postPaymentCashChangeBaht,

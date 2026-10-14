@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import type { Order, Table } from '@/lib/pos-types'
 import { posOrderHasServerId } from '@/lib/pos-order-server-id'
+import { recordPosPerf } from '@/lib/pos-perf-log'
 import {
   markPosOrderItemServed,
   posDineInTableMerge,
@@ -91,6 +92,8 @@ export interface TableOrderPanelProps {
   /** 합석 대상에 넣을 포장 주문(가상 테이블 행). absorb는 항상 “현재 테이블 청구서”로만 허용. */
   takeoutMergePeers?: Table[]
   onServed?: () => void
+  /** 서빙 체크 토글 성공 후 — 없으면 onServed. 연속 체크 시 재조회를 묶을 때 사용 */
+  onItemServedToggled?: () => void
   onAddOrder?: () => void
   /** 추가 주문 입력 중 — 「추가 주문」 버튼 숨김(서빙 체크는 유지) */
   addOrderModeActive?: boolean
@@ -134,6 +137,7 @@ export function TableOrderPanel({
   promos: promosFromProps = [],
   allTables = [],
   onServed,
+  onItemServedToggled,
   onAddOrder,
   addOrderModeActive = false,
   onPay,
@@ -182,7 +186,16 @@ export function TableOrderPanel({
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
   const [itemChildServed, setItemChildServed] = useState<Record<string, boolean>>({})
   const [itemCancelled, setItemCancelled] = useState<Record<string, boolean>>({})
-  const [savingItemId, setSavingItemId] = useState<string | null>(null)
+  const [savingItemIds, setSavingItemIds] = useState<Record<string, true>>({})
+  const afterServedToggle = () => (onItemServedToggled ?? onServed)?.()
+  const markItemSaving = (itemId: string, saving: boolean) =>
+    setSavingItemIds((prev) => {
+      if (saving) return prev[itemId] ? prev : { ...prev, [itemId]: true }
+      if (!prev[itemId]) return prev
+      const next = { ...prev }
+      delete next[itemId]
+      return next
+    })
   const [guestEditOpen, setGuestEditOpen] = useState(false)
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
   const [guestDirectValue, setGuestDirectValue] = useState('10')
@@ -313,24 +326,31 @@ export function TableOrderPanel({
       await appAlert(msg && msg !== 'posServedNeedsOrderId' ? msg : tDefault('posServedNeedsOrderId'))
       return
     }
-    const nextServed = !itemServed[itemId]
-    setSavingItemId(itemId)
+    if (savingItemIds[itemId]) return
+    const prevServed = Boolean(itemServed[itemId])
+    const nextServed = !prevServed
+    /** 체크는 즉시 반영, 실패 시 되돌림 — 서버 왕복을 직원이 기다리지 않게 */
+    setItemServed((prev) => ({ ...prev, [itemId]: nextServed }))
+    markItemSaving(itemId, true)
+    const t0 = performance.now()
     try {
       const res = await markPosOrderItemServed({
         id,
         itemId,
         served: nextServed,
       })
+      recordPosPerf('checker_server', performance.now() - t0)
       if (!res.success) {
+        setItemServed((prev) => ({ ...prev, [itemId]: prevServed }))
         await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return
       }
-      setItemServed((prev) => ({ ...prev, [itemId]: nextServed }))
-      onServed?.()
+      afterServedToggle()
     } catch (e) {
+      setItemServed((prev) => ({ ...prev, [itemId]: prevServed }))
       await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
-      setSavingItemId(null)
+      markItemSaving(itemId, false)
     }
   }
 
@@ -350,8 +370,12 @@ export function TableOrderPanel({
       return
     }
     const mapKey = `${itemId}::${childKey}`
-    const nextServed = !itemChildServed[mapKey]
-    setSavingItemId(itemId)
+    if (savingItemIds[itemId]) return
+    const prevServed = Boolean(itemChildServed[mapKey])
+    const nextServed = !prevServed
+    setItemChildServed((prev) => ({ ...prev, [mapKey]: nextServed }))
+    markItemSaving(itemId, true)
+    const t0 = performance.now()
     try {
       const res = await markPosOrderItemServed({
         id,
@@ -360,21 +384,23 @@ export function TableOrderPanel({
         mode: 'served',
         served: nextServed,
       })
+      recordPosPerf('checker_server', performance.now() - t0)
       if (!res.success) {
+        setItemChildServed((prev) => ({ ...prev, [mapKey]: prevServed }))
         await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return
       }
-      setItemChildServed((prev) => ({ ...prev, [mapKey]: nextServed }))
       const childServedCount = Number(res.childServedCount ?? -1)
       const childTotalCount = Number(res.childTotalCount ?? -1)
       if (childServedCount >= 0 && childTotalCount >= 0) {
         setItemServed((prev) => ({ ...prev, [itemId]: childServedCount >= childTotalCount }))
       }
-      onServed?.()
+      afterServedToggle()
     } catch (e) {
+      setItemChildServed((prev) => ({ ...prev, [mapKey]: prevServed }))
       await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
-      setSavingItemId(null)
+      markItemSaving(itemId, false)
     }
   }
 
@@ -1313,7 +1339,7 @@ export function TableOrderPanel({
                             e.stopPropagation()
                             void toggleItemServed(lineKey)
                           }}
-                          disabled={savingItemId === lineKey || removingItemId !== null || cancelled}
+                          disabled={Boolean(savingItemIds[lineKey]) || removingItemId !== null || cancelled}
                           aria-label={
                             served
                               ? (t('cancel') || '취소')
@@ -1358,7 +1384,7 @@ export function TableOrderPanel({
                                       e.stopPropagation()
                                       void toggleSetChildServed(lineKey, childKey)
                                     }}
-                                    disabled={savingItemId === lineKey || removingItemId !== null || cancelled}
+                                    disabled={Boolean(savingItemIds[lineKey]) || removingItemId !== null || cancelled}
                                   >
                                     <span className="truncate pr-1">{translatePosMenuLineForReceipt(childLabel, t)}</span>
                                     {childDone ? <Check className="h-5 w-5 shrink-0" /> : <CheckCircle className="h-5 w-5 shrink-0" />}

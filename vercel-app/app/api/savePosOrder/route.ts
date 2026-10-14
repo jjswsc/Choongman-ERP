@@ -875,17 +875,16 @@ export async function POST(req: NextRequest) {
       !isPosCompletionStatus(orderStatus) &&
       closeStatus == null
 
-    if (deferNonCriticalAck) {
-      void upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo').catch((taxErr) => {
-        console.error('savePosOrder tax recipient upsert:', taxErr)
-      })
-    } else {
-      try {
-        await upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo')
-      } catch (taxErr) {
-        console.error('savePosOrder tax recipient upsert:', taxErr)
-      }
-    }
+    /**
+     * 충만: Vercel은 응답 후 백그라운드 작업을 버릴 수 있어(주방 job 유실 위험) defer하지 않는다.
+     * 대신 서로 독립인 후처리는 동시에 시작하고 응답 전에 함께 기다린다.
+     */
+    const ackWork: Promise<unknown>[] = []
+    const taxPromise = upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo').catch((taxErr) => {
+      console.error('savePosOrder tax recipient upsert:', taxErr)
+    })
+    if (deferNonCriticalAck) void taxPromise
+    else ackWork.push(taxPromise)
 
     if (isPosCompletionStatus(orderStatus) && Number(created?.id) > 0) {
       const createdAtIso = String((created as { created_at?: string } | undefined)?.created_at || new Date().toISOString())
@@ -944,7 +943,7 @@ export async function POST(req: NextRequest) {
       if (deferNonCriticalAck) {
         void auditPromise.catch((e) => console.error('savePosOrder audit:', e))
       } else {
-        await auditPromise
+        ackWork.push(auditPromise)
       }
     }
 
@@ -976,18 +975,25 @@ export async function POST(req: NextRequest) {
           memo,
           guestCount: guest_count,
           ...(delivery_app_code ? { deliveryAppCode: delivery_app_code } : {}),
+          ...(idempotencyBody ? { localOrderNo: idempotencyBody.slice(0, 120) } : {}),
         },
       })
       if (deferNonCriticalAck) {
         void kitchenEnqueuePromise.catch((e) => console.error('savePosOrder kitchen enqueue:', e))
       } else {
-        await kitchenEnqueuePromise
+        ackWork.push(kitchenEnqueuePromise)
       }
+    }
+    if (ackWork.length > 0) {
+      const settled = await Promise.allSettled(ackWork)
+      const failed = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+      if (failed) throw failed.reason
     }
 
     const totalElapsedMs = Date.now() - startedAtMs
     headers.set('X-Pos-Save-Elapsed-Ms', String(totalElapsedMs))
     headers.set('X-Pos-Save-Allocate-OrderNo-Ms', String(allocateOrderNoMs))
+    headers.set('Server-Timing', `allocate_order_no;dur=${allocateOrderNoMs}, total;dur=${totalElapsedMs}`)
     let memberReceipt: Awaited<
       ReturnType<typeof import('@/lib/pos-receipt-member-snapshot-server').loadPosOrderMemberReceiptSnapshot>
     > = null
