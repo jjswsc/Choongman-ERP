@@ -1715,7 +1715,10 @@ export function usePosMainDeviceSyncHost(): void {
             bumpLastSeenOrderId(storeCode, oid)
             continue
           }
-          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
+          if (
+            consumeSuppressMainPosAutoPrintForQueuedSync(oid) ||
+            wasPosQueuedOrderLocallyPrintedByHash(order.idempotencyKeyHash)
+          ) {
             seenOrderIdsRef.current.add(oid)
             bumpLastSeenOrderId(storeCode, oid)
             continue

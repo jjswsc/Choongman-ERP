@@ -728,6 +728,10 @@ export async function GET(request: NextRequest) {
           linkposApprovedAmount: Number(r.linkpos_approved_amount ?? 0),
           linkposRequestedAt: String(r.linkpos_requested_at ?? ''),
           linkposRespondedAt: String(r.linkpos_responded_at ?? ''),
+          ...(() => {
+            const h = String((r as { idempotency_key_hash?: string | null }).idempotency_key_hash ?? '').trim()
+            return h ? { idempotencyKeyHash: h } : {}
+          })(),
         }
       })
 

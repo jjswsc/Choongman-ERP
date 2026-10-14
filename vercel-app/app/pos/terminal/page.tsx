@@ -6054,7 +6054,10 @@ export default function PosTerminalPage() {
             logPosPrintDebug('poll_skip_seen', { orderId: oid })
             continue
           }
-          if (consumeSuppressMainPosAutoPrintForQueuedSync(oid)) {
+          if (
+            consumeSuppressMainPosAutoPrintForQueuedSync(oid) ||
+            wasPosQueuedOrderLocallyPrintedByHash(order.idempotencyKeyHash)
+          ) {
             seenOrderIdsRef.current.add(oid)
             bumpLastSeenOrderId(oid)
             logPosPrintDebug('poll_suppress_queued_sync', { orderId: oid })
