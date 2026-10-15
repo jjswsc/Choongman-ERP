@@ -6449,6 +6449,9 @@ export const I18N_BASE_KO = {
   erpWorkspaceTabRemountHint: '다른 메뉴로 나갔다 오면 새로 불러옵니다',
   erpCloseOtherTabs: '다른 탭 닫기',
   erpWorkspaceTabDragHint: '드래그하여 순서 변경',
+  erpNewVersionReady: '새 버전이 배포되었습니다. 작업을 마친 뒤 새로고침하세요.',
+  erpNewVersionReload: '새로고침',
+  erpNewVersionLater: '나중에',
   windowsInstallerCopyHint:
     '다운로드 주소를 클립보드에 복사했습니다.\n\n브라우저 주소창에 붙여넣은 뒤 Enter를 누르면 설치 파일을 받을 수 있습니다.',
   windowsInstallerCopyFail: '클립보드 복사에 실패했습니다. 아래 주소를 직접 복사해 주세요:\n\n',
