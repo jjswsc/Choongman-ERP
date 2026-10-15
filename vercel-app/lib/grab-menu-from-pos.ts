@@ -821,7 +821,7 @@ export async function buildGrabMenuFromPos(params: {
   })
   const [resolved, storeSoldOutLoad] = await Promise.all([
     resolvePolicyBundleForGrabMenu(storeGuess),
-    loadStoreMenuSoldOutMap(storeGuess).catch(() => ({
+    loadStoreMenuSoldOutMap(storeGuess, { channel: 'delivery' }).catch(() => ({
       byMenuId: new Map<number, string>(),
       schemaReady: false,
     })),

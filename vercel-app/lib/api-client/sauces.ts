@@ -6,6 +6,7 @@ import { apiFetchWithOffline } from '../api/fetch-offline'
 import { setErpCache } from '../offline/cache'
 import { notifyPosCatalogUpdated, posMenusCatalogCacheKey } from '../offline/pos-catalog-offline'
 import type { PosMenuUpsertApiBody } from '../pos-menu-upsert-server'
+import type { PosMenuSoldOutScope } from '../pos-menu-sold-out'
 import { parsePosMutationResponse } from './helpers'
 import type { PosOptionSelectionGroupConfig } from './pos-menus'
 
@@ -735,6 +736,8 @@ export async function updatePosMenuSoldOut(params: {
   id: string
   soldOut: boolean
   storeCode?: string | null
+  /** all = 전 채널, store = หน้าร้าน만 (배달 계속 판매) */
+  soldOutScope?: PosMenuSoldOutScope
 }) {
   const res = await apiFetchWithOffline('/api/updatePosMenuSoldOut', {
     method: 'POST',
@@ -743,12 +746,14 @@ export async function updatePosMenuSoldOut(params: {
       id: params.id,
       soldOut: params.soldOut,
       storeCode: params.storeCode || undefined,
+      scope: params.soldOutScope || undefined,
     }),
   })
   const data = (await res.json()) as {
     success: boolean
     message?: string
     soldOutDate?: string | null
+    soldOutScope?: PosMenuSoldOutScope | null
     storeCode?: string
     scope?: 'store' | 'global'
     code?: string

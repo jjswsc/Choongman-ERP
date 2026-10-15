@@ -160,6 +160,12 @@ import {
   upsertPosOrderTaxInvoiceMemo,
   type PosTaxInvoiceData,
 } from '@/lib/pos-tax-invoice'
+import {
+  clearPosTaxInvoiceDraft,
+  readPosTaxInvoiceDraft,
+  savePosTaxInvoiceDraft,
+  type PosTaxInvoiceDraftFields,
+} from '@/lib/pos-tax-invoice-draft'
 import { escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
@@ -1216,6 +1222,8 @@ export default function PosTerminalPage() {
   const [pendingReceiptOrderNo, setPendingReceiptOrderNo] = useState<string | null>(null)
   const [taxInvoiceTargetOrder, setTaxInvoiceTargetOrder] = useState<Order | null>(null)
   const [taxInvoiceSaving, setTaxInvoiceSaving] = useState(false)
+  const [taxInvoiceDraftRestored, setTaxInvoiceDraftRestored] = useState(false)
+  const taxInvoiceDraftBaselineRef = useRef('')
   const [taxSearchLoading, setTaxSearchLoading] = useState(false)
   const [taxSearchField, setTaxSearchField] = useState<'taxId' | 'name' | 'phone'>('taxId')
   const [taxSearchKeyword, setTaxSearchKeyword] = useState('')
@@ -2447,14 +2455,15 @@ export default function PosTerminalPage() {
   const hasActiveOrderEntryCart =
     terminalCartLines.length > 0 &&
     (activeTab === 'tables' || activeTab === 'takeout' || activeTab === 'delivery')
-  /** 결제 모달·QR 대기·거스름·QR 성공 sticky·홀/포장/배달 입력 중 — 신규 배달 자동 탭 전환 억제 */
+  /** 결제 모달·QR 대기·거스름·QR 성공 sticky·홀/포장/배달 입력·세금계산서 입력 중 — 신규 배달 자동 탭 전환 억제 */
   const isIncomingDeliveryFocusLocked =
     tourPaymentModalOpen ||
     hasPendingPaymentFlow ||
     postPaymentCashChangeBaht != null ||
     kbankOutcomeState?.kind === 'success' ||
     kbankCallbackState === 'waiting' ||
-    hasActiveOrderEntryCart
+    hasActiveOrderEntryCart ||
+    taxInvoiceTargetOrder != null
   /**
    * Realtime INSERT effect가 autoFocus를 deps에 안 넣어 결제·키인 잠금이 스냅샷으로 남는 문제 방지.
    * 잠금 여부는 항상 최신 ref를 본다.
@@ -8291,24 +8300,84 @@ export default function PosTerminalPage() {
   const openTaxInvoiceEditorForOrder = useCallback((order: Order | null | undefined) => {
     if (!order) return
     const parsed = parsePosOrderMemo(order.memo)
+    const baseline = {
+      customerType: parsed.taxInvoice?.customerType === 'company' ? 'company' : 'person',
+      memberNo: String(parsed.taxInvoice?.memberNo || '').trim(),
+      name: String(parsed.taxInvoice?.name || '').trim(),
+      taxId: String(parsed.taxInvoice?.taxId || '').replace(/\D/g, '').slice(0, 13),
+      branchNo: String(parsed.taxInvoice?.branchNo || '').replace(/\D/g, '').slice(0, 5),
+      phone: String(parsed.taxInvoice?.phone || '').replace(/\D/g, '').slice(0, 10),
+      email: String(parsed.taxInvoice?.email || '').trim(),
+      address: String(parsed.taxInvoice?.address || '').trim(),
+    } satisfies PosTaxInvoiceDraftFields
+    taxInvoiceDraftBaselineRef.current = JSON.stringify(baseline)
+    const draft = readPosTaxInvoiceDraft(currentStoreId, order.id)
+    const fields = draft ?? baseline
     setTaxInvoiceTargetOrder(order)
+    setTaxInvoiceDraftRestored(draft != null)
     setTaxSearchField('taxId')
     setTaxSearchKeyword('')
     setTaxSearchRows([])
     setTaxSearchMessage('')
-    if (parsed.taxInvoice) {
-      applyTaxInvoiceProfile(parsed.taxInvoice)
+    setTiCustomerType(fields.customerType === 'company' ? 'company' : 'person')
+    setTiMemberNo(fields.memberNo)
+    setTiName(fields.name)
+    setTiTaxId(fields.taxId)
+    setTiBranchNo(fields.branchNo)
+    setTiPhone(fields.phone)
+    setTiEmail(fields.email)
+    setTiAddress(fields.address)
+  }, [currentStoreId])
+
+  /** 입력 중 Grab 유입·팝업 등으로 창이 닫혀도 다시 열면 이어서 입력 (주문별·기기 로컬) */
+  useEffect(() => {
+    if (!taxInvoiceTargetOrder) return
+    const fields: PosTaxInvoiceDraftFields = {
+      customerType: tiCustomerType,
+      memberNo: tiMemberNo,
+      name: tiName,
+      taxId: tiTaxId,
+      branchNo: tiBranchNo,
+      phone: tiPhone,
+      email: tiEmail,
+      address: tiAddress,
+    }
+    if (JSON.stringify(fields) === taxInvoiceDraftBaselineRef.current) {
+      clearPosTaxInvoiceDraft(currentStoreId, taxInvoiceTargetOrder.id)
       return
     }
-    setTiCustomerType('person')
-    setTiMemberNo('')
-    setTiName('')
-    setTiTaxId('')
-    setTiBranchNo('')
-    setTiPhone('')
-    setTiEmail('')
-    setTiAddress('')
-  }, [applyTaxInvoiceProfile])
+    savePosTaxInvoiceDraft(currentStoreId, taxInvoiceTargetOrder.id, fields)
+  }, [
+    taxInvoiceTargetOrder,
+    currentStoreId,
+    tiCustomerType,
+    tiMemberNo,
+    tiName,
+    tiTaxId,
+    tiBranchNo,
+    tiPhone,
+    tiEmail,
+    tiAddress,
+  ])
+
+  const discardTaxInvoiceDraft = useCallback(() => {
+    if (!taxInvoiceTargetOrder) return
+    clearPosTaxInvoiceDraft(currentStoreId, taxInvoiceTargetOrder.id)
+    setTaxInvoiceDraftRestored(false)
+    try {
+      const baseline = JSON.parse(taxInvoiceDraftBaselineRef.current) as PosTaxInvoiceDraftFields
+      setTiCustomerType(baseline.customerType === 'company' ? 'company' : 'person')
+      setTiMemberNo(baseline.memberNo)
+      setTiName(baseline.name)
+      setTiTaxId(baseline.taxId)
+      setTiBranchNo(baseline.branchNo)
+      setTiPhone(baseline.phone)
+      setTiEmail(baseline.email)
+      setTiAddress(baseline.address)
+    } catch {
+      /* ignore */
+    }
+  }, [taxInvoiceTargetOrder, currentStoreId])
 
   const normalizedTiTaxId = tiTaxId.replace(/\D/g, '').slice(0, 13)
   const normalizedTiBranchNo = tiBranchNo.replace(/\D/g, '').slice(0, 5)
@@ -8529,8 +8598,10 @@ export default function PosTerminalPage() {
           source: orderPaymentRecorded ? 'terminal_after_payment' : 'terminal_pre_payment',
         })
       }
+      clearPosTaxInvoiceDraft(currentStoreId, orderId)
       await appAlert(t('msg_saved'))
       setTaxInvoiceTargetOrder(null)
+      setTaxInvoiceDraftRestored(false)
       setTaxSearchRows([])
       setTaxSearchMessage('')
       await refetchCurrentStore()
@@ -12916,6 +12987,8 @@ export default function PosTerminalPage() {
           address: tiAddress,
           onAddressChange: setTiAddress,
           onSave: handleSaveTaxInvoiceForOrder,
+          draftRestored: taxInvoiceDraftRestored,
+          onDiscardDraft: discardTaxInvoiceDraft,
         }}
         kbankOutcome={{
           state: kbankOutcomeState,

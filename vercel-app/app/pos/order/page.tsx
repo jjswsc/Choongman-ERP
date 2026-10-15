@@ -30,7 +30,7 @@ import { formatAppliedCouponsDiscountReason, summarizeLegacyCouponFields } from 
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { newPosOrderClientRequestId } from "@/lib/pos-order-client-request-id"
 import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
-import { isPosMenuSoldOut } from "@/lib/pos-menu-sold-out"
+import { isPosMenuSoldOutForOrderType, withSoldOutForOrderType } from "@/lib/pos-menu-sold-out"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
@@ -796,8 +796,8 @@ export default function PosOrderPage() {
   /** 반반 맛 선택 목록 (폴백: 같은 대분류 → c코드 대분류 → 음료/디저트 제외) */
   const banbanFlavorList = React.useMemo(() => {
     if (!optionPickerMenu || !isBanbanMenu(optionPickerMenu)) return []
-    return getBanbanFlavorMenuList(menus, optionPickerMenu, todayStr)
-  }, [menus, optionPickerMenu, todayStr])
+    return getBanbanFlavorMenuList(withSoldOutForOrderType(menus, orderType), optionPickerMenu, todayStr)
+  }, [menus, optionPickerMenu, todayStr, orderType])
   /** 선택한 대분류에 속한 소분류만 (메뉴 기준) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
@@ -837,7 +837,7 @@ export default function PosOrderPage() {
 
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
-    const notSoldOut = active.filter((m) => !isPosMenuSoldOut(m.soldOutDate))
+    const notSoldOut = active.filter((m) => !isPosMenuSoldOutForOrderType(m, orderType))
     const visibleByOrderType = notSoldOut.filter((m) =>
       orderType === "delivery"
         ? m.sellDelivery !== false

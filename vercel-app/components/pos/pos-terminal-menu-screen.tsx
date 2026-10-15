@@ -23,7 +23,7 @@ import {
   type PosPromoWithItems,
 } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
-import { isPosMenuSoldOut } from '@/lib/pos-menu-sold-out'
+import { isPosMenuSoldOutForOrderType, withSoldOutForOrderType } from '@/lib/pos-menu-sold-out'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -671,7 +671,7 @@ export function PosTerminalMenuScreen({
 
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
-    const notSoldOut = active.filter((m) => !isPosMenuSoldOut(m.soldOutDate))
+    const notSoldOut = active.filter((m) => !isPosMenuSoldOutForOrderType(m, orderType))
     const visibleByOrderType = notSoldOut.filter((m) =>
       orderType === 'delivery'
         ? m.sellDelivery !== false
@@ -791,8 +791,8 @@ export function PosTerminalMenuScreen({
   /** 반반 맛 선택 목록 (열린 메뉴 기준, 후보 0개일 때 대분류·코드 기반 폴백) */
   const banbanFlavorList = React.useMemo(() => {
     if (!optionPickerMenu || !isBanbanMenu(optionPickerMenu)) return []
-    return getBanbanFlavorMenuList(menus, optionPickerMenu, todayStr)
-  }, [menus, optionPickerMenu, todayStr])
+    return getBanbanFlavorMenuList(withSoldOutForOrderType(menus, orderType), optionPickerMenu, todayStr)
+  }, [menus, optionPickerMenu, todayStr, orderType])
 
   const addWithOption = async (menu: PosMenu, opt: PosMenuOption | null, defaultOptionName?: string) => {
     const mirrorPid = menu.promoId?.trim()

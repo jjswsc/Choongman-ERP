@@ -24,6 +24,7 @@ import {
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
 import { loadStoreMenuSoldOutMap, resolveMenuSoldOutDate } from '@/lib/pos-menu-store-sold-out-server'
+import type { PosMenuSoldOutScope } from '@/lib/pos-menu-sold-out'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
@@ -242,13 +243,23 @@ export async function GET(request: NextRequest) {
 
     const useStoreSoldOutScope = !!requestedStoreCode
     let storeSoldOutByMenuId: Map<number, string> | null = null
+    let storeSoldOutScopeByMenuId: Map<number, PosMenuSoldOutScope> | null = null
     if (useStoreSoldOutScope) {
       try {
         const soldOutLoad = await loadStoreMenuSoldOutMap(requestedStoreCode)
         storeSoldOutByMenuId = soldOutLoad.schemaReady ? soldOutLoad.byMenuId : null
+        storeSoldOutScopeByMenuId = soldOutLoad.schemaReady ? soldOutLoad.scopeByMenuId ?? null : null
       } catch {
         storeSoldOutByMenuId = null
       }
+    }
+    const resolveSoldOutScope = (menuId: number, soldOutDate: string | null): PosMenuSoldOutScope | null => {
+      if (!soldOutDate) return null
+      return storeSoldOutScopeByMenuId?.get(menuId) ?? 'all'
+    }
+    const soldOutFields = (menuId: number, globalDate: string | null | undefined) => {
+      const soldOutDate = resolveSoldOut(menuId, globalDate)
+      return { soldOutDate, soldOutScope: resolveSoldOutScope(menuId, soldOutDate) }
     }
     const resolveSoldOut = (menuId: number, globalDate: string | null | undefined) =>
       resolveMenuSoldOutDate({
@@ -332,7 +343,7 @@ export async function GET(request: NextRequest) {
         vatIncluded: !!row.vat_included,
         isActive: row.is_active !== false,
         sortOrder: Number(row.sort_order) ?? 0,
-        soldOutDate: resolveSoldOut(rowMenuId, row.sold_out_date),
+        ...soldOutFields(rowMenuId, row.sold_out_date),
         optionSelectionGroups,
         optionSelectionConfig,
         kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
@@ -428,7 +439,7 @@ export async function GET(request: NextRequest) {
           vatIncluded: !!row.vat_included,
           isActive: row.is_active !== false,
           sortOrder: Number(row.sort_order) ?? 0,
-          soldOutDate: resolveSoldOut(rowMenuId, row.sold_out_date),
+          ...soldOutFields(rowMenuId, row.sold_out_date),
           optionSelectionGroups,
           optionSelectionConfig,
           kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,

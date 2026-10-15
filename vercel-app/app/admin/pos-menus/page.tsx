@@ -3224,7 +3224,7 @@ export default function PosMenusPage() {
         setMenus((prev) =>
           prev.map((m) =>
             m.id === menu.id
-              ? { ...m, soldOutDate: nextDate }
+              ? { ...m, soldOutDate: nextDate, soldOutScope: nextDate ? res.soldOutScope ?? "all" : null }
               : m
           )
         )

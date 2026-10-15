@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-15T03:43:25.696Z",
-  "entryCount": 1983,
+  "generatedAt": "2026-10-15T10:37:47.754Z",
+  "entryCount": 1987,
   "entries": [
     {
       "path": "app/admin/grab-integration/page.tsx",
@@ -3434,42 +3434,42 @@
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 116,
+      "line": 117,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 122,
+      "line": 123,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 150,
+      "line": 151,
       "kind": "limit",
       "value": 100000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 154,
+      "line": 155,
       "kind": "limit",
       "value": 100000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 227,
+      "line": 228,
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "getPosMenus"
     },
     {
       "path": "app/api/getPosMenus/route.ts",
-      "line": 228,
+      "line": 229,
       "kind": "maxRows",
       "value": 500000,
       "apiLabel": "getPosMenus"
@@ -4397,6 +4397,20 @@
       "kind": "pageSize",
       "value": 3000,
       "apiLabel": "grab/debugMenuPromoPricing"
+    },
+    {
+      "path": "app/api/grab/markOrderReady/route.ts",
+      "line": 17,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "grab/markOrderReady"
+    },
+    {
+      "path": "app/api/grab/markOrderReady/route.ts",
+      "line": 26,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "grab/markOrderReady"
     },
     {
       "path": "app/api/health/route.ts",
@@ -7536,77 +7550,77 @@
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 1916,
+      "line": 1924,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 4385,
+      "line": 4394,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 5947,
+      "line": 5956,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6182,
+      "line": 6191,
       "kind": "limit",
       "value": 800,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6493,
+      "line": 6502,
       "kind": "limit",
       "value": 300,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 6955,
+      "line": 6964,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 7990,
+      "line": 7999,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 8360,
+      "line": 8429,
       "kind": "limit",
       "value": 20,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 9844,
+      "line": 9922,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 10521,
+      "line": 10599,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
     },
     {
       "path": "app/pos/terminal/page.tsx",
-      "line": 11038,
+      "line": 11116,
       "kind": "limit",
       "value": 1,
       "apiLabel": "pos/terminal"
@@ -7662,7 +7676,7 @@
     },
     {
       "path": "lib/accounting-pl-channel-settlement-fees.ts",
-      "line": 195,
+      "line": 231,
       "kind": "pageSize",
       "value": 5000,
       "apiLabel": "lib:accounting-pl-channel-settlement-fees"
@@ -7795,70 +7809,70 @@
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 300,
+      "line": 301,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 348,
+      "line": 349,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 437,
+      "line": 438,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 448,
+      "line": 449,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 452,
+      "line": 453,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 483,
+      "line": 484,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 578,
+      "line": 579,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 590,
+      "line": 591,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 594,
+      "line": 595,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
     },
     {
       "path": "lib/accounting-reports-drilldown.ts",
-      "line": 891,
+      "line": 905,
       "kind": "limit",
       "value": 2000,
       "apiLabel": "lib:accounting-reports-drilldown"
@@ -9538,28 +9552,28 @@
     },
     {
       "path": "lib/ingredient-usage-variance.ts",
-      "line": 376,
+      "line": 389,
       "kind": "maxRows",
       "value": 400000,
       "apiLabel": "lib:ingredient-usage-variance"
     },
     {
       "path": "lib/ingredient-usage-variance.ts",
-      "line": 376,
+      "line": 389,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:ingredient-usage-variance"
     },
     {
       "path": "lib/ingredient-usage-variance.ts",
-      "line": 390,
+      "line": 403,
       "kind": "pageSize",
       "value": 8000,
       "apiLabel": "lib:ingredient-usage-variance"
     },
     {
       "path": "lib/ingredient-usage-variance.ts",
-      "line": 391,
+      "line": 404,
       "kind": "maxRows",
       "value": 400000,
       "apiLabel": "lib:ingredient-usage-variance"
@@ -11267,42 +11281,49 @@
     },
     {
       "path": "lib/pos-delivery-policy.ts",
-      "line": 131,
+      "line": 134,
       "kind": "limit",
       "value": 1,
       "apiLabel": "lib:pos-delivery-policy"
     },
     {
       "path": "lib/pos-delivery-policy.ts",
-      "line": 136,
+      "line": 139,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:pos-delivery-policy"
     },
     {
       "path": "lib/pos-delivery-policy.ts",
-      "line": 141,
+      "line": 144,
       "kind": "limit",
       "value": 1000,
       "apiLabel": "lib:pos-delivery-policy"
     },
     {
       "path": "lib/pos-delivery-policy.ts",
-      "line": 146,
+      "line": 149,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:pos-delivery-policy"
     },
     {
       "path": "lib/pos-delivery-policy.ts",
-      "line": 356,
+      "line": 320,
+      "kind": "limit",
+      "value": 1,
+      "apiLabel": "lib:pos-delivery-policy"
+    },
+    {
+      "path": "lib/pos-delivery-policy.ts",
+      "line": 381,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:pos-delivery-policy"
     },
     {
       "path": "lib/pos-delivery-policy.ts",
-      "line": 378,
+      "line": 403,
       "kind": "limit",
       "value": 5000,
       "apiLabel": "lib:pos-delivery-policy"
@@ -11414,7 +11435,7 @@
     },
     {
       "path": "lib/pos-menu-bom-explode.ts",
-      "line": 284,
+      "line": 367,
       "kind": "limit",
       "value": 10000,
       "apiLabel": "lib:pos-menu-bom-explode"
@@ -11491,7 +11512,14 @@
     },
     {
       "path": "lib/pos-menu-store-sold-out-server.ts",
-      "line": 29,
+      "line": 45,
+      "kind": "limit",
+      "value": 20000,
+      "apiLabel": "lib:pos-menu-store-sold-out-server"
+    },
+    {
+      "path": "lib/pos-menu-store-sold-out-server.ts",
+      "line": 51,
       "kind": "limit",
       "value": 20000,
       "apiLabel": "lib:pos-menu-store-sold-out-server"

@@ -12,13 +12,20 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
-import { isPosMenuSoldOut } from '@/lib/pos-menu-sold-out'
+import { isPosMenuSoldOut, type PosMenuSoldOutScope } from '@/lib/pos-menu-sold-out'
 import { canAccessPosOrder } from '@/lib/permissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-type FilterMode = 'all' | 'selling' | 'soldOut'
+type FilterMode = 'all' | 'selling' | 'storeOff' | 'allOff'
+/** selling = 판매, store = หน้าร้าน만 중지(배달 판매), all = 전 채널 중지 */
+type MenuSaleState = 'selling' | PosMenuSoldOutScope
+
+function menuSaleState(menu: PosMenu): MenuSaleState {
+  if (!isPosMenuSoldOut(menu.soldOutDate)) return 'selling'
+  return menu.soldOutScope === 'store' ? 'store' : 'all'
+}
 
 /** POS 매장용 품절 토글 — sold_out_date 있으면 수동 해제 전까지 유지 (QR·터미널 공통) */
 export function PosMenuSoldOutContent() {
@@ -64,11 +71,13 @@ export function PosMenuSoldOutContent() {
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase()
+    const rank: Record<MenuSaleState, number> = { all: 0, store: 1, selling: 2 }
     return menus
       .filter((m) => {
-        const sold = isPosMenuSoldOut(m.soldOutDate)
-        if (filter === 'selling' && sold) return false
-        if (filter === 'soldOut' && !sold) return false
+        const state = menuSaleState(m)
+        if (filter === 'selling' && state !== 'selling') return false
+        if (filter === 'storeOff' && state !== 'store') return false
+        if (filter === 'allOff' && state !== 'all') return false
         if (!q) return true
         return (
           m.name.toLowerCase().includes(q) ||
@@ -79,26 +88,33 @@ export function PosMenuSoldOutContent() {
         )
       })
       .sort((a, b) => {
-        const aSold = isPosMenuSoldOut(a.soldOutDate) ? 0 : 1
-        const bSold = isPosMenuSoldOut(b.soldOutDate) ? 0 : 1
-        if (aSold !== bSold) return aSold - bSold
+        const diff = rank[menuSaleState(a)] - rank[menuSaleState(b)]
+        if (diff !== 0) return diff
         return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
       })
   }, [menus, search, filter])
 
-  const soldOutCount = React.useMemo(
-    () => menus.filter((m) => isPosMenuSoldOut(m.soldOutDate)).length,
-    [menus]
-  )
+  const counts = React.useMemo(() => {
+    let store = 0
+    let all = 0
+    for (const m of menus) {
+      const state = menuSaleState(m)
+      if (state === 'store') store += 1
+      else if (state === 'all') all += 1
+    }
+    return { store, all }
+  }, [menus])
 
-  const handleToggle = async (menu: PosMenu) => {
-    const nextSoldOut = !isPosMenuSoldOut(menu.soldOutDate)
+  const handleSetState = async (menu: PosMenu, next: MenuSaleState) => {
+    if (menuSaleState(menu) === next) return
+    const nextSoldOut = next !== 'selling'
     setTogglingId(menu.id)
     try {
       const res = await updatePosMenuSoldOut({
         id: menu.id,
         soldOut: nextSoldOut,
         storeCode: storeCode || null,
+        soldOutScope: nextSoldOut ? next : undefined,
       })
       if (!res.success) {
         await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail_detail'))
@@ -110,8 +126,13 @@ export function PosMenuSoldOutContent() {
           : nextSoldOut
             ? todayStr
             : null
+      const nextScope: PosMenuSoldOutScope | null = nextDate
+        ? res.soldOutScope ?? (next === 'store' ? 'store' : 'all')
+        : null
       setMenus((prev) =>
-        prev.map((m) => (m.id === menu.id ? { ...m, soldOutDate: nextDate } : m))
+        prev.map((m) =>
+          m.id === menu.id ? { ...m, soldOutDate: nextDate, soldOutScope: nextScope } : m
+        )
       )
     } catch (e) {
       await appAlert(String(e))
@@ -128,6 +149,20 @@ export function PosMenuSoldOutContent() {
     )
   }
 
+  const stateOptions: { id: MenuSaleState; label: string; activeCn: string }[] = [
+    { id: 'selling', label: t('posAvailable') || '판매', activeCn: 'bg-emerald-600 text-white border-emerald-600' },
+    {
+      id: 'store',
+      label: t('posMenuSoldOutScopeStore') || '매장만 중지',
+      activeCn: 'bg-amber-500 text-white border-amber-500',
+    },
+    {
+      id: 'all',
+      label: t('posMenuSoldOutScopeAll') || '전체 중지',
+      activeCn: 'bg-red-600 text-white border-red-600',
+    },
+  ]
+
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:px-6">
@@ -140,9 +175,9 @@ export function PosMenuSoldOutContent() {
               <h1 className="truncate text-xl font-bold tracking-tight">
                 {t('posMenuSoldOutManage') || '메뉴 품절'}
               </h1>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t('posMenuSoldOutManageHint') ||
-                  '이 매장만 품절. POS·QR 주문 불가. 다시 열 때까지 유지.'}
+                  '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
               </p>
             </div>
           </div>
@@ -192,8 +227,12 @@ export function PosMenuSoldOutContent() {
               { id: 'all' as const, label: t('posMenuSoldOutFilterAll') || '전체' },
               { id: 'selling' as const, label: t('posAvailable') || '판매' },
               {
-                id: 'soldOut' as const,
-                label: `${t('posSoldOut') || '품절'}${soldOutCount > 0 ? ` (${soldOutCount})` : ''}`,
+                id: 'storeOff' as const,
+                label: `${t('posMenuSoldOutScopeStore') || '매장만 중지'}${counts.store > 0 ? ` (${counts.store})` : ''}`,
+              },
+              {
+                id: 'allOff' as const,
+                label: `${t('posMenuSoldOutScopeAll') || '전체 중지'}${counts.all > 0 ? ` (${counts.all})` : ''}`,
               },
             ] as const
           ).map((tab) => (
@@ -221,48 +260,55 @@ export function PosMenuSoldOutContent() {
         ) : (
           <ul className="space-y-2">
             {filtered.map((menu) => {
-              const sold = isPosMenuSoldOut(menu.soldOutDate)
+              const state = menuSaleState(menu)
               const busy = togglingId === menu.id
               return (
-                <li key={menu.id}>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleToggle(menu)}
-                    className={cn(
-                      'flex w-full min-h-[72px] items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors touch-manipulation',
-                      'active:scale-[0.99] disabled:opacity-60',
-                      sold
-                        ? 'border-red-200 bg-red-50 hover:bg-red-100/80'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-base font-semibold text-slate-900">
-                        {menu.name}
-                      </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {menu.code}
-                        {menu.category ? ` · ${menu.category}` : ''}
-                      </div>
+                <li
+                  key={menu.id}
+                  className={cn(
+                    'flex min-h-[72px] flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center',
+                    state === 'all'
+                      ? 'border-red-200 bg-red-50'
+                      : state === 'store'
+                        ? 'border-amber-200 bg-amber-50'
+                        : 'border-slate-200 bg-white'
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-base font-semibold text-slate-900">
+                      {menu.name}
                     </div>
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-full px-3 py-1.5 text-sm font-medium',
-                        sold
-                          ? 'bg-red-600 text-white'
-                          : 'bg-emerald-600 text-white'
-                      )}
-                    >
-                      {busy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : sold ? (
-                        t('posMenuSoldOutTempOff') || t('posSoldOut') || '일시 판매중지'
-                      ) : (
-                        t('posAvailable') || '판매'
-                      )}
-                    </span>
-                  </button>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {menu.code}
+                      {menu.category ? ` · ${menu.category}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {busy ? (
+                      <Loader2 className="mx-2 h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : null}
+                    {stateOptions.map((opt) => {
+                      const active = state === opt.id
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={busy}
+                          aria-pressed={active}
+                          onClick={() => void handleSetState(menu, opt.id)}
+                          className={cn(
+                            'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
+                            'active:scale-[0.98] disabled:opacity-60',
+                            active
+                              ? opt.activeCn
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </li>
               )
             })}

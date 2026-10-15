@@ -8,6 +8,7 @@ import { getFromErpCache, setErpCache } from '../offline/cache'
 import type { PosCategoryTabOrder } from '../pos-category-tab-order'
 import { sanitizePosCategoryTabOrder } from '../pos-category-tab-order'
 import type { PosMenuUpsertApiBody } from '../pos-menu-upsert-server'
+import type { PosMenuSoldOutScope } from '../pos-menu-sold-out'
 import { jsonAsArray } from '../safe-api-json'
 import { parsePosMutationResponse } from './helpers'
 
@@ -27,6 +28,8 @@ export interface PosMenu {
   isActive: boolean
   sortOrder: number
   soldOutDate?: string | null
+  /** 매장 품절 범위 — store 면 หน้าร้าน만 품절(배달 주문은 판매) */
+  soldOutScope?: PosMenuSoldOutScope | null
   /** 옵션 단계별 선택 그룹. 예: ["size","bone"] → 1단계 사이즈, 2단계 뼈/순살 */
   optionSelectionGroups?: string[]
   /** 그룹별 선택 규칙(1단계): required/optional + 최대 1개 선택 */

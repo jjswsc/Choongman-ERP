@@ -73,6 +73,9 @@ type TaxInvoiceDialogsProps = {
   address: string
   onAddressChange: (v: string) => void
   onSave: () => void | Promise<void>
+  /** 이 기기에 임시 저장된 미저장 입력을 불러온 상태 */
+  draftRestored: boolean
+  onDiscardDraft: () => void
 }
 
 type KbankStaffMonitorProps = {
@@ -214,6 +217,21 @@ export function PosTerminalDialogs({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
+            {ti.draftRestored && (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-900 dark:text-sky-200">
+                <span>{t('posTaxInvoiceDraftRestored') || '임시 저장된 입력을 불러왔습니다.'}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 px-2 text-xs"
+                  onClick={ti.onDiscardDraft}
+                  disabled={ti.saving}
+                >
+                  {t('posTaxInvoiceDraftDiscard') || '지우기'}
+                </Button>
+              </div>
+            )}
             <div className="grid grid-cols-[120px_minmax(0,1fr)_auto] gap-2">
               <Select value={ti.searchField} onValueChange={(v) => ti.onSearchFieldChange(v as 'taxId' | 'name' | 'phone')}>
                 <SelectTrigger className="h-9">
