@@ -385,6 +385,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [orderDoneOpen, setOrderDoneOpen] = React.useState(false)
   const [statusOpen, setStatusOpen] = React.useState(false)
   const [billPayOpen, setBillPayOpen] = React.useState(false)
+  /** 할인 안내를 먼저 보여 주고, 손님이 계속을 눌러야 QR 발급 */
+  const [billPayNotice, setBillPayNotice] = React.useState(false)
   const [billPaidOpen, setBillPaidOpen] = React.useState(false)
   const [billQrPayload, setBillQrPayload] = React.useState('')
   const [billQrAmount, setBillQrAmount] = React.useState(0)
@@ -901,7 +903,23 @@ export function QrTableGuestApp({ token }: { token: string }) {
     setHistoryOpen(false)
     setCallOpen(false)
     setBillPaidOpen(false)
+    clearBillPayPoll()
+    setBillQrPayload('')
+    setBillQrAmount(due)
+    setBillPayNotice(true)
     setBillPayOpen(true)
+  }
+
+  async function startBillQr() {
+    if (!sessionAuth) return
+    if (busy) return
+    const due = Number(orderSummary?.balanceDue || 0)
+    if (due < 1) {
+      setBillPayOpen(false)
+      showToast(g('payBillDoneHint'))
+      return
+    }
+    setBillPayNotice(false)
     setBillQrPayload('')
     setBillQrAmount(due)
     setBusy(true)
@@ -2078,6 +2096,9 @@ export function QrTableGuestApp({ token }: { token: string }) {
         amount={billQrAmount}
         qrPayload={billQrPayload}
         busy={busy}
+        discountNotice={billPayNotice}
+        onContinueQr={() => void startBillQr()}
+        brandBtn={brandBtn}
         g={g}
         renderQr={(payload) => (
           <GuestPayQrImg alt="Bill PromptPay QR" className="mx-auto h-56 w-56 object-contain" payload={payload} />

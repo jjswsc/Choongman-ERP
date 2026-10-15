@@ -496,10 +496,14 @@ export function QrTableGuestBillPaySheet(props: {
   amount: number
   qrPayload: string
   busy?: boolean
+  /** true: QR 발급 전 「할인은 카운터 결제」 안내 단계 */
+  discountNotice?: boolean
+  onContinueQr?: () => void
+  brandBtn?: string
   g: (key: string) => string
   renderQr: (payload: string) => React.ReactNode
 }) {
-  const { open, onClose, amount, qrPayload, busy, g, renderQr } = props
+  const { open, onClose, amount, qrPayload, busy, discountNotice, onContinueQr, brandBtn, g, renderQr } = props
   return (
     <QrTableGuestSwipeSheet
       open={open}
@@ -522,22 +526,50 @@ export function QrTableGuestBillPaySheet(props: {
         </div>
       }
     >
-      <div className="space-y-3 px-4 pb-6 pt-1">
-        <div className="rounded-2xl bg-[var(--qr-brand,#b45309)]/10 px-4 py-3 text-sm text-stone-800 ring-1 ring-[var(--qr-brand,#b45309)]/20">
-          <p className="font-semibold">{g('payBillHint')}</p>
-          <p className="mt-1 text-xs text-stone-600">{g('payBillReceiptHint')}</p>
+      {discountNotice ? (
+        <div className="space-y-3 px-4 pb-6 pt-1">
+          <p className="text-center text-sm text-stone-600">{g('amount')}</p>
+          <p className="text-center text-3xl font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+            ฿{Math.round(amount).toLocaleString()}
+          </p>
+          <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-300">
+            <p className="text-base font-semibold">{g('payBillDiscountTitle')}</p>
+            <p className="mt-1 leading-relaxed">{g('payBillDiscountBody')}</p>
+          </div>
+          <button
+            type="button"
+            className="w-full rounded-2xl bg-stone-800 py-3.5 font-semibold text-white"
+            onClick={onClose}
+          >
+            {g('payBillAtCounter')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            className={`w-full rounded-2xl py-3.5 font-semibold disabled:opacity-60 ${brandBtn || 'bg-[var(--qr-brand,#b45309)] text-white'}`}
+            onClick={onContinueQr}
+          >
+            {g('payBillContinueQr')}
+          </button>
         </div>
-        <p className="text-center text-sm text-stone-600">{g('amount')}</p>
-        <p className="text-center text-3xl font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
-          ฿{Math.round(amount).toLocaleString()}
-        </p>
-        {qrPayload ? (
-          <div className="flex justify-center py-2">{renderQr(qrPayload)}</div>
-        ) : (
-          <p className="py-10 text-center text-sm text-stone-500">{busy ? g('loading') : g('showQr')}</p>
-        )}
-        <p className="text-center text-sm font-medium text-stone-600">{g('payBillWaiting')}</p>
-      </div>
+      ) : (
+        <div className="space-y-3 px-4 pb-6 pt-1">
+          <div className="rounded-2xl bg-[var(--qr-brand,#b45309)]/10 px-4 py-3 text-sm text-stone-800 ring-1 ring-[var(--qr-brand,#b45309)]/20">
+            <p className="font-semibold">{g('payBillHint')}</p>
+            <p className="mt-1 text-xs text-stone-600">{g('payBillReceiptHint')}</p>
+          </div>
+          <p className="text-center text-sm text-stone-600">{g('amount')}</p>
+          <p className="text-center text-3xl font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+            ฿{Math.round(amount).toLocaleString()}
+          </p>
+          {qrPayload ? (
+            <div className="flex justify-center py-2">{renderQr(qrPayload)}</div>
+          ) : (
+            <p className="py-10 text-center text-sm text-stone-500">{busy ? g('loading') : g('showQr')}</p>
+          )}
+          <p className="text-center text-sm font-medium text-stone-600">{g('payBillWaiting')}</p>
+        </div>
+      )}
     </QrTableGuestSwipeSheet>
   )
 }
