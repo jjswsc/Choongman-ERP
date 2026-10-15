@@ -8387,6 +8387,13 @@ export default function PosTerminalPage() {
       ...(it.menuId ? { menuId1: String(it.menuId) } : {}),
       ...(it.optionId ? { optionId1: String(it.optionId) } : {}),
       ...(it.optionCode ? { optionCode1: String(it.optionCode) } : {}),
+      ...(it.menuId1 && it.menuId2 && (!it.menuId || it.menuId === it.menuId1)
+        ? {
+            menuId1: String(it.menuId1),
+            menuId2: String(it.menuId2),
+            ...(it.optionId2 ? { optionId2: String(it.optionId2) } : {}),
+          }
+        : {}),
       ...(Array.isArray(it.promoItems) ? { promoItems: it.promoItems } : {}),
     }))
 

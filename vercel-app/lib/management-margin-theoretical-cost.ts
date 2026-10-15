@@ -4,6 +4,11 @@ import type { PosMenuCostIndexEntry } from '@/lib/pos-menu-cost-index-server'
 import { costIndexFoodPackForOrder } from '@/lib/pos-menu-cost-index-server'
 import type { PromoLineLike, PromoMenuLike, PromoOptionLike } from '@/lib/promo-economics'
 import type { PromoPricingCatalog } from '@/lib/pos-order-promo-regular-price'
+import {
+  buildBanbanCostLookup,
+  resolveBanbanCostFlavors,
+  type BanbanCostLookup,
+} from '@/lib/pos-banban-cost-flavors'
 
 /** 전역 미즈 미사용 — BOM 재료별 loss_rate만 반영 */
 export const MANAGEMENT_MARGIN_MISE_RATE = 0
@@ -119,6 +124,7 @@ export type TheoreticalCostResolveContext = {
   promoIdByNormalizedName?: Map<string, string>
   /** SET-xxx 등 프로모 코드 → promo id */
   promoIdByCode?: Map<string, string>
+  banban?: BanbanCostLookup
 }
 
 export function buildTheoreticalCostResolveContext(params: {
@@ -186,6 +192,12 @@ export function buildTheoreticalCostResolveContext(params: {
     promoIdByMirrorMenuId: params.catalog?.promoIdByMirrorMenuId,
     promoIdByNormalizedName,
     promoIdByCode,
+    banban: buildBanbanCostLookup({
+      menus: params.catalog?.menus ?? [],
+      options: Object.entries(optionsByMenuId).flatMap(([menuId, opts]) =>
+        (opts || []).map((o) => ({ id: o.id, menuId, name: o.name }))
+      ),
+    }),
   }
 }
 
@@ -481,6 +493,19 @@ export function expandOrderLineToCostLines(
 
   const menuName = resolveLineMenuName(row)
   const optionName = resolveLineOptionName(row)
+
+  const banbanFlavors = ctx?.banban ? resolveBanbanCostFlavors(row, ctx.banban) : null
+  if (banbanFlavors) {
+    const halfQty = parentQty * 0.5
+    return banbanFlavors.map((f) => ({
+      menuId: f.menuId,
+      optionId: f.optionId,
+      menuName,
+      optionName: '',
+      qty: halfQty,
+    }))
+  }
+
   const { menuId, optionId } = resolveMenuAndOptionForCostLine(row, ctx)
   const menuId2 = resolveLineMenuId2(row)
 

@@ -88,6 +88,45 @@ describe('expandOrderLineToCostLines', () => {
     expect(lines[1]).toMatchObject({ menuId: '11', optionId: '2', qty: 1 })
   })
 
+  it('반반: 맛 정보(menuId1/2·줄 id·Grab 메모)로 각 맛 M Boneless 0.5 씩', () => {
+    const ctx = buildTheoreticalCostResolveContext({
+      costIndex: new Map(),
+      catalog: {
+        menus: [
+          { id: '75', name: 'Banban Chicken' },
+          { id: '11', name: 'Snow Onion' },
+          { id: '28', name: 'SPICY YANGNYEOM' },
+        ],
+        optionsByMenuId: {
+          '11': [{ id: '561', name: 'Kimchi' }, { id: '298', name: 'M - Boneless' }],
+          '28': [{ id: '538', name: 'M - Boneless' }],
+        },
+        promoItemsByPromoId: new Map(),
+        promoMetaById: new Map(),
+        promoIdByMirrorMenuId: new Map(),
+      },
+    })
+    const expected = [
+      { menuId: '11', optionId: '298', qty: 0.5 },
+      { menuId: '28', optionId: '538', qty: 0.5 },
+    ]
+    expect(
+      expandOrderLineToCostLines({ id: 'banban-11-28-x', name: 'Banban Chicken (Snow Onion / SPICY YANGNYEOM)', menuId1: '11', menuId2: '28', qty: 1 }, ctx)
+    ).toMatchObject(expected)
+    expect(
+      expandOrderLineToCostLines({ id: 'banban-11-28-x', name: 'Banban Chicken (Snow Onion / SPICY YANGNYEOM)', menuId1: '11', qty: 1 }, ctx)
+    ).toMatchObject(expected)
+    expect(
+      expandOrderLineToCostLines(
+        { id: 'grab:item-75-c024:L0', name: 'Banban Chicken (x / y)', note: 'mods:Kimchi · banbanFlavors:Snow Onion,SPICY YANGNYEOM', menuId1: '75', qty: 1 },
+        ctx
+      )
+    ).toMatchObject(expected)
+    expect(
+      expandOrderLineToCostLines({ id: 'grab:item-75-c024:L0', name: 'Banban Chicken (Unknown / Other)', menuId1: '75', qty: 1 }, ctx)
+    ).toMatchObject([{ menuId: '75', qty: 1 }])
+  })
+
   it('resolves menu id from cart line id and grab set child name', () => {
     const ctx = ctxFixture()
     const fromId = expandOrderLineToCostLines({ id: '8-2', name: 'SNOW ONION', qty: 1 }, ctx)

@@ -61,8 +61,16 @@ export function canRemovePosOrderLine(order: Order | null, opts?: { allowGrabLin
 
 export function orderItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
   return items.map((it) => {
-    const menuId = String(it.menuId ?? '').trim()
-    const optionId = String(it.optionId ?? '').trim()
+    const flavorMenuId1 = String(it.menuId1 ?? '').trim()
+    /** 주방 인쇄 dedupe 서명이 menuId 우선이라 기존 우선순위 유지 */
+    const menuId = String(it.menuId ?? '').trim() || flavorMenuId1
+    const optionId = String(it.optionId ?? '').trim() || String(it.optionId1 ?? '').trim()
+    const optionCode = String(it.optionCode1 ?? it.optionCode ?? '').trim()
+    /** 반반 두 번째 맛 — 첫 맛과 짝일 때만 (반반 부모 id 와 섞이면 원가가 잘못 반씩 나뉜다) */
+    const pairOk = !!flavorMenuId1 && menuId === flavorMenuId1
+    const menuId2 = pairOk ? String(it.menuId2 ?? '').trim() : ''
+    const optionId2 = pairOk ? String(it.optionId2 ?? '').trim() : ''
+    const optionCode2 = String(it.optionCode2 ?? '').trim()
     const q = resolveCartLineQuantityForSave(it as { quantity?: unknown; qty?: unknown })
     const base: PosOrderItem = {
       id: String(it.id ?? ''),
@@ -75,6 +83,10 @@ export function orderItemsToPosOrderItems(items: OrderItem[]): PosOrderItem[] {
     if (note) base.note = note
     if (menuId) base.menuId1 = menuId
     if (optionId) base.optionId1 = optionId
+    if (optionCode) base.optionCode1 = optionCode
+    if (menuId2) base.menuId2 = menuId2
+    if (optionId2) base.optionId2 = optionId2
+    if (optionCode2) base.optionCode2 = optionCode2
     if (it.promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0) {
       base.promoId = String(it.promoId)
       if (it.promoCode) base.promoCode = String(it.promoCode)

@@ -2,7 +2,7 @@
  * 매장 정상 원가 — 판매 메뉴 BOM을 정상 원가로 두고 손익 매출원가율과 비교한다.
  * 표의 할인은 통합 할인 한 칸. 실소진은 넣지 않는다.
  */
-import { getItemCostPerUnit } from '@/lib/item-cost-util'
+import { getItemBomUnitsPerStockUnit, getItemCostPerUnit } from '@/lib/item-cost-util'
 import { convertLineAmount, type IncomeStatementAmountBasisKind } from '@/lib/income-statement-display'
 import type { NetVatBuckets } from '@/lib/income-statement-item-vat'
 import { toPosCostSalesExclVat } from '@/lib/pos-cost-vat'
@@ -333,20 +333,14 @@ export function sumIngredientUsageMoney(params: IngredientUsageMoneyInput): Ingr
     if (act?.hasAdjustment) adjCount += 1
     const item = meta.get(code)
     const ingredientType = params.typeByCode?.[code]
-    const unitCost = item
-      ? getItemCostPerUnit(
-          {
-            cost: item.cost,
-            price: item.price,
-            total_quantity: item.total_quantity,
-            unit: item.unit,
-          },
-          ingredientType === 'packaging'
-        )
-      : 0
+    const itemUnit = item
+      ? { cost: item.cost, price: item.price, total_quantity: item.total_quantity, unit: item.unit }
+      : null
+    const unitCost = itemUnit ? getItemCostPerUnit(itemUnit, ingredientType === 'packaging') : 0
     const cost = Number.isFinite(unitCost) ? unitCost : 0
     const theoQty = Number(params.theoreticalQtyByCode[code]) || 0
-    const actualQty = act?.qty ?? 0
+    const perStock = itemUnit ? getItemBomUnitsPerStockUnit(itemUnit, ingredientType === 'packaging') : 1
+    const actualQty = (act?.qty ?? 0) * perStock
     theoreticalCost += round2(theoQty * cost)
     actualCost += round2(actualQty * cost)
   }

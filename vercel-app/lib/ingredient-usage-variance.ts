@@ -17,12 +17,17 @@ import {
   type PosMenuBomIndex,
 } from '@/lib/pos-menu-bom-explode'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
+import { resolveBanbanCostFlavors } from '@/lib/pos-banban-cost-flavors'
 import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_MENU_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
 import { getStockLocationPatterns, isOfficeStockSelection } from '@/lib/stock-location-patterns'
-import { getItemCostPerUnit } from '@/lib/item-cost-util'
+import {
+  getItemBomUnitLabel,
+  getItemBomUnitsPerStockUnit,
+  getItemCostPerUnit,
+} from '@/lib/item-cost-util'
 import { resolveItemsJsonLineQty } from '@/lib/pos-order-item-map'
 import { supabaseRpc, supabaseSelectAllPages, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { fetchStockLogsItemQtySum } from '@/lib/stock-logs-active-filter'
@@ -252,6 +257,14 @@ function aggregateTheoreticalFromOrders(
             String(pi.name || menuLabel || menuId),
             optionLabel
           )
+        }
+        continue
+      }
+
+      const banbanFlavors = index.banban ? resolveBanbanCostFlavors(raw, index.banban) : null
+      if (banbanFlavors) {
+        for (const f of banbanFlavors) {
+          explodeAndTrack(f.menuId, f.optionId, cartQty * 0.5, menuLabel || f.menuId, optionLabel)
         }
         continue
       }
@@ -639,12 +652,14 @@ export async function computeIngredientUsageVariance(params: {
   for (const code of allCodes) {
     const theoreticalQty = round4(theo.byItem[code] || 0)
     const act = actualByCode.get(code)
-    const actualQty = round4(act?.actual_usage_qty ?? 0)
+    const meta = itemMeta.get(code)
+    const ingredientType = theo.typeByItem[code] || 'unknown'
+    const perStock = meta ? getItemBomUnitsPerStockUnit(meta.raw, ingredientType === 'packaging') : 1
+    const toBom = (stockQty: number | undefined) => round4((stockQty ?? 0) * perStock)
+    const actualQty = toBom(act?.actual_usage_qty)
     const varianceQty = round4(actualQty - theoreticalQty)
     const variancePct =
       theoreticalQty > 0.0001 ? round2((varianceQty / theoreticalQty) * 100) : theoreticalQty === 0 && actualQty !== 0 ? null : 0
-    const meta = itemMeta.get(code)
-    const ingredientType = theo.typeByItem[code] || 'unknown'
     const unitCost = meta
       ? getItemCostPerUnit(meta.raw, ingredientType === 'packaging')
       : 0
@@ -657,7 +672,10 @@ export async function computeIngredientUsageVariance(params: {
     rows.push({
       itemCode: code,
       itemName: meta?.name || code,
-      unit: meta?.unit || '',
+      unit:
+        perStock === 1
+          ? meta?.unit || ''
+          : getItemBomUnitLabel(meta?.unit, ingredientType === 'packaging'),
       cost,
       ingredientType,
       theoreticalQty,
@@ -665,12 +683,12 @@ export async function computeIngredientUsageVariance(params: {
       varianceQty,
       variancePct,
       varianceCost: round2(varianceQty * cost),
-      beginningQty: round4(act?.beginning_qty ?? 0),
-      endingQty: round4(act?.ending_qty ?? 0),
-      inboundQty: round4(act?.inbound_qty ?? 0),
-      outboundQty: round4(act?.outbound_qty ?? 0),
-      usageQty: round4(act?.usage_qty ?? 0),
-      adjustmentQty: round4(act?.adjustment_qty ?? 0),
+      beginningQty: toBom(act?.beginning_qty),
+      endingQty: toBom(act?.ending_qty),
+      inboundQty: toBom(act?.inbound_qty),
+      outboundQty: toBom(act?.outbound_qty),
+      usageQty: toBom(act?.usage_qty),
+      adjustmentQty: toBom(act?.adjustment_qty),
       posQty: round4(act?.pos_qty ?? 0),
       hasAdjustment: Boolean(act?.has_adjustment),
       menuContributions,

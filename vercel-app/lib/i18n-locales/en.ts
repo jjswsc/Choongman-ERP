@@ -1198,7 +1198,7 @@ Only matters the employee must handle personally on a working day:
   stockTabHistory: 'Adjustment History',
   stockTabVariance: 'Theoretical vs actual',
   stockVarianceIntro:
-    'Compare theoretical ingredient usage (sales × recipe BOM) with actual usage from the inventory equation (beginning + inbound − outbound − ending), by item.\nThe Actual column is not POS auto-deduction — it reflects all stock movement. Usage / Adjustment / POS columns are explanatory breakdowns.\nVariance = actual − theoretical (positive means more used than recipe). Accurate BOM and period-end counts are required.',
+    'Compare theoretical ingredient usage (sales × recipe BOM) with actual usage from the inventory equation (beginning + inbound − outbound − ending), by item.\nBOM lines that point to a blend (sauce recipe code) are expanded into the blend\'s raw ingredients. If an item with the same code exists (HQ finished product), it is treated as that item.\nThe Actual column is not POS auto-deduction — it reflects all stock movement. Usage / Adjustment / POS columns are explanatory breakdowns.\nVariance = actual − theoretical (positive means more used than recipe). Accurate BOM and period-end counts are required.',
   stockVarianceStart: 'Start',
   stockVarianceEnd: 'End',
   stockVarianceType: 'Type',

@@ -3,6 +3,7 @@
  * 식: need = menuQty × quantity × (1 + loss_rate/100)
  */
 import { supabaseSelectAllPages, supabaseSelectFilter } from '@/lib/supabase-server'
+import { buildBanbanCostLookup, type BanbanCostLookup } from '@/lib/pos-banban-cost-flavors'
 
 export type BomLine = {
   item_code: string
@@ -24,6 +25,10 @@ export type PosMenuBomIndex = {
   /** menuId → 기본 BOM (option_id null) */
   baseByMenu: Map<string, BomLine[]>
   optionsById: Map<string, OptionMeta>
+  /** 있으면 가산형 옵션 item_code 가 배합일 때도 원재료로 푼다 */
+  sauces?: SauceRecipeIndex
+  /** 이론 소진 리포트용 — 반반 줄을 두 맛 M Boneless 로 나눈다 */
+  banban?: BanbanCostLookup
 }
 
 function bomKey(menuId: string, optionId: string): string {
@@ -109,8 +114,9 @@ export function explodeMenuIngredientsSync(
     if (additiveSourceMenuId && mult > 0) {
       explodeMenuIngredientsSync(index, String(additiveSourceMenuId), null, mult, usageByItem, typeByItem)
     } else if (optionItemCode && mult > 0) {
-      usageByItem[optionItemCode] = (usageByItem[optionItemCode] ?? 0) + mult
-      if (typeByItem && !typeByItem[optionItemCode]) typeByItem[optionItemCode] = 'food'
+      const optionLine: BomLine = { item_code: optionItemCode, quantity: 1, loss_rate: 0, ingredient_type: 'food' }
+      const lines = index.sauces ? flattenSauceBomLines([optionLine], index.sauces) : [optionLine]
+      addBomLinesNeed(usageByItem, lines, mult, typeByItem)
     }
     /** 가산형 옵션 전용 BOM 행(getMenuCost·원가 목록과 동일) */
     const optLines = index.byMenuOption.get(bomKey(mid, oid))
@@ -202,19 +208,96 @@ type BomOptionRow = {
 const BOM_INGREDIENT_SELECT = 'menu_id,option_id,item_code,quantity,loss_rate,ingredient_type'
 const BOM_OPTION_SELECT = 'id,option_type,item_code,additive_source_menu_id,quantity'
 
-/** DB에서 BOM·옵션 인덱스 로드 */
+/** 배합(sauces) 1회 생산 레시피. 생산량 = 재료 수량 합 (원가 인덱스 배합 단가와 같은 가정) */
+export type SauceRecipeIndex = {
+  /** items 에 같은 코드가 있으면 배합이 아니라 품목(본사 완제품)으로 본다 */
+  itemCodes: Set<string>
+  byCode: Map<string, { lines: { item_code: string; quantity: number; loss_rate: number }[]; yieldQty: number }>
+}
+
+const SAUCE_FLATTEN_MAX_DEPTH = 5
+
+/** BOM 줄의 배합 코드를 원재료 줄로 푼다. 배합 안의 배합도 재귀로 푼다. */
+export function flattenSauceBomLines(lines: BomLine[], sauces: SauceRecipeIndex, depth = 0): BomLine[] {
+  const out: BomLine[] = []
+  for (const line of lines) {
+    const recipe = sauces.itemCodes.has(line.item_code) ? undefined : sauces.byCode.get(line.item_code)
+    if (!recipe || !(recipe.yieldQty > 0) || depth >= SAUCE_FLATTEN_MAX_DEPTH) {
+      out.push(line)
+      continue
+    }
+    const batches = (line.quantity * (1 + line.loss_rate / 100)) / recipe.yieldQty
+    const sub = recipe.lines.map((r) => ({
+      item_code: r.item_code,
+      quantity: batches * r.quantity,
+      loss_rate: r.loss_rate,
+      ingredient_type: line.ingredient_type,
+    }))
+    out.push(...flattenSauceBomLines(sub, sauces, depth + 1))
+  }
+  return out
+}
+
+export function buildSauceRecipeIndex(
+  sauceRows: { id?: number; code?: string }[],
+  sauceIngRows: { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[],
+  itemCodeRows: { code?: string }[]
+): SauceRecipeIndex {
+  const itemCodes = new Set(itemCodeRows.map((r) => String(r.code ?? '').trim()).filter(Boolean))
+  const linesBySauceId = new Map<number, { item_code: string; quantity: number; loss_rate: number }[]>()
+  for (const r of sauceIngRows) {
+    const sid = Number(r.sauce_id ?? 0)
+    const code = String(r.item_code ?? '').trim()
+    if (!sid || !code) continue
+    const arr = linesBySauceId.get(sid) ?? []
+    arr.push({ item_code: code, quantity: Number(r.quantity ?? 1) || 0, loss_rate: Number(r.loss_rate ?? 0) || 0 })
+    linesBySauceId.set(sid, arr)
+  }
+  const byCode: SauceRecipeIndex['byCode'] = new Map()
+  for (const s of sauceRows) {
+    const code = String(s.code ?? '').trim()
+    if (!code) continue
+    const lines = linesBySauceId.get(Number(s.id ?? 0)) ?? []
+    byCode.set(code, { lines, yieldQty: lines.reduce((sum, l) => sum + l.quantity, 0) })
+  }
+  return { itemCodes, byCode }
+}
+
+/** DB에서 BOM·옵션 인덱스 로드 — 이론 소진 리포트용으로 배합을 원재료까지 풀고 반반은 맛별로 나눈다 */
 export async function buildPosMenuBomIndex(): Promise<PosMenuBomIndex> {
-  const [ingRows, optRows] = await Promise.all([
+  const [ingRows, optRows, sauceRows, sauceIngRows, itemRows, menuRows] = await Promise.all([
     supabaseSelectAllPages('pos_menu_ingredients', {
       order: 'menu_id.asc,id.asc',
       select: BOM_INGREDIENT_SELECT,
     }).catch(() => []) as Promise<BomIngredientRow[]>,
     supabaseSelectAllPages('pos_menu_options', {
       order: 'id.asc',
-      select: BOM_OPTION_SELECT,
-    }).catch(() => []) as Promise<BomOptionRow[]>,
+      select: `${BOM_OPTION_SELECT},menu_id,name`,
+    }).catch(() => []) as Promise<(BomOptionRow & { menu_id?: number; name?: string })[]>,
+    supabaseSelectAllPages('sauces', { order: 'id.asc', select: 'id,code' }).catch(() => []) as Promise<
+      { id?: number; code?: string }[]
+    >,
+    supabaseSelectAllPages('sauce_ingredients', {
+      order: 'sauce_id.asc',
+      select: 'sauce_id,item_code,quantity,loss_rate',
+    }).catch(() => []) as Promise<{ sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[]>,
+    supabaseSelectAllPages('items', { order: 'id.asc', select: 'code' }).catch(() => []) as Promise<
+      { code?: string }[]
+    >,
+    supabaseSelectAllPages('pos_menus', { order: 'id.asc', select: 'id,name,is_banban' }).catch(() => []) as Promise<
+      { id?: number; name?: string; is_banban?: boolean }[]
+    >,
   ])
-  return buildPosMenuBomIndexFromRows(ingRows, optRows)
+  const index = buildPosMenuBomIndexFromRows(
+    ingRows,
+    optRows,
+    buildSauceRecipeIndex(sauceRows, sauceIngRows, itemRows)
+  )
+  index.banban = buildBanbanCostLookup({
+    menus: menuRows.map((m) => ({ id: m.id, name: m.name, isBanban: m.is_banban === true })),
+    options: optRows.map((o) => ({ id: o.id, menuId: o.menu_id, name: o.name })),
+  })
+  return index
 }
 
 type CartLineForBom = {
@@ -289,15 +372,20 @@ export async function buildPosMenuBomIndexForMenus(menuIds: string[], optionIds:
   return buildPosMenuBomIndexFromRows(ingRows, optRows)
 }
 
-export function buildPosMenuBomIndexFromRows(ingRows: BomIngredientRow[], optRows: BomOptionRow[]): PosMenuBomIndex {
+export function buildPosMenuBomIndexFromRows(
+  ingRows: BomIngredientRow[],
+  optRows: BomOptionRow[],
+  sauces?: SauceRecipeIndex
+): PosMenuBomIndex {
   const byMenuOption = new Map<string, BomLine[]>()
   const baseByMenu = new Map<string, BomLine[]>()
 
   for (const r of ingRows || []) {
-    const line = asBomLine(r)
-    if (!line) continue
+    const raw = asBomLine(r)
+    if (!raw) continue
     const mid = String(r.menu_id ?? '').trim()
     if (!mid) continue
+    const lines = sauces ? flattenSauceBomLines([raw], sauces) : [raw]
     const oidRaw = r.option_id
     const oid =
       oidRaw != null && Number.isFinite(Number(oidRaw)) && Number(oidRaw) > 0
@@ -305,12 +393,12 @@ export function buildPosMenuBomIndexFromRows(ingRows: BomIngredientRow[], optRow
         : ''
     if (!oid) {
       const arr = baseByMenu.get(mid) || []
-      arr.push(line)
+      arr.push(...lines)
       baseByMenu.set(mid, arr)
     } else {
       const k = bomKey(mid, oid)
       const arr = byMenuOption.get(k) || []
-      arr.push(line)
+      arr.push(...lines)
       byMenuOption.set(k, arr)
     }
   }
@@ -329,5 +417,5 @@ export function buildPosMenuBomIndexFromRows(ingRows: BomIngredientRow[], optRow
     })
   }
 
-  return { byMenuOption, baseByMenu, optionsById }
+  return { byMenuOption, baseByMenu, optionsById, sauces }
 }
