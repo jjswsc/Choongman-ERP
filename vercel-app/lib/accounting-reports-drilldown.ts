@@ -33,6 +33,10 @@ import {
 import { plFetchEndStrWithPayrollPayWindow } from '@/lib/payroll-utils'
 import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purchase-drill-nav'
 import {
+  addFeeBatchCoverage,
+  loadChannelSettlementFeesForPl,
+} from '@/lib/accounting-pl-channel-settlement-fees'
+import {
   type AccountSubjectMetaRow,
   bankExpenseInPlPeriod,
   bankWithdrawCountsTowardPlExpense,
@@ -779,6 +783,10 @@ export async function computeIncomeStatementExpenseDrillDown(
     isHQ,
   })
   const feeAccountSubjectIds = new Set(feeAccountSubjectIdsFromMeta(subjectMeta).allIds)
+  const feeBatchCoverage = new Set<string>()
+  for (const ar of feeAccrualPl.rows) {
+    addFeeBatchCoverage(feeBatchCoverage, ar.store, { vendor_code: ar.payeeCode, memo: ar.memo })
+  }
   if (accountIds.length > 0) {
     const { rows: btRows, truncated } = await fetchBankWithdrawRowsForPl(
       accountIds,
@@ -796,13 +804,18 @@ export async function computeIncomeStatementExpenseDrillDown(
       if (salaryDecision === 'not-salary') {
         if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
       }
-      if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
       if (!isPlExpenseAccountSubject(r.account_subject_id, subjectMeta)) continue
       const bid = Number(r.id)
       if (!bid) continue
       // 손익 본표와 동일: 수수료 지급예정·카드 대금 배분에 연결된 통장은 이중 표시 제외
       if (feeAccrualPl.linkedBankTransactionIds.has(bid)) continue
       if (cardBillPl.linkedBankTransactionIds.has(bid)) continue
+      addFeeBatchCoverage(
+        feeBatchCoverage,
+        String(r.store || '').trim() || (storeFilter !== 'All' ? storeFilter : ''),
+        r
+      )
+      if (!expenseDrillMatchesSubject(r.account_subject_id, wantSubjectId)) continue
       bankAcc.push({
         kind: 'bank',
         id: bid,
@@ -829,6 +842,29 @@ export async function computeIncomeStatementExpenseDrillDown(
       memo: memoParts.join(' ').trim() || '[지급예정]',
       store: ar.store,
     })
+  }
+  if (wantSubjectId != null && feeAccountSubjectIds.has(wantSubjectId)) {
+    const channelFeePl = await loadChannelSettlementFeesForPl({
+      startStr,
+      endStr,
+      storeFilter,
+      isHQ,
+      subjectMeta,
+      coverage: feeBatchCoverage,
+    })
+    for (const row of channelFeePl.rows) {
+      if (row.accountSubjectId !== wantSubjectId) continue
+      bankAcc.push({
+        kind: 'bank',
+        id: row.id,
+        transDate: row.settleDate || startStr,
+        expenseDate: row.settleDate || null,
+        amount: row.amount,
+        category: 'channel_settlement',
+        memo: [`[채널정산 ${row.channel}]`, row.store, row.memo || ''].filter(Boolean).join(' '),
+        store: row.store,
+      })
+    }
   }
   for (const line of cardBillPl.lines) {
     if (!expenseDrillMatchesSubject(line.accountSubjectId, wantSubjectId)) continue

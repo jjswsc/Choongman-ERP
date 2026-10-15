@@ -520,3 +520,10 @@ export function normalizeQrHiddenMenuIds(raw: unknown): number[] {
   }
   return out.sort((a, b) => a - b)
 }
+
+/** 전체 매장 일괄 적용 — hide는 추가, show는 제거(show 우선), 그 매장에만 있던 숨김은 유지 */
+export function mergeQrHiddenMenuIds(current: unknown, hide: unknown, show: unknown): number[] {
+  const showSet = new Set(normalizeQrHiddenMenuIds(show))
+  const merged = [...normalizeQrHiddenMenuIds(current), ...normalizeQrHiddenMenuIds(hide)]
+  return normalizeQrHiddenMenuIds(merged.filter((id) => !showSet.has(id)))
+}

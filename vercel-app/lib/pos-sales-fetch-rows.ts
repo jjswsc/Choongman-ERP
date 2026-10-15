@@ -1,4 +1,6 @@
 import type { NextRequest } from 'next/server'
+import { iterBangkokYmdInclusive } from '@/lib/attendance-utils'
+import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import { excludePosSalesTestOfficeRows } from '@/lib/pos-sales-test-office'
 import {
   supabaseSelectFilterAllPagesStrippingUnknownColumns,
@@ -184,6 +186,33 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
     rows,
     truncated,
     bizCtx,
+  }
+}
+
+/**
+ * 영업일 구간을 나눠 병렬 조회 — PostgREST 1,000행 페이지를 순차로 넘기는 대기를 줄인다.
+ * 구간마다 영업일 라벨로 다시 거르므로 행이 겹치거나 빠지지 않는다(calendar 버킷은 단일 조회).
+ */
+export async function fetchPosSalesOrdersForBusinessRangeChunked(
+  params: Parameters<typeof fetchPosSalesOrdersForBusinessRange>[0],
+  opts: { chunkDays?: number; concurrency?: number } = {}
+): Promise<PosSalesFetchedRows> {
+  const chunkDays = Math.max(1, Math.trunc(opts.chunkDays ?? 4))
+  const days = iterBangkokYmdInclusive(params.startStr, params.endStr)
+  if (params.dateBucket === 'calendar' || days.length <= chunkDays) {
+    return fetchPosSalesOrdersForBusinessRange(params)
+  }
+  const ranges: { startStr: string; endStr: string }[] = []
+  for (let i = 0; i < days.length; i += chunkDays) {
+    ranges.push({ startStr: days[i]!, endStr: days[Math.min(i + chunkDays, days.length) - 1]! })
+  }
+  const parts = await mapWithConcurrency(ranges, opts.concurrency ?? 4, (range) =>
+    fetchPosSalesOrdersForBusinessRange({ ...params, ...range })
+  )
+  return {
+    rows: parts.flatMap((p) => p.rows),
+    truncated: parts.some((p) => p.truncated),
+    bizCtx: parts[0]!.bizCtx,
   }
 }
 

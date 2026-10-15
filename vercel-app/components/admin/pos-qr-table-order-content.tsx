@@ -15,6 +15,7 @@ import {
 import { useStoreList } from '@/lib/api-client'
 import {
   qrTableAdminAction,
+  qrTableAdminApplyHiddenMenusToStores,
   qrTableAdminGet,
   qrTableAdminSaveSettings,
 } from '@/lib/api-client/qr-table'
@@ -28,6 +29,8 @@ import { QrTablePrintCardsSection } from '@/components/admin/qr-table-print-card
 import { appAlert, appConfirm } from '@/lib/app-message'
 import { hrefToHelpSummaryKey } from '@/lib/admin-help-registry'
 import { useAppBrandConfig } from '@/components/app-brand-provider'
+import { useAuth } from '@/lib/auth-context'
+import { isOfficeRole } from '@/lib/permissions'
 
 function isSchemaMissingError(msg: string): boolean {
   const m = String(msg || '').toLowerCase()
@@ -76,19 +79,49 @@ function autoTierCode(form: typeof EMPTY_TIER_FORM, existingCodes: string[]): st
   return `${base}${Date.now().toString(36).slice(-3).toUpperCase()}`
 }
 
+type QrAdminMenu = { id: string; name: string; code: string; category: string }
+
+function menuCategoryLabel(m: { category?: string; categoryMain?: string }): string {
+  const sub = String(m.category || '').trim()
+  const main = String(m.categoryMain || '').trim()
+  if (main && sub && main !== sub) return `${main} · ${sub}`
+  return sub || main
+}
+
+function CategoryCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+}: {
+  checked: boolean
+  indeterminate: boolean
+  onChange: () => void
+}) {
+  const ref = React.useRef<HTMLInputElement>(null)
+  React.useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate
+  }, [indeterminate])
+  return <input ref={ref} type="checkbox" checked={checked} onChange={onChange} />
+}
+
 export function PosQrTableOrderContent() {
   const { lang } = useLang()
   const t = useT(lang)
   const tr = React.useCallback((k: string, fb: string) => tOr(t, k, fb), [t])
   const { posStoreOptions } = useStoreList()
   const brand = useAppBrandConfig()
+  const { auth } = useAuth()
+  const canApplyAllStores = isOfficeRole(auth?.role || '')
   const [storeCode, setStoreCode] = React.useState('')
   const [settings, setSettings] = React.useState<QrOrderStoreSettings>(defaultQrOrderStoreSettings(''))
   const [tiers, setTiers] = React.useState<QrBuffetTier[]>([])
   const [tokens, setTokens] = React.useState<Array<{ tableName: string; token: string; publicUrl?: string }>>([])
-  const [menus, setMenus] = React.useState<Array<{ id: string; name: string; code: string }>>([])
+  const [menus, setMenus] = React.useState<QrAdminMenu[]>([])
   const [menuSearch, setMenuSearch] = React.useState('')
   const [hiddenMenuSearch, setHiddenMenuSearch] = React.useState('')
+  const [savedHiddenIds, setSavedHiddenIds] = React.useState<number[]>([])
+  const [hiddenScope, setHiddenScope] = React.useState<'store' | 'all'>('store')
+  const [hiddenSaving, setHiddenSaving] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [editing, setEditing] = React.useState(false)
   const [tierForm, setTierForm] = React.useState(EMPTY_TIER_FORM)
@@ -108,20 +141,25 @@ export function PosQrTableOrderContent() {
 
   const hiddenMenuIdSet = React.useMemo(() => new Set(settings.hiddenMenuIds || []), [settings.hiddenMenuIds])
 
-  const filteredHiddenMenus = React.useMemo(() => {
+  const hiddenMenuGroups = React.useMemo(() => {
     const q = hiddenMenuSearch.trim().toLowerCase()
     const list = q
       ? menus.filter(
           (m) =>
             m.name.toLowerCase().includes(q) ||
             m.code.toLowerCase().includes(q) ||
+            m.category.toLowerCase().includes(q) ||
             String(m.id).includes(q)
         )
       : menus
-    return [...list].sort(
-      (a, b) => Number(hiddenMenuIdSet.has(Number(b.id))) - Number(hiddenMenuIdSet.has(Number(a.id)))
-    )
-  }, [menus, hiddenMenuSearch, hiddenMenuIdSet])
+    const groups = new Map<string, QrAdminMenu[]>()
+    for (const m of list) {
+      const arr = groups.get(m.category)
+      if (arr) arr.push(m)
+      else groups.set(m.category, [m])
+    }
+    return [...groups.entries()].map(([category, items]) => ({ category, items }))
+  }, [menus, hiddenMenuSearch])
 
   function toggleHiddenMenu(id: number) {
     setSettings((s) => {
@@ -133,9 +171,27 @@ export function PosQrTableOrderContent() {
     })
   }
 
+  function toggleHiddenCategory(items: QrAdminMenu[]) {
+    const ids = items.map((m) => Number(m.id)).filter((n) => n > 0)
+    setSettings((s) => {
+      const cur = s.hiddenMenuIds || []
+      const allHidden = ids.every((id) => cur.includes(id))
+      return {
+        ...s,
+        hiddenMenuIds: allHidden
+          ? cur.filter((x) => !ids.includes(x))
+          : [...cur, ...ids.filter((id) => !cur.includes(id))],
+      }
+    })
+  }
+
   React.useEffect(() => {
     if (!storeCode && posStoreOptions?.length) setStoreCode(posStoreOptions[0].code)
   }, [posStoreOptions, storeCode])
+
+  React.useEffect(() => {
+    setHiddenScope('store')
+  }, [storeCode])
 
   const alertApiError = React.useCallback(
     async (raw: string) => {
@@ -166,7 +222,10 @@ export function PosQrTableOrderContent() {
         await alertApiError(data.message)
         return
       }
-      if (data.settings) setSettings(data.settings)
+      if (data.settings) {
+        setSettings(data.settings)
+        setSavedHiddenIds(data.settings.hiddenMenuIds || [])
+      }
       setTiers(data.tiers || [])
       setTokens(data.tokens || [])
       const menuRes = await getPosMenus({ storeCode, fresh: true })
@@ -176,6 +235,7 @@ export function PosQrTableOrderContent() {
           id: String(m.id || ''),
           name: String(m.name || ''),
           code: String(m.code || ''),
+          category: menuCategoryLabel(m) || tr('qrTableHiddenMenusNoCategory', '기타'),
         }))
       )
     } catch (e) {
@@ -183,20 +243,79 @@ export function PosQrTableOrderContent() {
     } finally {
       setLoading(false)
     }
-  }, [storeCode, alertApiError])
+  }, [storeCode, alertApiError, tr])
 
   React.useEffect(() => {
     void reload()
   }, [storeCode]) // eslint-disable-line react-hooks/exhaustive-deps -- storeCode only; avoid reload identity loops
 
-  async function saveSettings() {
+  async function saveSettings(opts?: { silent?: boolean }): Promise<boolean> {
     const res = await qrTableAdminSaveSettings({ ...settings, storeCode })
     if (!res.success) {
       await alertApiError(res.message || 'save_failed')
+      return false
+    }
+    if (res.settings) {
+      setSettings(res.settings)
+      setSavedHiddenIds(res.settings.hiddenMenuIds || [])
+    }
+    if (!opts?.silent) await appAlert(tr('qrTableSaved', '저장했습니다.'))
+    return true
+  }
+
+  async function saveHiddenMenus() {
+    const otherStores = (posStoreOptions || []).map((s) => s.code).filter((c) => c && c !== storeCode)
+    if (!(canApplyAllStores && hiddenScope === 'all' && otherStores.length > 0)) {
+      await saveSettings()
       return
     }
-    if (res.settings) setSettings(res.settings)
-    await appAlert(tr('qrTableSaved', '저장했습니다.'))
+    const hideIds = settings.hiddenMenuIds || []
+    const showIds = savedHiddenIds.filter((id) => !hideIds.includes(id))
+    const ok = await appConfirm(
+      tr(
+        'qrTableHiddenMenusApplyAllConfirm',
+        '전체 {n}개 매장에 적용할까요?\n· 체크한 메뉴 {h}개 → 모든 매장 QR에서 숨김\n· 이번에 체크 해제한 메뉴 {s}개 → 모든 매장에서 다시 표시\n다른 매장에만 따로 숨긴 메뉴는 그대로 둡니다.'
+      )
+        .replace('{n}', String(otherStores.length + 1))
+        .replace('{h}', String(hideIds.length))
+        .replace('{s}', String(showIds.length))
+    )
+    if (!ok) return
+    setHiddenSaving(true)
+    try {
+      if (!(await saveSettings({ silent: true }))) return
+      const res = await qrTableAdminApplyHiddenMenusToStores({
+        storeCode,
+        storeCodes: otherStores,
+        hideMenuIds: hideIds,
+        showMenuIds: showIds,
+      })
+      if (!res.updated && !res.unchanged) {
+        await alertApiError(
+          res.message === 'office_only'
+            ? tr('qrTableHiddenMenusOfficeOnly', '전체 매장 적용은 오피스 직원 이상만 할 수 있습니다.')
+            : res.message || 'save_failed'
+        )
+        return
+      }
+      const failed = res.failed || []
+      let msg = tr(
+        'qrTableHiddenMenusApplyAllDone',
+        '이 매장 저장 완료. 다른 매장: 변경 {u}곳 · 이미 같음 {k}곳'
+      )
+        .replace('{u}', String((res.updated || []).length))
+        .replace('{k}', String((res.unchanged || []).length))
+      if (failed.length) {
+        msg += `\n${tr('qrTableHiddenMenusApplyAllFailed', '실패 {f}곳').replace('{f}', String(failed.length))}: ${failed
+          .map((f) => f.storeCode)
+          .join(', ')}`
+      }
+      await appAlert(msg)
+    } catch (e) {
+      await alertApiError(e instanceof Error ? e.message : 'save_failed')
+    } finally {
+      setHiddenSaving(false)
+    }
   }
 
   function resetTierForm() {
@@ -595,7 +714,7 @@ export function PosQrTableOrderContent() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {tr(
                   'qrTableHiddenMenusHint',
-                  '체크한 메뉴는 이 매장 손님 QR 화면에만 안 보입니다. POS 직원 화면과 다른 매장은 그대로입니다. 예: 무료 김치.'
+                  '체크한 메뉴는 이 매장 손님 QR 화면에만 안 보입니다. POS 직원 화면과 다른 매장은 그대로입니다. 예: 무료 김치. 카테고리 줄을 체크하면 그 카테고리 메뉴를 한 번에 숨깁니다.'
                 )}
               </p>
             </div>
@@ -608,36 +727,102 @@ export function PosQrTableOrderContent() {
             value={hiddenMenuSearch}
             onChange={(e) => setHiddenMenuSearch(e.target.value)}
           />
-          <div className="max-h-56 overflow-auto rounded-md border bg-background p-2">
-            <div className="grid gap-1 sm:grid-cols-2">
-              {filteredHiddenMenus.length === 0 ? (
-                <p className="col-span-full px-1 py-3 text-sm text-muted-foreground">
-                  {menus.length === 0
-                    ? tr('qrTableIncludedMenusEmpty', '이 매장에 등록된 메뉴가 없습니다.')
-                    : tr('qrTableMenuSearchEmpty', '검색 결과가 없습니다.')}
-                </p>
-              ) : (
-                filteredHiddenMenus.map((m) => {
-                  const id = Number(m.id)
-                  const checked = hiddenMenuIdSet.has(id)
+          <div className="max-h-80 overflow-auto rounded-md border bg-background p-2">
+            {hiddenMenuGroups.length === 0 ? (
+              <p className="px-1 py-3 text-sm text-muted-foreground">
+                {menus.length === 0
+                  ? tr('qrTableIncludedMenusEmpty', '이 매장에 등록된 메뉴가 없습니다.')
+                  : tr('qrTableMenuSearchEmpty', '검색 결과가 없습니다.')}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {hiddenMenuGroups.map(({ category, items }) => {
+                  const hiddenInGroup = items.filter((m) => hiddenMenuIdSet.has(Number(m.id))).length
+                  const allHidden = hiddenInGroup === items.length
                   return (
-                    <label
-                      key={`hide-${m.id}`}
-                      className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60 ${
-                        checked ? 'bg-destructive/10' : ''
-                      }`}
-                    >
-                      <input type="checkbox" checked={checked} onChange={() => toggleHiddenMenu(id)} />
-                      <span className="min-w-0 truncate">
-                        <span className="text-muted-foreground">{m.code}</span> {m.name}
-                      </span>
-                    </label>
+                    <div key={`hide-cat-${category}`}>
+                      <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 rounded-md bg-muted px-2 py-1.5 text-xs font-semibold">
+                        <CategoryCheckbox
+                          checked={allHidden}
+                          indeterminate={hiddenInGroup > 0 && !allHidden}
+                          onChange={() => toggleHiddenCategory(items)}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{category}</span>
+                        <span className="tabular-nums font-normal text-muted-foreground">
+                          {hiddenInGroup}/{items.length}
+                        </span>
+                      </label>
+                      <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                        {items.map((m) => {
+                          const id = Number(m.id)
+                          const checked = hiddenMenuIdSet.has(id)
+                          return (
+                            <label
+                              key={`hide-${m.id}`}
+                              className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60 ${
+                                checked ? 'bg-destructive/10' : ''
+                              }`}
+                            >
+                              <input type="checkbox" checked={checked} onChange={() => toggleHiddenMenu(id)} />
+                              <span className="min-w-0 truncate">
+                                <span className="text-muted-foreground">{m.code}</span> {m.name}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
                   )
-                })
-              )}
-            </div>
+                })}
+              </div>
+            )}
           </div>
-          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+          {canApplyAllStores ? (
+            <div className="space-y-1 rounded-md border border-dashed px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {tr('qrTableHiddenMenusScope', '적용 범위')}
+                </span>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="qr-hidden-scope"
+                    checked={hiddenScope === 'store'}
+                    onChange={() => setHiddenScope('store')}
+                  />
+                  {tr('qrTableHiddenMenusScopeStore', '이 매장만')}
+                </label>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="qr-hidden-scope"
+                    checked={hiddenScope === 'all'}
+                    onChange={() => setHiddenScope('all')}
+                  />
+                  {tr('qrTableHiddenMenusScopeAll', '전체 매장 ({n}곳)').replace(
+                    '{n}',
+                    String((posStoreOptions || []).length)
+                  )}
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {tr('qrTableHiddenMenusScopeOfficeOnly', '오피스 직원 이상만 보입니다')}
+                </span>
+              </div>
+              {hiddenScope === 'all' ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {tr(
+                    'qrTableHiddenMenusScopeAllHint',
+                    '체크한 메뉴는 모든 매장 QR에서 숨기고, 이번에 체크 해제한 메뉴는 모든 매장에서 다시 보이게 합니다. 다른 매장에만 따로 숨긴 메뉴는 그대로 둡니다.'
+                  )}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <Button onClick={() => void saveHiddenMenus()} disabled={hiddenSaving}>
+            {canApplyAllStores && hiddenScope === 'all'
+              ? tr('qrTableHiddenMenusSaveAll', '전체 매장에 저장')
+              : tr('save', '저장')}
+          </Button>
         </section>
 
         {/* 2) 인당 패키지 */}

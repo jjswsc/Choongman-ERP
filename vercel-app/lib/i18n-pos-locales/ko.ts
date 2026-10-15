@@ -76,6 +76,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posChannelSettleAlreadyPosted: '이미 동일 금액으로 분개되어 있습니다.',
     posChannelSettleNoGross: 'POS 채권(GROSS)이 없습니다.',
     posChannelSettleMismatch: 'GROSS = 수수료 + NET 이어야 합니다.',
+    posChannelSettleFeePctConfirm:
+      '수수료율 {pct}% 가 정상 범위(0~{max}%)를 벗어났습니다. 통장 입금이 다른 날짜 것일 수 있습니다. 그래도 저장할까요?',
     posChannelSettleGpPlatformLink: '플랫폼 정산 % (배달앱 운영)',
     posChannelSettleGpPoLink: '본사 PO 배달 GP % (청구 비율)',
     posChannelSettleCsvTitle: '정산서 CSV 일괄',

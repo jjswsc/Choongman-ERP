@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  applyQrHiddenMenusToStores,
   deleteBuffetTier,
   ensureQrTokensForTables,
   listQrTokensForStore,
@@ -10,6 +11,7 @@ import {
 } from '@/lib/qr-table-server'
 import { requirePosStoreWriteAuth, posApiCorsHeaders, applyPosApiCors } from '@/lib/pos-api-write-auth'
 import { requireAuth } from '@/lib/verify-auth'
+import { isOfficeRole } from '@/lib/permissions'
 import { normalizeQrHiddenMenuIds, type QrOrderMode, type QrPaymentMode } from '@/lib/qr-table-types'
 
 function schemaErrorMessage(e: unknown): string {
@@ -126,6 +128,29 @@ export async function POST(req: NextRequest) {
         origin: req.nextUrl.origin,
       })
       return applyPosApiCors(NextResponse.json({ success: true, tokens }, { headers }))
+    }
+
+    if (action === 'applyHiddenMenusToStores') {
+      if (!isOfficeRole(String(write.auth.role || ''))) {
+        return applyPosApiCors(
+          NextResponse.json({ success: false, message: 'office_only' }, { status: 403, headers })
+        )
+      }
+      const storeCodes = Array.isArray(body.storeCodes)
+        ? (body.storeCodes as unknown[]).map((x) => String(x || '').trim()).filter(Boolean)
+        : []
+      if (!storeCodes.length) {
+        return applyPosApiCors(NextResponse.json({ success: false, message: 'store_required' }, { status: 400, headers }))
+      }
+      const result = await applyQrHiddenMenusToStores(
+        {
+          storeCodes,
+          hideMenuIds: normalizeQrHiddenMenuIds(body.hideMenuIds),
+          showMenuIds: normalizeQrHiddenMenuIds(body.showMenuIds),
+        },
+        write.auth.tenantId
+      )
+      return applyPosApiCors(NextResponse.json({ success: result.failed.length === 0, ...result }, { headers }))
     }
 
     return applyPosApiCors(NextResponse.json({ success: false, message: 'unknown_action' }, { status: 400, headers }))

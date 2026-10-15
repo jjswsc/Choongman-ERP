@@ -3336,6 +3336,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posChannelSettleHint: 'Delivery: the platform deducts a % from GROSS and deposits NET next day (not HQ PO delivery GP).\nGROSS=1130 receivable, NET=bank deposit, FEE=GROSS−NET. Bank category: Sales collection only.',
     posChannelSettleMemo: 'Memo (optional)',
     posChannelSettleMismatch: 'GROSS must equal fee + NET.',
+    posChannelSettleFeePctConfirm:
+      'อัตราค่าธรรมเนียม {pct}% เกินช่วงปกติ (0–{max}%) เงินเข้าธนาคารอาจเป็นของวันอื่น ยืนยันบันทึกหรือไม่?',
     posChannelSettleNoGross: 'No POS gross receivable for this channel.',
     posChannelSettlePostJournal: 'Post settlement journal',
     posChannelSettlePosted: 'Channel settlement journal created.',

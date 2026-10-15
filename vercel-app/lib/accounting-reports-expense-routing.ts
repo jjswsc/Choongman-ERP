@@ -151,6 +151,16 @@ export function isPlExpenseAccountSubject(
   return meta.pAndLSection !== 'cost'
 }
 
+export type DeliveryCardFeeAccrualPlRow = {
+  id: number
+  expenseDate: string
+  amount: number
+  store: string | null
+  memo: string | null
+  payeeCode: string | null
+  accountSubjectId: number
+}
+
 /**
  * 지출등록「배달앱/카드 수수료」(계정 5528/5529) 지급예정 — 손익 비용 반영.
  * 통장 지급 연결분은 linkedBankTransactionIds 로 넘기고 통장 집계에서 제외해 이중계상 방지.
@@ -169,14 +179,7 @@ export async function loadDeliveryCardFeeAccrualsForPl(params: {
   cashExpenseVat: number
   linkedBankTransactionIds: Set<number>
   fetched: number
-  rows: {
-    id: number
-    expenseDate: string
-    amount: number
-    store: string | null
-    memo: string | null
-    accountSubjectId: number
-  }[]
+  rows: DeliveryCardFeeAccrualPlRow[]
 }> {
   const empty = {
     bySubject: new Map<number | null, number>(),
@@ -186,14 +189,7 @@ export async function loadDeliveryCardFeeAccrualsForPl(params: {
     cashExpenseVat: 0,
     linkedBankTransactionIds: new Set<number>(),
     fetched: 0,
-    rows: [] as {
-      id: number
-      expenseDate: string
-      amount: number
-      store: string | null
-      memo: string | null
-      accountSubjectId: number
-    }[],
+    rows: [] as DeliveryCardFeeAccrualPlRow[],
   }
   const { deliveryIds, cardIds, allIds } = feeAccountSubjectIdsFromMeta(params.subjectMeta)
   if (allIds.length === 0) return empty
@@ -226,14 +222,7 @@ export async function loadDeliveryCardFeeAccrualsForPl(params: {
     let cardFees = 0
     let cashExpenseVat = 0
     const accrualIds: number[] = []
-    const detailRows: {
-      id: number
-      expenseDate: string
-      amount: number
-      store: string | null
-      memo: string | null
-      accountSubjectId: number
-    }[] = []
+    const detailRows: DeliveryCardFeeAccrualPlRow[] = []
 
     for (const r of rows || []) {
       const status = String(r.status || '').toLowerCase()
@@ -273,6 +262,7 @@ export async function loadDeliveryCardFeeAccrualsForPl(params: {
           amount: amt,
           store: storeName || null,
           memo: r.memo != null ? String(r.memo) : null,
+          payeeCode: r.payee_code != null ? String(r.payee_code) : null,
           accountSubjectId: sid,
         })
       }

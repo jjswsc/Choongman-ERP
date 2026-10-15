@@ -46,6 +46,11 @@ import {
 import { plFetchEndStrWithPayrollPayWindow } from '@/lib/payroll-utils'
 import { resolveBankPlCashVat } from '@/lib/income-statement-cash-vat'
 import {
+  addFeeBatchCoverage,
+  channelSettlementImplausibleWarning,
+  loadChannelSettlementFeesForPl,
+} from '@/lib/accounting-pl-channel-settlement-fees'
+import {
   addBankExpenseWithdrawToPl,
   addPettyCashRowToPl,
   addToSubjectMap,
@@ -179,6 +184,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   deliveryAppFeeExpense += feeAccrualPl.deliveryAppFees
   cardFeeExpense += feeAccrualPl.cardFees
   const feeAccrualLinkedBankIds = feeAccrualPl.linkedBankTransactionIds
+  const feeBatchCoverage = new Set<string>()
+  for (const row of feeAccrualPl.rows) {
+    addFeeBatchCoverage(feeBatchCoverage, row.store, { vendor_code: row.payeeCode, memo: row.memo })
+  }
   const feeAccountSubjectIds = new Set(feeAccountSubjectIdsFromMeta(subjectMeta).allIds)
   limits.delivery_card_fee_accruals = {
     fetched: feeAccrualPl.fetched,
@@ -808,6 +817,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
             accrualGross: accrual?.gross,
             accrualVat: accrual?.vat,
           })
+          const rowStore = String(r.store || '').trim() || (storeFilter !== 'All' ? storeFilter : '')
           addBankExpenseWithdrawToPl({
             row: r,
             subjectMeta,
@@ -832,9 +842,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
             },
             onDeliveryFee: (amt) => {
               deliveryAppFeeExpense += amt
+              addFeeBatchCoverage(feeBatchCoverage, rowStore, r)
             },
             onCardFee: (amt) => {
               cardFeeExpense += amt
+              addFeeBatchCoverage(feeBatchCoverage, rowStore, r)
             },
             onSkippedNonPl: (amt) => {
               skippedNonPlExpense += amt
@@ -850,6 +862,23 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       }
     } catch {
       warnings.push('bank_transactions 조회 실패로 일부 지출이 누락될 수 있습니다.')
+    }
+
+    {
+      const channelFeePl = await loadChannelSettlementFeesForPl({
+        startStr,
+        endStr,
+        storeFilter,
+        isHQ,
+        subjectMeta,
+        coverage: feeBatchCoverage,
+      })
+      mergeExpenseSubjectMaps(expenseBySubjectMap, channelFeePl.bySubject)
+      deliveryAppFeeExpense += channelFeePl.deliveryAppFees
+      cardFeeExpense += channelFeePl.cardFees
+      limits.pos_channel_settlement_fees = { fetched: channelFeePl.fetched, limit: ACCOUNTING_ROWS_MAX }
+      const implausibleWarning = channelSettlementImplausibleWarning(channelFeePl.implausible)
+      if (implausibleWarning) warnings.push(implausibleWarning)
     }
 
     {

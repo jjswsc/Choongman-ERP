@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { CHANNEL_FEE_SOURCE_MANUAL_CONFIRMED } from '@/lib/accounting-pl-channel-settlement-fees'
 import { BankSettlementGuardError } from '@/lib/bank-settlement-guards'
+import { channelFeePctBand, isPlausibleCoverFee } from '@/lib/pos-channel-cover-gross'
 import { saveChannelSettlement } from '@/lib/pos-channel-settlement-process'
 import { normalizePosChannelSettlementChannel } from '@/lib/pos-channel-settlement'
 import { requireAuth } from '@/lib/verify-auth'
@@ -20,15 +22,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'INVALID_PARAMS' }, { status: 400, headers })
     }
     const feeRaw = body.fee ?? body.feeAmt ?? body.fee_amt
+    const gross = Number(body.gross ?? 0)
+    const net = Number(body.net ?? 0)
+    const implausibleFee = gross > 0 && !isPlausibleCoverFee(channel, gross, net)
+    if (implausibleFee && !body.allowImplausibleFee) {
+      const { max } = channelFeePctBand(channel)
+      const feePct = gross > 0 ? Math.round(((gross - net) / gross) * 1000) / 10 : 0
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'FEE_PCT_OUT_OF_RANGE',
+          message: `FEE_PCT_OUT_OF_RANGE (${feePct}% / max ${max}%)`,
+          feePct,
+          maxPct: max,
+        },
+        { status: 400, headers }
+      )
+    }
     const out = await saveChannelSettlement({
       storeCode: String(body.storeCode ?? body.store_code ?? '').trim(),
       settleDate: String(body.settleDate ?? body.settle_date ?? '').slice(0, 10),
       channel,
-      gross: Number(body.gross ?? 0),
-      net: Number(body.net ?? 0),
+      gross,
+      net,
       fee: feeRaw != null && feeRaw !== '' ? Number(feeRaw) : undefined,
       memo: String(body.memo ?? '').trim() || null,
-      feeSource: String(body.feeSource ?? body.fee_source ?? '').trim() || null,
+      feeSource: implausibleFee
+        ? CHANNEL_FEE_SOURCE_MANUAL_CONFIRMED
+        : String(body.feeSource ?? body.fee_source ?? '').trim() || null,
       bankTransactionId:
         body.bankTransactionId != null ? Math.floor(Number(body.bankTransactionId)) : null,
       repost: Boolean(body.repost),

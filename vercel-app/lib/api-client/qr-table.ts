@@ -283,6 +283,26 @@ export async function qrTableAdminAction(body: Record<string, unknown>) {
   return parseJson<{ success: boolean; tier?: QrBuffetTier; tokens?: QrTableToken[]; message?: string }>(res)
 }
 
+export async function qrTableAdminApplyHiddenMenusToStores(body: {
+  storeCode: string
+  storeCodes: string[]
+  hideMenuIds: number[]
+  showMenuIds: number[]
+}) {
+  const res = await apiFetch('/api/qr-table/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'applyHiddenMenusToStores', ...body }),
+  })
+  return parseJson<{
+    success: boolean
+    updated?: string[]
+    unchanged?: string[]
+    failed?: Array<{ storeCode: string; message: string }>
+    message?: string
+  }>(res)
+}
+
 export async function qrTableStaffOpenSession(body: {
   storeCode: string
   tableName: string

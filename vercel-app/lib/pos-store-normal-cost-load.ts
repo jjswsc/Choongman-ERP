@@ -1,4 +1,4 @@
-import { computeIncomeStatementReport } from '@/lib/accounting-reports'
+import { computeIncomeStatementReportShared } from '@/lib/accounting-reports-income'
 import type { IncomeStatementData } from '@/lib/api-client/income-statement'
 import { buildIncomeStatementViewNumbers } from '@/lib/income-statement-display'
 import { mergeNetVatBuckets, type NetVatBuckets } from '@/lib/income-statement-item-vat'
@@ -22,7 +22,7 @@ import {
 } from '@/lib/pos-store-normal-cost'
 import { filterCompletedPosSalesRows } from '@/lib/pos-sales-period-aggregate'
 import {
-  fetchPosSalesOrdersForBusinessRange,
+  fetchPosSalesOrdersForBusinessRangeChunked,
   POS_SALES_DISCOUNT_ANALYTICS_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
 import { loadPosSalesPromoPricingCatalog } from '@/lib/pos-sales-promo-pricing-catalog-server'
@@ -63,6 +63,9 @@ function accountingMonthsAligned(startStr: string, endStr: string): boolean {
   const end = getBangkokMonthRange(months[months.length - 1]!).endStr
   return start === startStr.slice(0, 10) && end === endStr.slice(0, 10)
 }
+
+/** 매장별 손익 1건 = 소형 PostgREST 요청 40여 개 순차 — 너무 높이면 Supabase 커넥션이 밀린다 */
+const STORE_PL_CONCURRENCY = 5
 
 async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length)
@@ -110,7 +113,7 @@ async function loadAccountingPl(params: {
   const vendorLists: StoreNormalPurchaseVendor[][] = []
   let purchaseVatBuckets: NetVatBuckets | null = null
   for (const yearMonth of params.months) {
-    const report = await computeIncomeStatementReport({
+    const report = await computeIncomeStatementReportShared({
       yearMonth,
       storeFilter: params.storeCode,
       userRole: params.auth.userRole,
@@ -195,10 +198,22 @@ export async function computePosStoreNormalCost(params: {
     storeCode: storeCodes?.[0] ?? null,
   })
 
+  const loadPlForStores = (stores: string[]) =>
+    mapPool(stores, STORE_PL_CONCURRENCY, async (storeCode) => {
+      try {
+        return { pl: await loadAccountingPl({ storeCode, months, auth: params.auth }), failed: false }
+      } catch {
+        return { pl: null, failed: true }
+      }
+    })
+
+  const explicit = (storeCodes ?? []).filter(isStoreCode)
+  const explicitPlPromise = explicit.length > 0 ? loadPlForStores(explicit) : null
+
   const [catalog, costIndex, fetchResult] = await Promise.all([
     loadPosSalesPromoPricingCatalog(),
     buildPosMenuCostIndex(),
-    fetchPosSalesOrdersForBusinessRange({
+    fetchPosSalesOrdersForBusinessRangeChunked({
       startStr,
       endStr,
       storeCodes,
@@ -219,10 +234,10 @@ export async function computePosStoreNormalCost(params: {
     byStore.set(code, list)
   }
 
-  const explicit = (storeCodes ?? []).filter(isStoreCode)
   const storeList = explicit.length > 0 ? explicit : [...byStore.keys()]
+  const plResults = await (explicitPlPromise ?? loadPlForStores(storeList))
 
-  const rows = await mapPool(storeList, 3, async (storeCode) => {
+  const rows = storeList.map((storeCode, index) => {
     const orders = byStore.get(storeCode) ?? []
     const slice = buildManagementMarginPosSlice({
       orderRows: orders,
@@ -234,13 +249,10 @@ export async function computePosStoreNormalCost(params: {
     let accountingCogs: number | null = null
     let accountingSalesIncluded: number | null = null
     let accountingCogsIncluded: number | null = null
-    let pl: Awaited<ReturnType<typeof loadAccountingPl>> = null
-    try {
-      pl = await loadAccountingPl({
-        storeCode,
-        months,
-        auth: params.auth,
-      })
+    const { pl, failed } = plResults[index]!
+    if (failed) {
+      usageWarnings.push('ACCOUNTING_LOAD_FAILED')
+    } else {
       accountingSales = pl?.excluded.sales ?? null
       accountingCogs = pl?.excluded.cogs ?? null
       accountingSalesIncluded = pl?.included.sales ?? null
@@ -248,8 +260,6 @@ export async function computePosStoreNormalCost(params: {
       if (!(accountingSales != null && accountingSales > 0.0001) && slice.netSales > 0.0001) {
         accountingSales = round2(slice.netSales)
       }
-    } catch {
-      usageWarnings.push('ACCOUNTING_LOAD_FAILED')
     }
 
     return buildStoreNormalCostRow({

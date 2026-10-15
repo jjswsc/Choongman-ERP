@@ -125,8 +125,24 @@ export function normalizePosBusinessDayStart(raw: unknown): PosBusinessClock {
   return normalizePosBusinessHours(raw).start
 }
 
+/** Asia/Bangkok 은 1920년 이후 DST 없는 고정 UTC+7 */
+const BANGKOK_UTC_OFFSET_MS = 7 * 60 * 60 * 1000
+const BANGKOK_FIXED_OFFSET_MIN_MS = Date.UTC(1921, 0, 1)
+const BANGKOK_FIXED_OFFSET_MAX_MS = Date.UTC(9999, 11, 30)
+
+/**
+ * 주문 수만 건 영업일 판정에서 toLocaleDateString(timeZone) 이 행당 수십 µs 라 산술로 계산.
+ * 범위 밖·Invalid Date 는 Intl 결과를 그대로 쓴다.
+ */
+function bangkokYmdFromUtcMs(ms: number): string {
+  if (!(ms >= BANGKOK_FIXED_OFFSET_MIN_MS && ms <= BANGKOK_FIXED_OFFSET_MAX_MS)) {
+    return new Date(ms).toLocaleDateString('en-CA', { timeZone: POS_TIMEZONE })
+  }
+  return new Date(ms + BANGKOK_UTC_OFFSET_MS).toISOString().slice(0, 10)
+}
+
 export function getBangkokDateStr(base: Date = new Date()): string {
-  return base.toLocaleDateString('en-CA', { timeZone: POS_TIMEZONE })
+  return bangkokYmdFromUtcMs(base.getTime())
 }
 
 export function getBangkokClockParts(base: Date = new Date()): { hour: number; minute: number } {
@@ -157,7 +173,7 @@ export function addDaysYmd(dateStr: string, delta: number): string {
   const base = Date.parse(`${s}T12:00:00+07:00`)
   if (!Number.isFinite(base)) return getBangkokDateStr()
   const ms = base + delta * 86400000
-  return new Date(ms).toLocaleDateString('en-CA', { timeZone: POS_TIMEZONE })
+  return bangkokYmdFromUtcMs(ms)
 }
 
 function bangkokWallToUtcMs(ymd: string, clock: PosBusinessClock): number {

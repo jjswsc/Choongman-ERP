@@ -91,6 +91,7 @@ import {
   defaultQrOrderStoreSettings,
   isQrTableCreatedBy,
   markNewlyPrepaidQrExtraLines,
+  mergeQrHiddenMenuIds,
   normalizeQrHiddenMenuIds,
   parseQrTableSessionIdFromCreatedBy,
   type QrBuffetTier,
@@ -427,6 +428,37 @@ export async function upsertQrOrderStoreSettings(
     await upsertRowsTenantStore('pos_qr_order_store_settings', 'store_code', [row], tenantScope)
   }
   return loadQrOrderStoreSettings(storeCode, tenantId)
+}
+
+/** QR 숨김 메뉴를 여러 매장에 병합 적용 — 다른 설정은 그대로, 바뀌는 매장만 저장 */
+export async function applyQrHiddenMenusToStores(
+  params: { storeCodes: string[]; hideMenuIds: number[]; showMenuIds: number[] },
+  tenantId?: string | null
+): Promise<{ updated: string[]; unchanged: string[]; failed: Array<{ storeCode: string; message: string }> }> {
+  const codes = [...new Set(params.storeCodes.map((c) => String(c || '').trim()).filter(Boolean))].slice(0, 300)
+  const updated: string[] = []
+  const unchanged: string[] = []
+  const failed: Array<{ storeCode: string; message: string }> = []
+  const runOne = async (storeCode: string) => {
+    try {
+      const cur = await loadQrOrderStoreSettings(storeCode, tenantId)
+      const before = normalizeQrHiddenMenuIds(cur.hiddenMenuIds)
+      const next = mergeQrHiddenMenuIds(before, params.hideMenuIds, params.showMenuIds)
+      if (before.join(',') === next.join(',')) {
+        unchanged.push(storeCode)
+        return
+      }
+      await upsertQrOrderStoreSettings({ ...cur, storeCode, hiddenMenuIds: next }, tenantId)
+      updated.push(storeCode)
+    } catch (e) {
+      failed.push({ storeCode, message: e instanceof Error ? e.message : String(e || 'error') })
+    }
+  }
+  const CONCURRENCY = 4
+  for (let i = 0; i < codes.length; i += CONCURRENCY) {
+    await Promise.all(codes.slice(i, i + CONCURRENCY).map(runOne))
+  }
+  return { updated, unchanged, failed }
 }
 
 export async function loadBuffetTiersForStore(

@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { appAlert } from '@/lib/app-message'
+import { appAlert, appConfirm } from '@/lib/app-message'
 import {
   getPosChannelSettlementGross,
   getPosChannelSettlements,
@@ -21,7 +21,7 @@ import {
   type PosChannelSettlementRow,
 } from '@/lib/api-client'
 import { parseChannelSettlementCsv } from '@/lib/parse-channel-settlement-csv'
-import { appendCoverMemo } from '@/lib/pos-channel-cover-gross'
+import { appendCoverMemo, channelFeePctBand, isPlausibleCoverFee } from '@/lib/pos-channel-cover-gross'
 import {
   deriveFeeFromGrossNet,
   roundSettlementMoney,
@@ -205,6 +205,20 @@ export function PosChannelSettlementPanel({
       await appAlert(t('posChannelSettleMismatch') || 'GROSS = 수수료 + NET 이어야 합니다.')
       return
     }
+    const implausibleFee = !isPlausibleCoverFee(channel, gross, netNum)
+    if (implausibleFee) {
+      const feePct = gross > 0 ? Math.round((feeNum / gross) * 1000) / 10 : 0
+      const { max } = channelFeePctBand(channel)
+      const ok = await appConfirm(
+        (
+          t('posChannelSettleFeePctConfirm') ||
+          '수수료율 {pct}% 가 정상 범위(0~{max}%)를 벗어났습니다. 통장 입금이 다른 날짜 것일 수 있습니다. 그래도 저장할까요?'
+        )
+          .replace('{pct}', String(feePct))
+          .replace('{max}', String(max))
+      )
+      if (!ok) return
+    }
     setSaving(true)
     try {
       const res = await savePosChannelSettlement({
@@ -224,6 +238,7 @@ export function PosChannelSettlementPanel({
         bankTransactionId:
           bankTransactionId != null && bankTransactionId > 0 ? bankTransactionId : undefined,
         repost,
+        allowImplausibleFee: implausibleFee || undefined,
       })
       if (res.success) {
         await appAlert(

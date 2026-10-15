@@ -76,6 +76,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posChannelSettleAlreadyPosted: 'Already posted with the same amounts.',
     posChannelSettleNoGross: 'No POS gross receivable for this channel.',
     posChannelSettleMismatch: 'GROSS must equal fee + NET.',
+    posChannelSettleFeePctConfirm:
+      'Fee rate {pct}% is outside the normal range (0–{max}%). The bank deposit may belong to a different date. Save anyway?',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
     posChannelSettleGpPoLink: 'HQ PO delivery GP % (Billing rates)',
     posChannelSettleCsvTitle: 'Settlement CSV batch',

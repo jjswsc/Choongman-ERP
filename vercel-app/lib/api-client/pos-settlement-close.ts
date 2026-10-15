@@ -292,6 +292,8 @@ export async function savePosChannelSettlement(params: {
   memo?: string
   bankTransactionId?: number
   repost?: boolean
+  /** 채널 정상 수수료율 밖이어도 직원이 확인하고 저장 */
+  allowImplausibleFee?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/savePosChannelSettlement', {
     method: 'POST',
@@ -304,6 +306,7 @@ export async function savePosChannelSettlement(params: {
     journalEntryId?: number | null
     alreadyPosted?: boolean
     message?: string
+    code?: string
   }>
 }
 

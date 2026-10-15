@@ -3287,4 +3287,5 @@ export const I18N_POS_KH: Record<string, string> = {
     posAndroidPrintUsbGrant: 'អនុញ្ញាត USB',
     posShellPrintDiagnosticsRasterHint: 'Turn on only if receipts or kitchen slips come out blank while Notepad prints fine. The POS sends the slip as an image straight to the printer, bypassing the Windows driver. Applies to all printers on this PC.',
     posShellPrintDiagnosticsRasterLabel: 'Send as image (ESC/POS) (`rasterEscPos`)',
+    posChannelSettleFeePctConfirm: 'Fee rate {pct}% is outside the normal range (0–{max}%). The bank deposit may belong to a different date. Save anyway?',
 }
