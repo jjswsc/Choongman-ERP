@@ -155,6 +155,8 @@ export async function GET(request: NextRequest) {
     }
 
     const bangkokYear = parseInt(getBangkokTodayDateString().slice(0, 4), 10)
+    /** 사용(연간)·잔여 집계 연도: 조회 종료일이 속한 해(1/1~12/31). 종료일 미지정이면 방콕 올해 */
+    const statsYear = /^\d{4}-\d{2}-\d{2}$/.test(endStr) ? parseInt(endStr.slice(0, 4), 10) : bangkokYear
 
     const leaveAssignedEmp = (leaveRows || []).map((l) =>
       assignLeaveRowToEmployeeForStats(
@@ -197,7 +199,6 @@ export async function GET(request: NextRequest) {
       let usedTotalSick = 0
       let usedTotalUnpaid = 0
       let usedTotalLakij = 0
-      let usedSickThisBangkokYear = 0
 
       for (let li = 0; li < (leaveRows || []).length; li++) {
         const l = leaveRows[li]
@@ -214,20 +215,23 @@ export async function GET(request: NextRequest) {
         const underOneYear = isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
 
         const inPeriod = leaveDateInYmdRange(dateStr, periodStart, periodEnd)
+        const inStatsYear = parseInt(dateStr.slice(0, 4), 10) === statsYear
+        if (!inPeriod && !inStatsYear) continue
+        const yearDays = inStatsYear ? days : 0
+        const periodDays = inPeriod ? days : 0
 
         if (lType.indexOf('무급휴가') !== -1 || lType.toLowerCase().indexOf('unpaid') !== -1 || underOneYear) {
-          usedTotalUnpaid += days
-          if (inPeriod) usedPeriodUnpaid += days
+          usedTotalUnpaid += yearDays
+          usedPeriodUnpaid += periodDays
         } else if (lType.indexOf('ลากิจ') !== -1 || lType.toLowerCase().indexOf('lakij') !== -1) {
-          usedTotalLakij += days
-          if (inPeriod) usedPeriodLakij += days
+          usedTotalLakij += yearDays
+          usedPeriodLakij += periodDays
         } else if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
-          usedTotalSick += days
-          if (parseInt(dateStr.slice(0, 4), 10) === bangkokYear) usedSickThisBangkokYear += days
-          if (inPeriod) usedPeriodSick += days
+          usedTotalSick += yearDays
+          usedPeriodSick += periodDays
         } else {
-          usedTotalAnnual += days
-          if (inPeriod) usedPeriodAnnual += days
+          usedTotalAnnual += yearDays
+          usedPeriodAnnual += periodDays
         }
       }
 
@@ -246,7 +250,7 @@ export async function GET(request: NextRequest) {
         usedTotalLakij: Math.round(usedTotalLakij * 10) / 10,
         remain: Math.max(0, Math.round((annualLimit - usedTotalAnnual) * 10) / 10),
         remainLakij: Math.max(0, Math.round((LAKIJ_DAYS_PER_YEAR - usedTotalLakij) * 10) / 10),
-        remainSick: Math.max(0, Math.round((SICK_DAYS_PER_YEAR - usedSickThisBangkokYear) * 10) / 10),
+        remainSick: Math.max(0, Math.round((SICK_DAYS_PER_YEAR - usedTotalSick) * 10) / 10),
       })
     }
 

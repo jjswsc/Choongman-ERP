@@ -365,8 +365,9 @@ Only matters the employee must handle personally on a working day:
   leaveRejectReasonLabel: 'Rejection reason',
   leave_tab_stats: 'Leave Stats',
   leave_used_period: 'Used (Period)',
-  leave_used_total: 'Used (Total)',
+  leave_used_total: 'Used ({year})',
   leave_remain: 'Remain',
+  leave_remain_year: 'Remain ({year})',
   leave_col_name: 'Name',
   leave_col_request_date: 'Request Date',
   leave_col_request_time: 'Submitted (ICT)',
@@ -377,7 +378,7 @@ Only matters the employee must handle personally on a working day:
   leave_col_action: 'Action',
   leave_stats_hint: 'Select period, store, and employment status, then click Search.',
   leave_stats_approved_only:
-    'Only approved leave is counted. Items still «Pending» on the approval screen do not appear in usage totals. The default search shows current staff; choose Resigned or All to include former employees.',
+    'Only approved leave is counted. Items still «Pending» on the approval screen do not appear in usage totals. The default search shows current staff; choose Resigned or All to include former employees. Yearly usage and remaining days cover only the calendar year of the end date (Jan 1 – Dec 31); earlier years are not added.',
   leave_stats_staff_filter: 'Employment',
   leave_stats_name_ph: 'Name or employee code',
   tabHome: 'Home',
@@ -1817,7 +1818,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_leave:
     'Approve or reject leave requests and review annual/sick/unpaid usage and balances by period. Use the Approvers tab for global and per-store approvers. Stats default to current staff. Sidebar badges count only recent unapproved leave dates.',
   helpHow_admin_leave:
-    '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store. Default list is current staff; choose Resigned or All to include former employees.\n③ Approvers: set global approvers (all stores) and per-store approvers. Once a store has any designated approver, only that list (+ global + Director) can approve. Stores with none keep manager/franchisee fallback.\n④ Payroll may deep-link here by month.\n⑤ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
+    '① Approval: review certificates, then approve or reject pending requests.\n② Stats: query usage and remaining leave by period and store. Yearly usage and remaining days use the calendar year of the end date (Jan 1 – Dec 31). Default list is current staff; choose Resigned or All to include former employees.\n③ Approvers: set global approvers (all stores) and per-store approvers. Once a store has any designated approver, only that list (+ global + Director) can approve. Stores with none keep manager/franchisee fallback.\n④ Payroll may deep-link here by month.\n⑤ Sidebar badges count pending leave from the last 30 leave-days through future dates only.',
   helpSum_admin_hr_calendar:
     'View birthdays, hire dates, work anniversaries, and resignations on a monthly calendar and list.',
   helpHow_admin_hr_calendar:

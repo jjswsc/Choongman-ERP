@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select"
 import { BarChart3, Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, tr } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeaveStats } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
@@ -56,6 +56,7 @@ export function AdminLeaveStats() {
     }[]
   >([])
   const [loading, setLoading] = useState(false)
+  const [statsYear, setStatsYear] = useState(() => todayStr().slice(0, 4))
 
   const { posStores: storeKeys } = useStoreList()
   useEffect(() => {
@@ -74,6 +75,7 @@ export function AdminLeaveStats() {
   const loadStats = () => {
     if (!auth?.store) return
     setLoading(true)
+    setStatsYear(/^\d{4}-\d{2}-\d{2}$/.test(endStr) ? endStr.slice(0, 4) : todayStr().slice(0, 4))
     getLeaveStats({
       startStr,
       endStr,
@@ -156,8 +158,8 @@ export function AdminLeaveStats() {
                   {t("emp_label_employee_code")}
                 </th>
                 <th colSpan={4} className="px-3 py-2 font-semibold">{t("leave_used_period")}</th>
-                <th colSpan={4} className="px-3 py-2 font-semibold">{t("leave_used_total")}</th>
-                <th colSpan={3} className="px-3 py-2 font-semibold">{t("leave_remain")}</th>
+                <th colSpan={4} className="px-3 py-2 font-semibold">{tr(t, "leave_used_total", { year: statsYear })}</th>
+                <th colSpan={3} className="px-3 py-2 font-semibold">{tr(t, "leave_remain_year", { year: statsYear })}</th>
               </tr>
               <tr className="border-b bg-muted/30">
                 <th className="px-2 py-1 font-medium">{t("annual")}</th>
