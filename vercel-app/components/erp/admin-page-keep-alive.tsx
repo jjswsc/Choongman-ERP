@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useSearchParams } from "next/navigation"
+import { LayoutRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime"
 import {
   consumeErpBackEvictHref,
   normalizeErpHref,
@@ -31,8 +32,16 @@ import {
 /** 워크스페이스 탭 상한과 동일 */
 const MAX_CACHED_PAGES = 12
 
+type LayoutRouterContextValue = React.ContextType<typeof LayoutRouterContext>
+
 type CacheEntry = {
   node: React.ReactNode
+  /**
+   * 이 슬롯이 마지막으로 활성일 때의 Next LayoutRouterContext.
+   * children(LayoutRouter)은 이 컨텍스트의 활성 세그먼트만 그리므로, 숨김 중에 최신 값을 주면
+   * 숨긴 슬롯이 지금 연 메뉴로 바뀌며 원래 화면이 unmount된다.
+   */
+  layoutRouterCtx: LayoutRouterContextValue
   lastSeen: number
   stamp: number
   /** 이 슬롯이 마지막으로 활성일 때의 pathname+search. 숨김 중 URL 고정에 사용 */
@@ -79,6 +88,7 @@ function syncCacheWithWorkspaceTabs(
 export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const layoutRouterCtx = React.useContext(LayoutRouterContext)
   const erpNav = useErpNavigationOptional()
   const cacheRef = React.useRef(new Map<string, CacheEntry>())
   const prevCacheHrefRef = React.useRef<string | null>(null)
@@ -114,6 +124,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
   if (keepAliveCurrent) {
     if (existing && reactivating) {
       existing.lastSeen = Date.now()
+      existing.layoutRouterCtx = layoutRouterCtx
       const nextUrl = advanceKeepAliveSlotUrl({
         storedFullHref: existing.fullHref || href,
         liveHref: href,
@@ -125,6 +136,7 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
     } else {
       cacheRef.current.set(cacheHref, {
         node: children,
+        layoutRouterCtx,
         lastSeen: Date.now(),
         stamp: remountStamp,
         fullHref: href,
@@ -220,18 +232,21 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
       slotIsLive: active && keepAliveCurrent,
       holdStoredQuery: entry.holdStoredQuery === true,
     })
+    const slotLayoutRouterCtx = active && keepAliveCurrent ? layoutRouterCtx : entry.layoutRouterCtx
     return (
       <ErpPageVisibilityProvider key={key} active={active}>
-        <ErpKeepAliveRouterScope fullHref={slotFullHref}>
-          <div
-            className={active ? activeSlotClass : hiddenSlotClass}
-            hidden={!active}
-            aria-hidden={!active}
-            data-erp-keep-alive={key}
-          >
-            <KeepAliveFrozenTree node={entry.node} />
-          </div>
-        </ErpKeepAliveRouterScope>
+        <LayoutRouterContext.Provider value={slotLayoutRouterCtx}>
+          <ErpKeepAliveRouterScope fullHref={slotFullHref}>
+            <div
+              className={active ? activeSlotClass : hiddenSlotClass}
+              hidden={!active}
+              aria-hidden={!active}
+              data-erp-keep-alive={key}
+            >
+              <KeepAliveFrozenTree node={entry.node} />
+            </div>
+          </ErpKeepAliveRouterScope>
+        </LayoutRouterContext.Provider>
       </ErpPageVisibilityProvider>
     )
   }
@@ -240,19 +255,15 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
    * 제외 경로(실시간 매출 등)는 캐시에 넣지 않지만,
    * 이미 열어 둔 keep-alive 탭 트리는 unmount하면 안 된다(상태 증발).
    * 숨긴 슬롯은 자기 fullHref로 pathname/search를 고정한다.
+   * 슬롯 목록과 live 자리의 트리 모양은 두 경우 모두 같아야 한다(다르면 전체 슬롯 remount).
    */
-  if (!keepAliveCurrent) {
-    return (
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {entries.map(([key, entry]) => renderCachedSlot(key, entry, false))}
-        <ErpPageVisibilityProvider active={true}>
-          <div className={activeSlotClass} data-erp-keep-alive-live={cacheHref}>
-            {children}
-          </div>
-        </ErpPageVisibilityProvider>
+  const liveSlot = keepAliveCurrent ? null : (
+    <ErpPageVisibilityProvider active={true}>
+      <div className={activeSlotClass} data-erp-keep-alive-live={cacheHref}>
+        {children}
       </div>
-    )
-  }
+    </ErpPageVisibilityProvider>
+  )
 
   if (entries.length === 0) {
     return (
@@ -264,7 +275,10 @@ export function AdminPageKeepAlive({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {entries.map(([key, entry]) => renderCachedSlot(key, entry, key === effectiveDisplayHref))}
+      {entries.map(([key, entry]) =>
+        renderCachedSlot(key, entry, keepAliveCurrent && key === effectiveDisplayHref)
+      )}
+      {liveSlot}
     </div>
   )
 }

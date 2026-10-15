@@ -23,6 +23,7 @@ import {
 import {
   clearErpKeepAliveCacheRegistry,
 } from "@/lib/erp-keep-alive-registry"
+import { useErpPageActive } from "@/lib/erp-page-visibility"
 
 const STACK_KEY = "erp_nav_stack_v1"
 const BACK_FLAG_KEY = "erp_nav_back_pending"
@@ -493,16 +494,18 @@ export function useErpNavigationOptional(): ErpNavigationContextValue | null {
 /**
  * 팝업·탭 등 화면 내 작업 상태를 먼저 되돌릴 때 등록.
  * handler가 true를 반환하면 ERP 뒤로가기가 해당 단계에서 멈춘다.
+ * keep-alive로 숨긴 화면의 handler는 등록하지 않는다(다른 메뉴의 뒤로가기를 가로채 숨긴 화면 탭을 되돌림).
  */
 export function useErpBackHandler(active: boolean, handler: ErpBackHandler) {
   const ctx = useErpNavigationOptional()
+  const pageActive = useErpPageActive()
   const handlerRef = React.useRef(handler)
   handlerRef.current = handler
 
   React.useEffect(() => {
-    if (!ctx || !active) return
+    if (!ctx || !active || !pageActive) return
     return ctx.registerBackHandler(() => handlerRef.current())
-  }, [ctx, active])
+  }, [ctx, active, pageActive])
 }
 
 /** Dialog·Sheet 등 오버레이 — open일 때 onOpenChange(false)로 닫기 */
