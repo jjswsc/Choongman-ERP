@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **763**개 · 접두어 그룹 **96**개
+- `sql/` 최상위: **769**개 · 접두어 그룹 **97**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **67**개
+- `sql/archive/` (진단 전용 등 보관): **69**개
 
-<details><summary><code>pos_*</code> (219)</summary>
+<details><summary><code>pos_*</code> (223)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -99,6 +99,10 @@
 - [`pos_delivery_app_policies.sql`](../sql/pos_delivery_app_policies.sql)
 - [`pos_delivery_app_settlement_fee_pct.sql`](../sql/pos_delivery_app_settlement_fee_pct.sql)
 - [`pos_delivery_app_settlement_fee_pct_all_stores.sql`](../sql/pos_delivery_app_settlement_fee_pct_all_stores.sql)
+- [`pos_delivery_grab_pack_ready_01_column.sql`](../sql/pos_delivery_grab_pack_ready_01_column.sql) — log
+- [`pos_delivery_grab_pack_ready_02_silom_off.sql`](../sql/pos_delivery_grab_pack_ready_02_silom_off.sql) — log
+- [`pos_delivery_grab_pack_ready_03_check.sql`](../sql/pos_delivery_grab_pack_ready_03_check.sql) — verify
+- [`pos_delivery_grab_pack_ready_04_silom_legacy_key_off.sql`](../sql/pos_delivery_grab_pack_ready_04_silom_legacy_key_off.sql) — log
 - [`pos_deposit_ledger.sql`](../sql/pos_deposit_ledger.sql)
 - [`pos_dual_monitor_customer_display.sql`](../sql/pos_dual_monitor_customer_display.sql)
 - [`pos_dual_monitor_idle_media.sql`](../sql/pos_dual_monitor_idle_media.sql)
@@ -1145,6 +1149,13 @@
 
 </details>
 
+<details><summary><code>the_*</code> (2)</summary>
+
+- [`the_street_customer_display_01_settings.sql`](../sql/the_street_customer_display_01_settings.sql)
+- [`the_street_customer_display_02_audit.sql`](../sql/the_street_customer_display_02_audit.sql) — diagnose
+
+</details>
+
 <details><summary><code>admin_*</code> (1)</summary>
 
 - [`admin_help_handover_notes.sql`](../sql/admin_help_handover_notes.sql)
@@ -1468,7 +1479,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (67)</summary>
+<details><summary><code>archive/</code> (69)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1491,6 +1502,7 @@
 - [`archive/diagnose/diagnose_cm030_zero_amount_07_orders_missing.sql`](../sql/archive/diagnose/diagnose_cm030_zero_amount_07_orders_missing.sql)
 - [`archive/diagnose/diagnose_employee_phone_dup_0953845476.sql`](../sql/archive/diagnose/diagnose_employee_phone_dup_0953845476.sql)
 - [`archive/diagnose/diagnose_force_outbound_reference_no_ivf72075.sql`](../sql/archive/diagnose/diagnose_force_outbound_reference_no_ivf72075.sql)
+- [`archive/diagnose/diagnose_grab_ready_pressed_by_store.sql`](../sql/archive/diagnose/diagnose_grab_ready_pressed_by_store.sql)
 - [`archive/diagnose/diagnose_hq_accounting_po_receivable.sql`](../sql/archive/diagnose/diagnose_hq_accounting_po_receivable.sql)
 - [`archive/diagnose/diagnose_hq_like_receivable_pepsi_office_01_apo89.sql`](../sql/archive/diagnose/diagnose_hq_like_receivable_pepsi_office_01_apo89.sql)
 - [`archive/diagnose/diagnose_hq_like_receivable_pepsi_office_02_cm_office.sql`](../sql/archive/diagnose/diagnose_hq_like_receivable_pepsi_office_02_cm_office.sql)
@@ -1527,6 +1539,7 @@
 - [`archive/diagnose/diagnose_silom_delivery_sales_01_status.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_01_status.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_03_paid_at.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_03_paid_at.sql)
+- [`archive/diagnose/diagnose_silom_grab_ready_vs_paid.sql`](../sql/archive/diagnose/diagnose_silom_grab_ready_vs_paid.sql)
 - [`archive/diagnose/diagnose_silom_tax_wh_195_dup_01_accruals.sql`](../sql/archive/diagnose/diagnose_silom_tax_wh_195_dup_01_accruals.sql)
 - [`archive/diagnose/diagnose_silom_tax_wh_195_dup_02_payables.sql`](../sql/archive/diagnose/diagnose_silom_tax_wh_195_dup_02_payables.sql)
 - [`archive/diagnose/diagnose_silom_tax_wh_195_dup_03_linked.sql`](../sql/archive/diagnose/diagnose_silom_tax_wh_195_dup_03_linked.sql)

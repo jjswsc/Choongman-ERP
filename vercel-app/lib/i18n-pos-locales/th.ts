@@ -1668,6 +1668,11 @@ export const I18N_POS_TH: Record<string, string> = {
       'Grab: เลือกออเดอร์ที่รับอัตโนมัติจากรายการเดลิเวอรี ก่อนสร้างมือให้เช็คว่าเลข GF ซ้ำในรายการหรือยัง (Grab ใช้เลขซ้ำได้)',
     posGrabDeliveryProgressTitle: 'ขั้น Grab',
     posGrabDeliveryProgressHint: 'สถานะจาก Grab แยกจากการปรุงและชำระเงินในร้าน',
+    posGrabMarkReady: 'แจ้ง Grab ว่าพร้อมส่ง',
+    posGrabMarkReadyDone: 'แจ้ง Grab พร้อมส่งแล้ว',
+    posGrabMarkReadyConfirm:
+      'ระบบจะแจ้ง Grab ว่าอาหารพร้อมส่งแล้ว\nกดเฉพาะตอนที่อาหารพร้อมจริงเท่านั้น ต้องการดำเนินการต่อหรือไม่?',
+    posGrabMarkReadyFail: 'แจ้ง Grab ไม่สำเร็จ\n\n{detail}',
     posGrabStageWaitConfirm: 'รอยืนยัน',
     posGrabStageAccepted: 'รับออเดอร์แล้ว',
     posGrabStageDriverFound: 'มีคนขับแล้ว',
@@ -3114,6 +3119,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posDeliveryOpsCategoryOrder: 'ลำดับหมวดหมู่',
     posDeliveryOpsDesc: 'ตั้งค่านโยบายการแสดงเมนู ช่วงเวลาขาย สถานะสินค้าหมด สต็อก และการรับออเดอร์ตามแต่ละแอป',
     posDeliveryOpsEnabled: 'เปิดใช้การเชื่อมต่อแอป',
+    posDeliveryOpsPackCompleteMarksGrabReady: 'กดแพ็คเสร็จแล้วแจ้ง Grab ว่าพร้อมส่งอัตโนมัติ',
+    posDeliveryOpsPackCompleteMarksGrabReadyHint:
+      'ถ้าปิด ปุ่มแพ็คเสร็จจะบันทึกใน POS อย่างเดียว และจะแจ้ง Grab ได้เฉพาะปุ่ม "แจ้ง Grab ว่าพร้อมส่ง" ในหน้าออเดอร์เดลิเวอรี',
     posDeliveryOpsVisibleMenus: 'เมนูที่แสดงในแอปเดลิเวอรี',
     posMenuTabDeliveryOps: 'การจัดการแอปเดลิเวอรี',
     posDeliveryOpsSellEnd: 'สิ้นสุดการขาย',

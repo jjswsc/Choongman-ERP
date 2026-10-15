@@ -268,7 +268,9 @@
 - [ ] 매장 결제 플로우(영수증/주방 출력/완료처리)가 일반 홀 주문과 동일하게 동작하는지 확인
 
 ### 13. Mark ready API
-- [ ] POS에서 포장 완료 시 Grab `markOrderReady` API 호출 성공 여부 확인
+- [ ] 매장 정책 `pos_delivery_app_policies.pack_complete_marks_grab_ready`(기본 true): true면 「포장 완료」(แพ็คเสร็จ) 시 `markOrderReady` 자동 호출, false(예: 실롬)면 생략 — 관리자 POS 메뉴 → 배달앱 운영(Grab)에서 변경
+- [ ] POS 배달 패널의 「Grab에 준비완료 알림」(แจ้ง Grab ว่าพร้อมส่ง) 버튼은 정책과 무관하게 항상 전송되는지 확인
+- [ ] 호출 성공 시 `pos_order_events.event_type = 'grab_mark_ready'`에 누른 직원이 남는지 확인
 - [ ] 실패 시 관리자 화면에서 재시도 가능(로그 기반)한지 확인
 - [ ] `markStatus` 호출 후 Grab 상태 푸시가 POS에 역반영되는지 확인
 

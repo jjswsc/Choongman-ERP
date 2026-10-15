@@ -170,6 +170,23 @@ export function PosDeliveryOpsSettings({
           {t("posDeliveryOpsEnabled") || "앱 연동 사용"}
         </label>
       </div>
+      {deliveryOpsAppCode === "grab" ? (
+        <div className="md:col-span-4">
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={deliveryOpsAppPolicy.packCompleteMarksGrabReady !== false}
+              onChange={(e) =>
+                setDeliveryOpsAppPolicy((p) => ({ ...p, packCompleteMarksGrabReady: e.target.checked }))
+              }
+            />
+            {t("posDeliveryOpsPackCompleteMarksGrabReady") || "포장 완료 시 Grab에 준비완료 자동 전송"}
+          </label>
+          <p className="mt-1 text-[10px] text-muted-foreground leading-snug">
+            {t("posDeliveryOpsPackCompleteMarksGrabReadyHint")}
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }

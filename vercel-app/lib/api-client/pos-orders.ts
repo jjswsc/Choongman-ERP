@@ -769,13 +769,19 @@ export async function claimTableQrPrintJob(params: {
   return res.json() as Promise<{ success: boolean; job: PosTableQrPrintJobClaim | null; message?: string }>
 }
 
-export async function grabMarkOrderReadyApi(params: { orderID: string; markStatus: 1 | 2 }) {
+export async function grabMarkOrderReadyApi(params: {
+  orderID: string
+  markStatus: 1 | 2
+  posOrderId?: number
+  /** pack_complete: 매장 정책이 꺼져 있으면 서버가 전송 생략(sent:false). manual: 항상 전송 */
+  trigger: 'pack_complete' | 'manual'
+}) {
   const res = await apiFetchWithOffline('/api/grab/markOrderReady', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; sent?: boolean; skipped?: string; message?: string }>
 }
 
 export async function grabCancelOrderByStoreApi(params: {

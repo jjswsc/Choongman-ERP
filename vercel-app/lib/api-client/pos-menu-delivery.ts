@@ -26,6 +26,8 @@ export interface PosDeliveryAppPolicy {
   autoAcceptEnabled: boolean
   /** 플랫폼 정산 수수료(%) — Grab/LINE 등 익일 NET 입금 대사 (본사 PO 배달 GP와 별도) */
   settlementFeePct?: number | null
+  /** Grab 전용: 포장 완료 시 Grab 준비완료 자동 전송 (기본 true) */
+  packCompleteMarksGrabReady?: boolean
   updatedAt?: string
 }
 

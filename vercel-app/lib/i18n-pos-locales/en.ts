@@ -2312,6 +2312,11 @@ export const I18N_POS_EN: Record<string, string> = {
       'Grab: pick auto-received orders from the delivery list. GF numbers can repeat — check the list before creating a manual order.',
     posGrabDeliveryProgressTitle: 'Grab delivery stages',
     posGrabDeliveryProgressHint: 'Status from Grab pushes. Shown separately from in-store prep and payment.',
+    posGrabMarkReady: 'Notify Grab: food ready',
+    posGrabMarkReadyDone: 'Grab notified: food ready',
+    posGrabMarkReadyConfirm:
+      'This tells Grab the food is ready for pickup.\nPress only when the food is actually ready. Continue?',
+    posGrabMarkReadyFail: 'Could not notify Grab.\n\n{detail}',
     posGrabStageWaitConfirm: 'Waiting for confirmation',
     posGrabStageAccepted: 'Order accepted',
     posGrabStageDriverFound: 'Driver found',
@@ -2926,6 +2931,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posDeliveryOpsAcceptModeManual: 'Manual',
     posDeliveryOpsAcceptModeAuto: 'Auto',
     posDeliveryOpsEnabled: 'Enable app integration',
+    posDeliveryOpsPackCompleteMarksGrabReady: 'Packaging complete also notifies Grab (food ready)',
+    posDeliveryOpsPackCompleteMarksGrabReadyHint:
+      'When off, Packaging complete only updates the POS. Grab is notified only via the "Notify Grab: food ready" button on the delivery order.',
     posDeliveryOpsAutoAcceptForce: 'Force auto-accept',
     posDeliveryOpsCategoryOrder: 'Category order',
     posDeliveryOpsVisibleMenus: 'Delivery app visible menus',

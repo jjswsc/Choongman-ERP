@@ -556,6 +556,7 @@ export default function PosMenusPage() {
     orderAcceptanceMode: "manual",
     autoAcceptEnabled: false,
     settlementFeePct: null,
+    packCompleteMarksGrabReady: true,
   })
   const [deliveryOpsMenuPolicyMap, setDeliveryOpsMenuPolicyMap] = React.useState<Record<string, PosDeliveryMenuPolicy>>({})
   const deliveryOpsImageInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
@@ -3428,6 +3429,7 @@ export default function PosMenusPage() {
         autoAcceptEnabled: Boolean(res.appPolicy?.autoAcceptEnabled ?? false),
         settlementFeePct:
           res.appPolicy?.settlementFeePct != null ? Number(res.appPolicy.settlementFeePct) : null,
+        packCompleteMarksGrabReady: res.appPolicy?.packCompleteMarksGrabReady !== false,
         updatedAt: res.appPolicy?.updatedAt,
       })
       const menuMap: Record<string, PosDeliveryMenuPolicy> = {}
@@ -3676,6 +3678,9 @@ export default function PosMenusPage() {
           orderAcceptanceMode: deliveryOpsAppPolicy.orderAcceptanceMode,
           autoAcceptEnabled: Boolean(deliveryOpsAppPolicy.autoAcceptEnabled),
           settlementFeePct: deliveryOpsAppPolicy.settlementFeePct,
+          ...(deliveryOpsAppCode === "grab"
+            ? { packCompleteMarksGrabReady: deliveryOpsAppPolicy.packCompleteMarksGrabReady !== false }
+            : {}),
         },
         menuPolicies,
         categoryOrders,

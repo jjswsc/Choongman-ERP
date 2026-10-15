@@ -438,6 +438,8 @@ export function DeliveryOrderPanel({
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
   const [selectedLineItemId, setSelectedLineItemId] = useState<string | null>(null)
   const [cancelQtyDialogOpen, setCancelQtyDialogOpen] = useState(false)
+  const [grabReadySending, setGrabReadySending] = useState(false)
+  const [grabReadySentOrderId, setGrabReadySentOrderId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -591,6 +593,25 @@ export function DeliveryOrderPanel({
     await applyLineCancel(selectedLineItemId, 1, true)
   }
 
+  const notifyGrabReadyOnPackComplete = async (posOrderId: number) => {
+    if (!grabOrderId) return
+    try {
+      const res = await grabMarkOrderReadyApi({
+        orderID: grabOrderId,
+        markStatus: 1,
+        posOrderId,
+        trigger: 'pack_complete',
+      })
+      if (!res.success) {
+        console.error('grabMarkOrderReadyApi:', res.message || 'failed')
+        return
+      }
+      if (res.sent) setGrabReadySentOrderId(String(posOrderId))
+    } catch (e) {
+      console.error('grabMarkOrderReadyApi:', e)
+    }
+  }
+
   const handlePackComplete = async () => {
     if (!order || order.status === 'completed' || order.status === 'ready') return
     const id = Number(order.id)
@@ -598,16 +619,7 @@ export function DeliveryOrderPanel({
     const completeReady = async () => {
       try {
         await updatePosOrderStatus({ id, status: 'ready' })
-        if (grabOrderId) {
-          try {
-            const markRes = await grabMarkOrderReadyApi({ orderID: grabOrderId, markStatus: 1 })
-            if (!markRes.success) {
-              console.error('grabMarkOrderReadyApi:', markRes.message || 'failed')
-            }
-          } catch (e) {
-            console.error('grabMarkOrderReadyApi:', e)
-          }
-        }
+        await notifyGrabReadyOnPackComplete(id)
         onPackaged?.()
       } catch (e) {
         console.error('updatePosOrderStatus:', e)
@@ -632,6 +644,33 @@ export function DeliveryOrderPanel({
       setChecklistOpen(true)
     } catch (e) {
       console.error('packaging checklist:', e)
+    }
+  }
+
+  const grabReadySent = Boolean(order && grabReadySentOrderId === String(order.id))
+  const canMarkGrabReady =
+    Boolean(grabOrderId) && !['pending', 'cancelled', 'refunded'].includes(normalizedStatus)
+
+  const handleMarkGrabReady = async () => {
+    if (!order || !grabOrderId || grabReadySending || grabReadySent) return
+    if (!(await appConfirm(t('posGrabMarkReadyConfirm') || ti('posGrabMarkReadyConfirm')))) return
+    setGrabReadySending(true)
+    try {
+      const res = await grabMarkOrderReadyApi({
+        orderID: grabOrderId,
+        markStatus: 1,
+        posOrderId: posOrderHasServerId(order.id) ? Number(order.id) : undefined,
+        trigger: 'manual',
+      })
+      if (!res.success) {
+        await appAlert(i18nTr(ti, 'posGrabMarkReadyFail', { detail: res.message || '' }))
+        return
+      }
+      setGrabReadySentOrderId(String(order.id))
+    } catch (e) {
+      await appAlert(i18nTr(ti, 'posGrabMarkReadyFail', { detail: String(e) }))
+    } finally {
+      setGrabReadySending(false)
     }
   }
 
@@ -945,6 +984,20 @@ export function DeliveryOrderPanel({
                   : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${activeLineEntries.length || order.items.length})`}
               </Button>
 
+              {canMarkGrabReady && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-10 text-sm font-semibold border-emerald-500/60 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                  disabled={grabReadySending || grabReadySent}
+                  onClick={() => { void handleMarkGrabReady() }}
+                >
+                  {grabReadySent
+                    ? (t('posGrabMarkReadyDone') || ti('posGrabMarkReadyDone'))
+                    : (t('posGrabMarkReady') || ti('posGrabMarkReady'))}
+                </Button>
+              )}
+
               {isManualPending && (
                 <div className="grid grid-cols-2 gap-2">
                   <Button type="button" className="h-10" onClick={handleManualAccept} disabled={deciding}>
@@ -1008,6 +1061,7 @@ export function DeliveryOrderPanel({
           setChecklistSubmitting(true)
           try {
             await updatePosOrderStatus({ id, status: 'ready' })
+            await notifyGrabReadyOnPackComplete(id)
             console.info('[packaging-checklist] delivery confirmed', {
               orderId: id,
               checkedCount: checkedItemIds.length,

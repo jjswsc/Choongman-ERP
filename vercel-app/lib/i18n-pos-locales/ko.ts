@@ -2302,6 +2302,11 @@ export const I18N_POS_KO: Record<string, string> = {
       'Grab: 자동 수신 주문은 배달 목록에서 선택하세요. GF 번호는 Grab에서 재사용될 수 있으니, 수동 입력 전 목록에 같은 번호가 없는지 확인하세요.',
     posGrabDeliveryProgressTitle: 'Grab 배달 단계',
     posGrabDeliveryProgressHint: 'Grab에서 푸시한 배송 상태입니다. 매장 조리·결제 흐름과는 별도로 표시됩니다.',
+    posGrabMarkReady: 'Grab에 준비완료 알림',
+    posGrabMarkReadyDone: 'Grab 준비완료 알림 보냄',
+    posGrabMarkReadyConfirm:
+      'Grab에 "음식 준비완료(พร้อมส่ง)"를 알립니다.\n음식이 실제로 다 준비됐을 때만 누르세요. 진행할까요?',
+    posGrabMarkReadyFail: 'Grab 준비완료 알림에 실패했습니다.\n\n{detail}',
     posGrabStageWaitConfirm: '확인 대기',
     posGrabStageAccepted: '주문 수락',
     posGrabStageDriverFound: '기사 배정',
@@ -3052,6 +3057,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posDeliveryOpsAcceptModeManual: '수동',
     posDeliveryOpsAcceptModeAuto: '자동',
     posDeliveryOpsEnabled: '앱 연동 사용',
+    posDeliveryOpsPackCompleteMarksGrabReady: '포장 완료 시 Grab에 준비완료 자동 전송',
+    posDeliveryOpsPackCompleteMarksGrabReadyHint:
+      '끄면 포장 완료는 POS에만 표시되고, Grab 준비완료는 배달 주문 화면의 「Grab에 준비완료 알림」 버튼으로만 보냅니다.',
     posDeliveryOpsAutoAcceptForce: '자동승인 강제',
     posDeliveryOpsCategoryOrder: '카테고리 순서',
     posDeliveryOpsVisibleMenus: '배달앱 노출 메뉴',

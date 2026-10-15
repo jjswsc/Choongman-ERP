@@ -19,6 +19,8 @@ export type PosDeliveryAppPolicy = {
   autoAcceptEnabled: boolean
   /** 플랫폼 정산 수수료(%) — 익일 NET 입금 대사. 본사 PO와 별도 */
   settlementFeePct?: number | null
+  /** Grab 전용: POS 「포장 완료」 시 Grab mark-ready 자동 전송 (기본 true) */
+  packCompleteMarksGrabReady?: boolean
   updatedAt?: string
 }
 
@@ -119,6 +121,7 @@ export async function getPosDeliveryPolicyBundle(params: {
     enabled: true,
     orderAcceptanceMode: 'manual',
     autoAcceptEnabled: false,
+    packCompleteMarksGrabReady: true,
   }
   if (!storeCode) {
     return { appPolicy: defaultPolicy, menuPolicies: [], categoryOrders: [] }
@@ -159,6 +162,7 @@ export async function getPosDeliveryPolicyBundle(params: {
       rawPct != null && rawPct !== '' && Number.isFinite(Number(rawPct))
         ? normalizeDeliveryAppFeePercent(rawPct)
         : null,
+    packCompleteMarksGrabReady: app.pack_complete_marks_grab_ready !== false,
     updatedAt: String(app.updated_at ?? '') || undefined,
   }
 
@@ -216,15 +220,19 @@ export async function savePosDeliveryPolicyBundle(input: SavePolicyInput): Promi
     const p = appPolicy.settlementFeePct
     row.settlement_fee_pct = p == null ? null : normalizeDeliveryAppFeePercent(p)
   }
-  try {
-    await supabaseUpsert('pos_delivery_app_policies', [row], 'store_code,app_code')
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (row.settlement_fee_pct !== undefined && /settlement_fee_pct/i.test(msg)) {
-      delete row.settlement_fee_pct
+  if (appPolicy.packCompleteMarksGrabReady !== undefined) {
+    row.pack_complete_marks_grab_ready = Boolean(appPolicy.packCompleteMarksGrabReady)
+  }
+  const optionalColumns = ['settlement_fee_pct', 'pack_complete_marks_grab_ready'] as const
+  for (;;) {
+    try {
       await supabaseUpsert('pos_delivery_app_policies', [row], 'store_code,app_code')
-    } else {
-      throw e
+      break
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const missing = optionalColumns.find((col) => row[col] !== undefined && msg.includes(col))
+      if (!missing) throw e
+      delete row[missing]
     }
   }
 
@@ -297,6 +305,23 @@ export async function savePosDeliveryPolicyBundle(input: SavePolicyInput): Promi
         'store_code,app_code,category_main,category'
       )
     }
+  }
+}
+
+/** 매장 Grab 정책: 「포장 완료」 시 Grab mark-ready 자동 전송 여부. 행·컬럼이 없으면 true */
+export async function getGrabPackCompleteMarksReady(storeCodeRaw: string): Promise<boolean> {
+  const raw = String(storeCodeRaw ?? '').trim()
+  if (!raw) return true
+  try {
+    const storeCode = await resolveCanonicalErpStoreCode(raw)
+    const rows = (await supabaseSelectFilter(
+      'pos_delivery_app_policies',
+      `store_code=eq.${encodeURIComponent(storeCode || raw)}&app_code=eq.grab`,
+      { limit: 1, select: 'pack_complete_marks_grab_ready' }
+    )) as { pack_complete_marks_grab_ready?: boolean | null }[] | null
+    return rows?.[0]?.pack_complete_marks_grab_ready !== false
+  } catch {
+    return true
   }
 }
 
