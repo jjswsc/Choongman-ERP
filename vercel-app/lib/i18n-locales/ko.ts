@@ -6668,6 +6668,8 @@ export const I18N_BASE_KO = {
     '사용 금액을 넣으면 현재 등급의 기본 적립율로 포인트를 채울 수 있습니다. POS 채널·생일·기간 보너스는 포함하지 않으니, 필요하면 포인트 칸을 수정하세요.',
   memberPointsRetroNote: '소급 적립: 사용금액 {amount} THB · {tier} {rate}% → {points}P',
   memberPointsAdjustFail: '조정 실패',
+  memberPointsRetroAddStamp: '방문 스탬프 1개도 같이 적립 (POS에서 회원을 못 넣은 방문 소급)',
+  memberPointsRetroStampFail: '포인트는 적립됐지만 스탬프 적립은 실패했습니다.',
   memberPointsBalanceTitle: '회원 포인트 잔액',
   memberPointsBalance: '사용 가능 포인트',
   memberPointsTierCumulative: '누적 포인트(등급)',
@@ -7965,7 +7967,7 @@ export const I18N_BASE_KO = {
   helpSum_admin_members_points:
     '(메뉴 통합) 포인트 조회·조정은 「회원 리스트」화면의 포인트 탭으로 이동했습니다. 적립 규칙은 등급 관리에서 설정합니다.',
   helpHow_admin_members_points:
-    '① 회원 리스트에서 회원을 선택한 뒤 「포인트」탭을 엽니다.\n② 잔액·원장 확인, 금액으로 계산 또는 +/- 포인트 수기 조정을 합니다.\n③ 등급별 적립율·보너스·승급 기준은 「등급 관리」에서 설정합니다.',
+    '① 회원 리스트에서 회원을 선택한 뒤 「포인트」탭을 엽니다.\n② 잔액·원장 확인, 금액으로 계산 또는 +/- 포인트 수기 조정을 합니다. POS에서 회원을 못 넣은 방문을 사용금액으로 소급할 때는「방문 스탬프 1개도 같이 적립」을 켜 두면 스탬프도 1개 올라갑니다.\n③ 등급별 적립율·보너스·승급 기준은 「등급 관리」에서 설정합니다.',
   helpSum_admin_members_coupons:
     '회원 쿠폰 발급과 사용 이력을 관리하는 화면입니다. (→ /admin/crm/coupons 로 통합)',
   helpHow_admin_members_coupons:

@@ -44,6 +44,16 @@ function parseBool(raw: string | undefined, defaultValue: boolean): boolean {
   return v === '1' || v === 'true' || v === 'yes'
 }
 
+/** system_settings.value_json 원본 → 문자열 (jsonb 배열 `["CM Union Mall"]` 도 유지) */
+export function posQueueSettingValueText(raw: unknown): string {
+  if (raw == null) return ''
+  if (Array.isArray(raw)) return JSON.stringify(raw)
+  if (typeof raw === 'boolean') return raw ? 'true' : 'false'
+  if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw)
+  if (typeof raw === 'string') return raw.trim()
+  return ''
+}
+
 export function posQueueConfigFromMap(map: Map<string, string>): PosQueueConfig {
   return {
     allStores: parseBool(map.get(POS_QUEUE_SETTING_KEYS.allStores), false),

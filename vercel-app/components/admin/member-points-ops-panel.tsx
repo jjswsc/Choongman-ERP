@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { adjustMemberPoints, getMemberTiers, type Member } from "@/lib/api-client"
@@ -69,6 +70,7 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
   const [deltaPoints, setDeltaPoints] = React.useState("0")
   const [spendAmount, setSpendAmount] = React.useState("")
   const [note, setNote] = React.useState("")
+  const [addRetroStamp, setAddRetroStamp] = React.useState(true)
   const [tiers, setTiers] = React.useState<TierRateRow[]>([])
   const [rows, setRows] = React.useState<LedgerRow[]>([])
   const [ledgerLoading, setLedgerLoading] = React.useState(false)
@@ -84,6 +86,7 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
     setDeltaPoints("0")
     setSpendAmount("")
     setNote("")
+    setAddRetroStamp(true)
     setRows([])
     setLedgerLoaded(false)
     setLedgerOffset(0)
@@ -230,6 +233,15 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
                   })
                 : t("memberPointsCalcPreviewIdle")}
             </p>
+            {spendParsed > 0 ? (
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
+                <Checkbox
+                  checked={addRetroStamp}
+                  onCheckedChange={(v) => setAddRetroStamp(v === true)}
+                />
+                <span>{t("memberPointsRetroAddStamp")}</span>
+              </label>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -279,10 +291,14 @@ export function MemberPointsOpsPanel({ member, onMemberPointsChange }: Props) {
                     points: p,
                     note,
                     amount: amountForLedger || undefined,
+                    addStamp: amountForLedger > 0 && addRetroStamp,
                   })
                   if (!res.success) {
                     await appAlert(res.message || t("memberPointsAdjustFail"))
                     return
+                  }
+                  if (res.stampError) {
+                    await appAlert(`${t("memberPointsRetroStampFail")} ${res.stampError}`)
                   }
                   setDeltaPoints("0")
                   setSpendAmount("")

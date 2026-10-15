@@ -188,13 +188,19 @@ export async function adjustMemberPoints(params: {
   points: number
   note?: string
   amount?: number
+  addStamp?: boolean
 }) {
   const res = await apiFetchWithOffline('/api/member-points/adjust', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    stampBalance?: number
+    stampError?: string
+  }>
 }
 
 export async function getMemberTiers() {

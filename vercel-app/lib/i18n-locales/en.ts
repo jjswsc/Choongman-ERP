@@ -6662,6 +6662,8 @@ orderItemQty: 'Qty',
     'Enter spend amount and calculate to fill points from the current tier earn rate. Channel, birthday, and period bonuses are not included — edit the points field if needed.',
   memberPointsRetroNote: 'Retro earn: spend {amount} THB · {tier} {rate}% → {points}P',
   memberPointsAdjustFail: 'Adjustment failed',
+  memberPointsRetroAddStamp: 'Also add 1 visit stamp (retro visit the POS did not link to the member)',
+  memberPointsRetroStampFail: 'Points were added, but the stamp could not be added.',
   memberPointsBalanceTitle: 'Member points balance',
   memberPointsBalance: 'Available points',
   memberPointsTierCumulative: 'Tier points (lifetime)',
@@ -7961,7 +7963,7 @@ orderItemQty: 'Qty',
   helpSum_admin_members_points:
     '(Merged) Point lookup and adjustment moved to the Points tab on Member list. Earn rules stay under Tier management.',
   helpHow_admin_members_points:
-    '① On Member list, select a member and open the Points tab.\n② Review balance and ledger; calculate from spend or adjust with +/- points.\n③ Tier earn rates, bonuses, and upgrade criteria are set under Tier management.',
+    '① On Member list, select a member and open the Points tab.\n② Review balance and ledger; calculate from spend or adjust with +/- points. When back-filling a visit the POS did not link to the member, keep “Also add 1 visit stamp” on so the stamp card goes up by one too.\n③ Tier earn rates, bonuses, and upgrade criteria are set under Tier management.',
   helpSum_admin_members_coupons:
     'Issue member coupons and review history (redirects to /admin/crm/coupons).',
   helpHow_admin_members_coupons:
