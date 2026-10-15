@@ -58,12 +58,7 @@ import {
 } from '@/components/pos/pos-tax-invoice-form-ui'
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
-import {
-  buildUpdatePosOrderParamsFromOrder,
-  canStartPosLinePartialCancel,
-  orderItemsToPosOrderItems,
-  orderPaymentsSum,
-} from '@/lib/pos-order-line-update'
+import { canStartPosLinePartialCancel, orderPaymentsSum } from '@/lib/pos-order-line-update'
 import { kitchenRoutingItemFromOrderItem } from '@/lib/pos-kitchen-slip-routing'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
@@ -747,9 +742,7 @@ export function TableOrderPanel({
     }
     setGuestSaving(true)
     try {
-      const items = orderItemsToPosOrderItems(order.items)
-      const merged: Order = { ...order, guestCount: g }
-      const res = await updatePosOrder(buildUpdatePosOrderParamsFromOrder(merged, items))
+      const res = await updatePosOrder({ id: Number(order.id), guestCount: g, guestCountOnly: true })
       if (!res.success) {
         await appAlert(localizeApiMessage(res.message, t, t('processFail') || '처리 실패', lang))
         return

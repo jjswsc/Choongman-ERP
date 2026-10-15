@@ -126,6 +126,10 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    if (body.guestCountOnly === true || String(body.guestCountOnly ?? '') === '1') {
+      return await updatePosOrderGuestCountOnly({ auth, body, id, fromOfflineQueueSync, headers })
+    }
+
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
     const itemsWithOption = await enrichOrderItemsWithOptionCode(itemsRaw)
     let items = itemsWithOption
@@ -1050,4 +1054,89 @@ export async function POST(req: NextRequest) {
       { headers }
     )
   }
+}
+
+/** 손님 수만 변경 — 품목이 0개인 홀 주문도 허용, 금액·결제·주방 재처리 없음 */
+async function updatePosOrderGuestCountOnly(params: {
+  auth: NonNullable<Awaited<ReturnType<typeof requireAuth>>['auth']>
+  body: Record<string, unknown>
+  id: number
+  fromOfflineQueueSync: boolean
+  headers: Headers
+}): Promise<NextResponse> {
+  const { auth, body, id, fromOfflineQueueSync, headers } = params
+  const g = Math.trunc(Number(body.guestCount ?? body.guest_count))
+  if (!id || Number.isNaN(id) || Number.isNaN(g)) {
+    return NextResponse.json({ success: false, message: 'id and guestCount required' }, { headers })
+  }
+  const guestCount = Math.max(0, Math.min(99, g))
+
+  const rows = (await supabaseSelectFilterStrippingUnknownColumns(
+    'pos_orders',
+    `id=eq.${id}`,
+    { limit: 1, select: 'id,order_no,store_code,status,order_type,guest_count' },
+    'updatePosOrder:guestCountOnly'
+  )) as {
+    id?: number
+    order_no?: string
+    store_code?: string
+    status?: string
+    order_type?: string
+    guest_count?: number | null
+  }[] | null
+  const current = rows?.[0]
+  if (!current) {
+    return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+  }
+  if (!(await authCanAccessPosStoreWrite(auth, String(current.store_code ?? '')))) {
+    return NextResponse.json(
+      { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+      { status: 403, headers }
+    )
+  }
+  const status = String(current.status ?? '').trim().toLowerCase()
+  if (!EDITABLE_STATUSES.includes(status)) {
+    if (fromOfflineQueueSync) {
+      return NextResponse.json(
+        { success: true, noop: true, message: 'skip_stale_order_update_replay' },
+        { headers }
+      )
+    }
+    return NextResponse.json(
+      { success: false, message: '이미 취소·환불된 주문입니다. 목록을 새로고침해 주세요.' },
+      { headers }
+    )
+  }
+  if (!isDineInOrderTypeForGuestCount(current.order_type)) {
+    return NextResponse.json({ success: true, noop: true }, { headers })
+  }
+  const prevGuest = current.guest_count ?? null
+  if (Number(prevGuest ?? 0) === guestCount && prevGuest != null) {
+    return NextResponse.json({ success: true, noop: true }, { headers })
+  }
+
+  await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, { guest_count: guestCount })
+
+  await writePosOrderAuditTrail({
+    orderId: id,
+    orderNo: current.order_no || null,
+    storeCode: current.store_code || null,
+    actionType: 'update_order',
+    source: fromOfflineQueueSync ? 'offline_queue' : 'api',
+    actor: {
+      name: String(auth?.name || body?.updatedBy || '').trim() || null,
+      role: String(auth?.role || '').trim() || null,
+      store: String(auth?.store || '').trim() || null,
+      employeeCode: String(auth?.employeeCode || '').trim() || null,
+      employeeId:
+        auth?.employeeId != null && Number.isFinite(Number(auth.employeeId))
+          ? Math.floor(Number(auth.employeeId))
+          : null,
+    },
+    before: { guest_count: prevGuest },
+    after: { guest_count: guestCount },
+    reason: 'guest_count_update',
+  }).catch((e) => console.error('updatePosOrder guestCountOnly audit:', e))
+
+  return NextResponse.json({ success: true }, { headers })
 }

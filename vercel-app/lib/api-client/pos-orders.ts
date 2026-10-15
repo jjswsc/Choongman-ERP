@@ -475,6 +475,8 @@ export async function updatePosOrder(params: {
   pointUsed?: number
   pointEarned?: number
   guestCount?: number
+  /** true면 guest_count만 갱신(items 불필요 — 품목 0개 홀 주문도 가능) */
+  guestCountOnly?: boolean
   linkposPayment?: LinkposPaymentSummary | null
   /**
    * true면 결제 완료 시 포인트 적립·LINE 알림을 건너뜀.
