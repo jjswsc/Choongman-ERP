@@ -73,7 +73,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
           const memberId = await findSingleMemberIdByPhone(target.guestPhone)
           if (memberId) target = { ...target, memberId }
         }
-        line = await notifyPosQueueTicketCalledByLine(target)
+        line = await notifyPosQueueTicketCalledByLine(target, {
+          statusUrl: `${req.nextUrl.origin}/q/${target.publicToken}`,
+        })
       } else {
         line = { sent: false, reason: 'disabled' }
       }

@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { appAlert } from '@/lib/app-message'
-import type { PosPrinterSettings } from '@/lib/api-client'
 import {
   issuePosQueueTicketRequest,
   listPosQueueTickets,
@@ -55,10 +54,9 @@ export function PosQueueWaitlistDialog(props: {
   onOpenChange: (open: boolean) => void
   storeCode: string
   t: (key: string) => string
-  getPrinterSettings: (storeCode: string) => Promise<PosPrinterSettings>
   onWaitingCountChange?: (count: number) => void
 }) {
-  const { open, onOpenChange, storeCode, t, getPrinterSettings, onWaitingCountChange } = props
+  const { open, onOpenChange, storeCode, t, onWaitingCountChange } = props
   const [tickets, setTickets] = React.useState<PosQueueTicket[]>([])
   const [nowMs, setNowMs] = React.useState(0)
   const [partySize, setPartySize] = React.useState(2)
@@ -87,7 +85,6 @@ export function PosQueueWaitlistDialog(props: {
 
   const printLocal = React.useCallback(
     async (ticket: PosQueueTicket, teamsAhead: number) => {
-      const printerSettings = await getPrinterSettings(storeCode).catch(() => null)
       await printPosQueueTicketSlip({
         queueNo: ticket.queueNo,
         partySize: ticket.partySize,
@@ -95,10 +92,9 @@ export function PosQueueWaitlistDialog(props: {
         issuedAt: ticket.createdAt,
         url: resolvePosQueuePublicUrl(ticket.publicToken),
         storeLabel: storeCode.replace(/^CM\s+/i, '').trim() || storeCode,
-        printerSettings,
       })
     },
-    [getPrinterSettings, storeCode]
+    [storeCode]
   )
 
   const onIssue = async () => {

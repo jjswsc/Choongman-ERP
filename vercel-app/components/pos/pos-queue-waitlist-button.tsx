@@ -4,7 +4,6 @@ import * as React from 'react'
 import dynamic from 'next/dynamic'
 import { Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { PosPrinterSettings } from '@/lib/api-client'
 import { listPosQueueTickets } from '@/lib/api-client/pos-queue-tickets'
 import { tOr } from '@/lib/i18n'
 import { isPosQueueTicketActive } from '@/lib/pos-queue-ticket'
@@ -21,9 +20,8 @@ const BADGE_POLL_MS = 60_000
 export function PosQueueWaitlistButton(props: {
   storeCode: string
   t: (key: string) => string
-  getPrinterSettings: (storeCode: string) => Promise<PosPrinterSettings>
 }) {
-  const { storeCode, t, getPrinterSettings } = props
+  const { storeCode, t } = props
   const [enabled, setEnabled] = React.useState(false)
   const [waitingCount, setWaitingCount] = React.useState(0)
   const [open, setOpen] = React.useState(false)
@@ -73,7 +71,6 @@ export function PosQueueWaitlistButton(props: {
           }}
           storeCode={storeCode}
           t={t}
-          getPrinterSettings={getPrinterSettings}
           onWaitingCountChange={setWaitingCount}
         />
       ) : null}

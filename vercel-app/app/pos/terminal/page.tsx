@@ -12079,11 +12079,7 @@ export default function PosTerminalPage() {
                     <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
                   </Button>
                   {!isPosDemo && currentStoreId ? (
-                    <PosQueueWaitlistButton
-                      storeCode={String(currentStoreId)}
-                      t={t}
-                      getPrinterSettings={getPrinterSettingsForStore}
-                    />
+                    <PosQueueWaitlistButton storeCode={String(currentStoreId)} t={t} />
                   ) : null}
                 </div>
               </div>

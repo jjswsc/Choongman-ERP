@@ -146,7 +146,6 @@ async function printClaimedQueueTicketJob(
       issuedAt: payload.issuedAt,
       url: payload.url,
       storeLabel: payload.storeLabel || ctx.storeCode,
-      printerSettings: ctx.printerSettings,
     })
     await markKitchenPrintJob({ jobId, status: 'printed' })
     ctx.logPosPrintDebug?.('queue_ticket_job_printed', { jobId, queueNo: payload.queueNo })
