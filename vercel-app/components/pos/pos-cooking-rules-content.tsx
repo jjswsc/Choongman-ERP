@@ -18,6 +18,7 @@ import { useT } from "@/lib/i18n"
 import { localizeApiMessage } from "@/lib/translate-api-message"
 import { getPosPrinterSettings, savePosPrinterSettings, useStoreList } from "@/lib/api-client"
 import { isOfficeRole } from "@/lib/permissions"
+import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { PosScreenConfigEmeraldSaveButton } from "@/components/pos/pos-screen-config-action-bar"
 import { PosScreenConfigStoreAndCopyRow } from "@/components/pos/pos-screen-config-store-and-copy-row"
 
@@ -30,15 +31,7 @@ export function PosCookingRulesContent() {
   const [storeCode, setStoreCode] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
-  const [baseSettings, setBaseSettings] = React.useState<{
-    kitchenMode: 1 | 2 | 3
-    kitchen1Categories: string[]
-    kitchen2Categories: string[]
-    kitchen3Categories: string[]
-    autoStockDeduction?: boolean
-    deliveryFee?: number
-    packagingFee?: number
-  } | null>(null)
+  const [settingsLoaded, setSettingsLoaded] = React.useState(false)
 
   const [freshMax, setFreshMax] = React.useState("10")
   const [warningMax, setWarningMax] = React.useState("15")
@@ -59,15 +52,7 @@ export function PosCookingRulesContent() {
     setLoading(true)
     return getPosPrinterSettings({ storeCode: effectiveStore })
       .then((settings) => {
-        setBaseSettings({
-          kitchenMode: (Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3),
-          kitchen1Categories: settings.kitchen1Categories || [],
-          kitchen2Categories: settings.kitchen2Categories || [],
-          kitchen3Categories: settings.kitchen3Categories || [],
-          autoStockDeduction: settings.autoStockDeduction,
-          deliveryFee: settings.deliveryFee,
-          packagingFee: settings.packagingFee,
-        })
+        setSettingsLoaded(true)
         setFreshMax(String(settings.cookingFreshMaxMin ?? 10))
         setWarningMax(String(settings.cookingWarningMaxMin ?? 15))
         setRuleMode(settings.cookingRuleMode === "recipe_diff" ? "recipe_diff" : "elapsed")
@@ -116,15 +101,10 @@ export function PosCookingRulesContent() {
       const warnDiff = Math.max(0, Number(recipeWarnDiff) || 0)
       const urgentDiff = Math.max(warnDiff + 1, Number(recipeUrgentDiff) || 5)
       const delayOver = Math.max(0, Number(delayAlertOverMin) || 0)
+      const latest = await getPosPrinterSettings({ storeCode: effectiveStore })
       const res = await savePosPrinterSettings({
+        ...posPrinterSettingsToSaveParams(latest, { omitKitchenRoutes: true }),
         storeCode: effectiveStore,
-        kitchenMode: baseSettings?.kitchenMode || 1,
-        kitchen1Categories: baseSettings?.kitchen1Categories || [],
-        kitchen2Categories: baseSettings?.kitchen2Categories || [],
-        kitchen3Categories: baseSettings?.kitchen3Categories || [],
-        autoStockDeduction: baseSettings?.autoStockDeduction,
-        deliveryFee: baseSettings?.deliveryFee,
-        packagingFee: baseSettings?.packagingFee,
         cookingFreshMaxMin: fresh,
         cookingWarningMaxMin: warning,
         cookingRuleMode: ruleMode,
@@ -163,14 +143,8 @@ export function PosCookingRulesContent() {
     try {
       const targetBase = await getPosPrinterSettings({ storeCode: copyTargetStore })
       const res = await savePosPrinterSettings({
+        ...posPrinterSettingsToSaveParams(targetBase, { omitKitchenRoutes: true }),
         storeCode: copyTargetStore,
-        kitchenMode: targetBase.kitchenMode || 1,
-        kitchen1Categories: targetBase.kitchen1Categories || [],
-        kitchen2Categories: targetBase.kitchen2Categories || [],
-        kitchen3Categories: targetBase.kitchen3Categories || [],
-        autoStockDeduction: targetBase.autoStockDeduction,
-        deliveryFee: targetBase.deliveryFee,
-        packagingFee: targetBase.packagingFee,
         cookingFreshMaxMin: fresh,
         cookingWarningMaxMin: warning,
         cookingRuleMode: ruleMode,
@@ -234,7 +208,7 @@ export function PosCookingRulesContent() {
         rightSlot={
           <PosScreenConfigEmeraldSaveButton
             onClick={handleSave}
-            disabled={saving || !effectiveStore || loading || !baseSettings}
+            disabled={saving || !effectiveStore || loading || !settingsLoaded}
           >
             <Save className="h-4 w-4" />
             {saving ? "..." : t("itemsBtnSave") || "저장"}

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
@@ -35,6 +36,13 @@ import { useStoreList } from "@/lib/use-store-list"
 import { labelForStore } from "@/lib/store-list-keys"
 import { formatMoney2 } from "@/lib/financial-amount-format"
 import { patchPosCostViewSession, readPosCostViewSession } from "@/lib/pos-cost-view-session"
+import {
+  computeStoreNormalKpi,
+  readStoreNormalAvgExcluded,
+  storeNormalGapPct,
+  storeNormalTheoryPct,
+  writeStoreNormalAvgExcluded,
+} from "@/lib/pos-store-normal-average"
 
 function pct(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—"
@@ -64,20 +72,6 @@ function actualCostPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): nu
 
 function plCogsAmount(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
   return resolveStoreNormalAccounting(row, vatMode).cogs
-}
-
-function theoryPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
-  const net = resolveStoreNormalPosSales(row, vatMode).net
-  const bom = resolveStoreNormalBom(row.bomCost, vatMode)
-  if (!(net > 0.0001) || !Number.isFinite(bom)) return null
-  return (bom / net) * 100
-}
-
-function gapPct(row: StoreNormalCostRow, vatMode: StoreNormalVatMode): number | null {
-  const actual = actualCostPct(row, vatMode)
-  const theory = theoryPct(row, vatMode)
-  if (actual == null || theory == null) return null
-  return Math.round((actual - theory) * 100) / 100
 }
 
 const USAGE_WARN_KEY: Record<string, string> = {
@@ -114,6 +108,7 @@ export function PosCostStoreNormalTab() {
   const [result, setResult] = React.useState<StoreNormalCostReport | null>(null)
   const [expanded, setExpanded] = React.useState<string | null>(null)
   const [viewReady, setViewReady] = React.useState(false)
+  const [avgExcluded, setAvgExcluded] = React.useState<string[]>([])
 
   React.useEffect(() => {
     setPlVatMode(readIncomeStatementDisplayPrefs().vatMode)
@@ -127,8 +122,28 @@ export function PosCostStoreNormalTab() {
       if (saved.storeFilter) setStoreFilter(saved.storeFilter)
       setResult(saved.result)
     }
+    setAvgExcluded(readStoreNormalAvgExcluded())
     setViewReady(true)
   }, [])
+
+  const avgExcludedSet = React.useMemo(() => new Set(avgExcluded), [avgExcluded])
+
+  const setStoreInAverage = React.useCallback((storeCode: string, include: boolean) => {
+    setAvgExcluded((prev) => {
+      const next = include ? prev.filter((c) => c !== storeCode) : [...prev.filter((c) => c !== storeCode), storeCode]
+      writeStoreNormalAvgExcluded(next)
+      return next
+    })
+  }, [])
+
+  const includeAllStoresInAverage = React.useCallback(() => {
+    const shown = new Set((result?.rows ?? []).map((r) => r.storeCode))
+    setAvgExcluded((prev) => {
+      const next = prev.filter((c) => !shown.has(c))
+      writeStoreNormalAvgExcluded(next)
+      return next
+    })
+  }, [result])
 
   React.useEffect(() => {
     if (!viewReady) return
@@ -184,30 +199,24 @@ export function PosCostStoreNormalTab() {
     return msgs
   }, [result, t])
 
-  const kpi = React.useMemo(() => {
-    const rows = result?.rows ?? []
-    let net = 0
-    let bom = 0
-    let plSales = 0
-    let plCogs = 0
-    let higherPl = 0
-    for (const row of rows) {
-      net += resolveStoreNormalPosSales(row, plVatMode).net
-      bom += resolveStoreNormalBom(row.bomCost, plVatMode)
-      const pl = resolveStoreNormalAccounting(row, plVatMode)
-      if (pl.sales != null && pl.sales > 0.0001 && pl.cogs != null) {
-        plSales += pl.sales
-        plCogs += pl.cogs
-      }
-      if ((gapPct(row, plVatMode) ?? 0) > 0.5) higherPl += 1
-    }
-    return {
-      normalPct: net > 0.0001 ? (bom / net) * 100 : null,
-      plPct: plSales > 0.0001 ? (plCogs / plSales) * 100 : null,
-      higherPl,
-      stores: rows.length,
-    }
-  }, [result, plVatMode])
+  const kpi = React.useMemo(
+    () => computeStoreNormalKpi(result?.rows ?? [], plVatMode, avgExcludedSet),
+    [result, plVatMode, avgExcludedSet]
+  )
+
+  const excludedShownLabels = React.useMemo(
+    () =>
+      (result?.rows ?? [])
+        .filter((r) => avgExcludedSet.has(r.storeCode))
+        .map((r) => labelForStore(storeLabels, r.storeCode)),
+    [result, avgExcludedSet, storeLabels]
+  )
+
+  const kpiStoresSub = (key: string) => {
+    const base = t(key).replace("{n}", String(kpi.stores))
+    if (kpi.excludedStores <= 0) return base
+    return base + t("posCostStoreNormalKpiExcludedSuffix").replace("{m}", String(kpi.excludedStores))
+  }
 
   const holdLabel = () => t("posCostStoreNormalHoldBom")
 
@@ -283,12 +292,12 @@ export function PosCostStoreNormalTab() {
             <MetricCard
               label={t("posCostStoreNormalKpiNormalPct")}
               value={pct(kpi.normalPct)}
-              subLabel={t("posCostStoreNormalKpiNormalPctSub").replace("{n}", String(kpi.stores))}
+              subLabel={kpiStoresSub("posCostStoreNormalKpiNormalPctSub")}
             />
             <MetricCard
               label={t("posCostStoreNormalKpiPlPct")}
               value={pct(kpi.plPct)}
-              subLabel={t("posCostStoreNormalKpiPlPctSub").replace("{n}", String(kpi.stores))}
+              subLabel={kpiStoresSub("posCostStoreNormalKpiPlPctSub")}
             />
             <MetricCard
               label={t("posCostStoreNormalKpiHigherPl")}
@@ -297,11 +306,26 @@ export function PosCostStoreNormalTab() {
             />
           </div>
 
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>{t("posCostStoreNormalAvgHint")}</span>
+            {excludedShownLabels.length > 0 ? (
+              <>
+                <span className="text-amber-800 dark:text-amber-200">
+                  {t("posCostStoreNormalAvgExcludedList").replace("{stores}", excludedShownLabels.join(", "))}
+                </span>
+                <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={includeAllStoresInAverage}>
+                  {t("posCostStoreNormalAvgIncludeAll")}
+                </Button>
+              </>
+            ) : null}
+          </div>
+
           <div className="max-h-[70vh] overflow-auto rounded-xl border bg-card">
             <table className="w-full min-w-[1100px] text-xs">
               <thead className="sticky top-0 z-10 bg-muted [&_th]:bg-muted">
                 <tr className="border-b text-left">
                   <th className="px-2 py-2 w-8" />
+                  <th className="px-2 py-2 w-10 text-center whitespace-nowrap">{t("posCostStoreNormalColAvg")}</th>
                   <th className="px-2 py-2">{t("posCostStoreNormalColStore")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColGross")}</th>
                   <th className="px-2 py-2 text-right whitespace-nowrap">{t("posCostStoreNormalColDiscount")}</th>
@@ -321,17 +345,19 @@ export function PosCostStoreNormalTab() {
                   const sales = resolveStoreNormalPosSales(row, plVatMode)
                   const discPct = shareOfGross(sales.discount, sales.gross)
                   const bom = resolveStoreNormalBom(row.bomCost, plVatMode)
-                  const theory = theoryPct(row, plVatMode)
+                  const theory = storeNormalTheoryPct(row, plVatMode)
                   const vendors = listStoreNormalPurchaseVendors(row, plVatMode)
                   const actual = actualCostPct(row, plVatMode)
-                  const gap = gapPct(row, plVatMode)
-                  const plHot = gap != null && gap > 0.5
+                  const gap = storeNormalGapPct(row, plVatMode)
+                  const inAverage = !avgExcludedSet.has(row.storeCode)
+                  const plHot = inAverage && gap != null && gap > 0.5
                   return (
                     <React.Fragment key={row.storeCode}>
                       <tr
                         className={cn(
                           "border-b border-border/60",
-                          plHot && "bg-amber-50/80 dark:bg-amber-950/25"
+                          plHot && "bg-amber-50/80 dark:bg-amber-950/25",
+                          !inAverage && "text-muted-foreground [&>td:not(:nth-child(2))]:opacity-60"
                         )}
                       >
                         <td className="px-2 py-2">
@@ -344,8 +370,19 @@ export function PosCostStoreNormalTab() {
                             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </button>
                         </td>
+                        <td className="px-2 py-2 text-center">
+                          <Checkbox
+                            checked={inAverage}
+                            onCheckedChange={(v) => setStoreInAverage(row.storeCode, v === true)}
+                            aria-label={t("posCostStoreNormalAvgIncludeAria").replace("{store}", storeName)}
+                            className="align-middle"
+                          />
+                        </td>
                         <td className="px-2 py-2 font-medium whitespace-nowrap" title={storeName !== row.storeCode ? row.storeCode : undefined}>
                           {storeName}
+                          {!inAverage ? (
+                            <span className="ml-1 text-[10px] font-normal">{t("posCostStoreNormalAvgExcludedTag")}</span>
+                          ) : null}
                           {row.holdReasons.includes("bom_unmatched") ? (
                             <span className="ml-1 text-[10px] font-normal text-amber-700 dark:text-amber-300">
                               {t("posCostStoreNormalHeld")}
@@ -372,7 +409,7 @@ export function PosCostStoreNormalTab() {
                       </tr>
                       {open ? (
                         <tr className="border-b bg-muted/20">
-                          <td colSpan={11} className="px-4 py-3 space-y-2">
+                          <td colSpan={12} className="px-4 py-3 space-y-2">
                             {row.holdReasons.length > 0 ? (
                               <ul className="list-disc pl-4 text-amber-800 dark:text-amber-200">
                                 {row.holdReasons.map((reason) => (
