@@ -14,7 +14,7 @@ import {
   isDeliveryAppFeeWithdrawRow,
   round2,
 } from '@/lib/accounting-reports-shared'
-import { isPlausibleCoverFee } from '@/lib/pos-channel-cover-gross'
+import { channelFeePctBand, isPlausibleCoverFee } from '@/lib/pos-channel-cover-gross'
 import { normalizePosChannelSettlementChannel } from '@/lib/pos-channel-settlement'
 import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
@@ -82,6 +82,7 @@ export type ChannelSettlementFeeSourceRow = {
   net_amt?: number | null
   fee_source?: string | null
   memo?: string | null
+  bank_transaction_id?: number | null
 }
 
 export type ChannelSettlementFeePlRow = {
@@ -92,6 +93,22 @@ export type ChannelSettlementFeePlRow = {
   amount: number
   accountSubjectId: number
   memo: string | null
+  bankTransactionId: number | null
+}
+
+/** 수수료율이 정상 범위를 벗어나 손익에서 뺀 정산 — 직원이 입금 재매칭할 목록 */
+export type ChannelSettlementFeeExcludedRow = {
+  id: number
+  settleDate: string
+  store: string
+  channel: string
+  gross: number
+  net: number
+  fee: number
+  feePct: number
+  maxPct: number
+  accountSubjectId: number
+  bankTransactionId: number | null
 }
 
 export type ChannelSettlementFeesForPl = {
@@ -99,6 +116,7 @@ export type ChannelSettlementFeesForPl = {
   deliveryAppFees: number
   cardFees: number
   rows: ChannelSettlementFeePlRow[]
+  excludedRows: ChannelSettlementFeeExcludedRow[]
   skippedBatch: { count: number; fee: number }
   implausible: { count: number; fee: number }
 }
@@ -109,6 +127,7 @@ export function emptyChannelSettlementFeesForPl(): ChannelSettlementFeesForPl {
     deliveryAppFees: 0,
     cardFees: 0,
     rows: [],
+    excludedRows: [],
     skippedBatch: { count: 0, fee: 0 },
     implausible: { count: 0, fee: 0 },
   }
@@ -143,10 +162,26 @@ export function aggregateChannelSettlementFeesForPl(
       skippedFee += fee
       continue
     }
+    const bankTransactionId = Math.floor(Number(r.bank_transaction_id) || 0) || null
     const trusted = TRUSTED_OUT_OF_BAND_FEE_SOURCES.has(String(r.fee_source || '').trim().toLowerCase())
-    if (!trusted && !isPlausibleCoverFee(channel, Number(r.gross_amt) || 0, Number(r.net_amt) || 0)) {
+    const gross = Number(r.gross_amt) || 0
+    const net = Number(r.net_amt) || 0
+    if (!trusted && !isPlausibleCoverFee(channel, gross, net)) {
       out.implausible.count++
       implausibleFee += fee
+      out.excludedRows.push({
+        id: Math.floor(Number(r.id) || 0),
+        settleDate: String(r.settle_date || '').slice(0, 10),
+        store,
+        channel,
+        gross: round2(gross),
+        net: round2(net),
+        fee,
+        feePct: gross > 0 ? Math.round((fee / gross) * 1000) / 10 : 0,
+        maxPct: channelFeePctBand(channel).max,
+        accountSubjectId: subjectId,
+        bankTransactionId,
+      })
       continue
     }
     out.bySubject.set(subjectId, (out.bySubject.get(subjectId) || 0) + fee)
@@ -160,6 +195,7 @@ export function aggregateChannelSettlementFeesForPl(
       amount: fee,
       accountSubjectId: subjectId,
       memo: r.memo != null ? String(r.memo) : null,
+      bankTransactionId,
     })
   }
   for (const [k, v] of out.bySubject) out.bySubject.set(k, round2(v))
@@ -190,7 +226,7 @@ export async function loadChannelSettlementFeesForPl(params: {
       'pos_channel_settlements',
       `settle_date=gte.${params.startStr}&settle_date=lte.${params.endStr}`,
       {
-        select: 'id,store_code,settle_date,channel,gross_amt,fee_amt,net_amt,fee_source,memo',
+        select: 'id,store_code,settle_date,channel,gross_amt,fee_amt,net_amt,fee_source,memo,bank_transaction_id',
         order: 'id.asc',
         pageSize: 5000,
         maxRows: ACCOUNTING_ROWS_MAX,

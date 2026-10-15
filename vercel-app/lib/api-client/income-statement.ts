@@ -429,6 +429,19 @@ export type IncomeStatementExpenseDrillDown = {
     sso: number
     tax: number
   }[]
+  excludedChannelSettlements?: {
+    id: number
+    settleDate: string
+    store: string
+    channel: string
+    gross: number
+    net: number
+    fee: number
+    feePct: number
+    maxPct: number
+    accountSubjectId: number
+    bankTransactionId: number | null
+  }[]
   truncated: { petty: boolean; bank: boolean; fixed: boolean; payroll?: boolean }
   error?: string
 }

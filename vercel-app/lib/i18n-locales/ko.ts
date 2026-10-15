@@ -5449,6 +5449,11 @@ export const I18N_BASE_KO = {
   pL_expenseDrillPayroll: '확정 급여',
   pL_expenseDrillPayrollNote:
     '급여 모듈에 저장된 확정 급여(실지급+SSO+원천)입니다. 같은 달 통장·패티 급여성 출금은 이중 방지를 위해 제외됩니다.',
+  pL_expenseDrillExcludedSettle: '손익에서 제외된 채널 정산 (수수료율 비정상)',
+  pL_expenseDrillExcludedSettleNote:
+    '수수료율이 채널 상한을 넘어 통장 입금이 다른 날짜와 연결됐을 가능성이 큽니다. 통장 거래에서 해당 입금(bank #ID)을 찾아 채널 정산을 열고 맞는 입금으로 다시 연결한 뒤 Repost 하세요. 금액이 실제로 맞으면 다시 저장하면서 확인을 누르면 손익에 들어갑니다.',
+  pL_expenseDrillColChannel: '채널',
+  pL_expenseDrillColBankTx: '통장 입금',
   pL_expenseDrillPayrollColNet: '실지급',
   pL_expenseDrillClickHint: '클릭하여 해당 월 비용 내역 보기',
   pL_expenseDrillColCategory: '용도',

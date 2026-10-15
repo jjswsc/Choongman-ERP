@@ -5440,6 +5440,11 @@ Only matters the employee must handle personally on a working day:
   pL_expenseDrillPayroll: 'Confirmed payroll',
   pL_expenseDrillPayrollNote:
     'From saved payroll (net + employee SSO + withholding). Same-month salary-like bank/petty withdrawals are excluded to avoid double-counting.',
+  pL_expenseDrillExcludedSettle: 'Channel settlements NOT counted (abnormal fee rate)',
+  pL_expenseDrillExcludedSettleNote:
+    'Fee % is above the channel limit, so the bank deposit is probably matched to the wrong day. Open Bank transactions, find the deposit (bank #ID), open its channel settlement and re-link the correct deposit, then Repost. If the amount is really correct, save again and confirm.',
+  pL_expenseDrillColChannel: 'Channel',
+  pL_expenseDrillColBankTx: 'Bank deposit',
   pL_expenseDrillPayrollColNet: 'Net pay',
   pL_expenseDrillClickHint: 'Click to open this month’s expense breakdown',
   pL_expenseDrillColCategory: 'Category',

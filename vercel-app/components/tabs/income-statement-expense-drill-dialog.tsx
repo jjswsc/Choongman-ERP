@@ -163,6 +163,45 @@ export function IncomeExpenseDrillDialog({
               </div>
             )}
 
+            {(expenseDrillData.excludedChannelSettlements?.length || 0) > 0 && (
+              <div>
+                <p className="text-sm font-bold text-amber-800 dark:text-amber-200 mb-1">
+                  {t("pL_expenseDrillExcludedSettle")} ({expenseDrillData.excludedChannelSettlements!.length})
+                </p>
+                <p className="text-xs text-muted-foreground mb-2">{t("pL_expenseDrillExcludedSettleNote")}</p>
+                <AdminTableScroll className="rounded border border-amber-300/70" hint={false} lockViewport={false}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-amber-50 dark:bg-amber-950/40">
+                        <th className="text-left p-2">{t("pL_purchaseDrillColDate")}</th>
+                        <th className="text-left p-2">{t("pL_expenseDrillColChannel")}</th>
+                        <th className="text-right p-2">GROSS</th>
+                        <th className="text-right p-2">NET</th>
+                        <th className="text-right p-2">{t("amount")}</th>
+                        <th className="text-right p-2">%</th>
+                        <th className="text-left p-2">{t("pL_expenseDrillColBankTx")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenseDrillData.excludedChannelSettlements!.map((r) => (
+                        <tr key={r.id} className="border-b border-border/60">
+                          <td className="p-2 whitespace-nowrap">{r.settleDate}</td>
+                          <td className="p-2">{r.channel}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.gross)}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.net)}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.fee)}</td>
+                          <td className="p-2 text-right font-mono text-destructive whitespace-nowrap">
+                            {r.feePct}% <span className="text-muted-foreground">/ {r.maxPct}%</span>
+                          </td>
+                          <td className="p-2 font-mono">{r.bankTransactionId ? `#${r.bankTransactionId}` : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </AdminTableScroll>
+              </div>
+            )}
+
             {expenseDrillData.fixedExpenses.length > 0 && (
               <div>
                 <p className="text-sm font-bold text-foreground mb-1.5">{t("pL_expenseDrillFixed")}</p>
@@ -227,7 +266,8 @@ export function IncomeExpenseDrillDialog({
               expenseDrillData.petty.length > 0 ||
               expenseDrillData.bankWithdrawals.length > 0 ||
               expenseDrillData.fixedExpenses.length > 0 ||
-              (expenseDrillData.payroll?.length || 0) > 0
+              (expenseDrillData.payroll?.length || 0) > 0 ||
+              (expenseDrillData.excludedChannelSettlements?.length || 0) > 0
             ) && (
               <p className="text-sm text-muted-foreground py-4">{t("pL_purchaseDrillEmpty")}</p>
             )}

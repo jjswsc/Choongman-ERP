@@ -35,6 +35,7 @@ import { PL_PETTY_CASH_PURCHASE_VENDOR_KEY } from '@/lib/income-statement-purcha
 import {
   addFeeBatchCoverage,
   loadChannelSettlementFeesForPl,
+  type ChannelSettlementFeeExcludedRow,
 } from '@/lib/accounting-pl-channel-settlement-fees'
 import {
   type AccountSubjectMetaRow,
@@ -656,6 +657,8 @@ export type IncomeStatementExpenseDrillDownResult = {
   bankWithdrawals: IncomeStatementExpenseDrillBankRow[]
   fixedExpenses: IncomeStatementExpenseDrillFixedRow[]
   payroll: IncomeStatementExpenseDrillPayrollRow[]
+  /** 5528·5529 — 수수료율 비정상이라 손익에서 뺀 채널 정산 */
+  excludedChannelSettlements?: ChannelSettlementFeeExcludedRow[]
   truncated: { petty: boolean; bank: boolean; fixed: boolean; payroll: boolean }
 }
 
@@ -843,6 +846,7 @@ export async function computeIncomeStatementExpenseDrillDown(
       store: ar.store,
     })
   }
+  let excludedChannelSettlements: ChannelSettlementFeeExcludedRow[] = []
   if (wantSubjectId != null && feeAccountSubjectIds.has(wantSubjectId)) {
     const channelFeePl = await loadChannelSettlementFeesForPl({
       startStr,
@@ -861,10 +865,20 @@ export async function computeIncomeStatementExpenseDrillDown(
         expenseDate: row.settleDate || null,
         amount: row.amount,
         category: 'channel_settlement',
-        memo: [`[채널정산 ${row.channel}]`, row.store, row.memo || ''].filter(Boolean).join(' '),
+        memo: [
+          `[Channel settlement ${row.channel}]`,
+          row.store,
+          row.bankTransactionId ? `bank #${row.bankTransactionId}` : '',
+          row.memo || '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
         store: row.store,
       })
     }
+    excludedChannelSettlements = channelFeePl.excludedRows
+      .filter((row) => row.accountSubjectId === wantSubjectId)
+      .sort((a, b) => a.settleDate.localeCompare(b.settleDate) || a.id - b.id)
   }
   for (const line of cardBillPl.lines) {
     if (!expenseDrillMatchesSubject(line.accountSubjectId, wantSubjectId)) continue
@@ -954,6 +968,7 @@ export async function computeIncomeStatementExpenseDrillDown(
     bankWithdrawals: bankSlice,
     fixedExpenses: fixedSlice,
     payroll: payrollSlice,
+    ...(excludedChannelSettlements.length > 0 ? { excludedChannelSettlements } : {}),
     truncated: {
       petty: pettyTruncated,
       bank: bankTruncated,

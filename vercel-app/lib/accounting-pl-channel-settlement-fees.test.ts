@@ -106,6 +106,8 @@ describe('aggregateChannelSettlementFeesForPl', () => {
     ])
     expect(out.implausible).toEqual({ count: 1, fee: 400 })
     expect(out.cardFees).toBe(800)
+    expect(out.excludedRows).toHaveLength(1)
+    expect(out.excludedRows[0]).toMatchObject({ id: 1, channel: 'card', feePct: 40, maxPct: 8, accountSubjectId: CARD_ID })
     expect(channelSettlementImplausibleWarning(out.implausible)).toContain('1건')
     expect(channelSettlementImplausibleWarning({ count: 0, fee: 0 })).toBeNull()
   })
