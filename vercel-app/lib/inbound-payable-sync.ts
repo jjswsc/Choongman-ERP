@@ -7,6 +7,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdate,
 } from './supabase-server'
+import { computeInboundBatchAmountsWithDiscount } from './inbound-discount'
 import {
   buildItemTaxMapFromRows,
   computeInboundBatchAmounts,
@@ -145,11 +146,18 @@ export async function upsertInboundPayableTransaction(params: {
   })
 }
 
-/** 등록 직후 payable 행 생성용 (sync와 동일 산식) */
+/** 등록 직후 payable 행 생성용 (sync와 동일 산식). discountAmt>0이면 줄 단가에 배분 후 합계. */
 export function computeInboundRegisterTotals(
   list: { date?: string; code?: string; qty?: number | string; cost?: number | string }[],
-  taxByCode: ReadonlyMap<string, import('./income-statement-item-vat').ItemTaxType>
-): { grossTotal: number; batchDateYmd: string; lines: InboundPayableLine[] } {
+  taxByCode: ReadonlyMap<string, import('./income-statement-item-vat').ItemTaxType>,
+  discountAmt = 0
+): {
+  grossTotal: number
+  batchDateYmd: string
+  lines: InboundPayableLine[]
+  discountAmt: number
+  netBefore: number
+} {
   const lines: InboundPayableLine[] = list
     .map((item) => {
       const code = String(item.code || '').trim()
@@ -165,6 +173,16 @@ export function computeInboundRegisterTotals(
     })
     .filter((l) => l.code && l.qty > 0)
 
-  const { grossTotal, batchDateYmd } = computeInboundBatchAmounts(lines, taxByCode)
-  return { grossTotal, batchDateYmd, lines }
+  const withDisc = computeInboundBatchAmountsWithDiscount(lines, taxByCode, discountAmt)
+  const discountedLines: InboundPayableLine[] = lines.map((l, i) => ({
+    ...l,
+    unitCost: withDisc.allocated.lines[i]?.unitCostAfter ?? l.unitCost,
+  }))
+  return {
+    grossTotal: withDisc.gross,
+    batchDateYmd: withDisc.batchDateYmd,
+    lines: discountedLines,
+    discountAmt: withDisc.discount,
+    netBefore: withDisc.netBefore,
+  }
 }

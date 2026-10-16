@@ -38,6 +38,8 @@ export interface InboundBatchDetail {
   invoicePhotoUrl?: string | null
   sourceCurrency?: InboundSourceCurrency
   fxRate?: number | null
+  /** 헤더 할인(THB). 재고 단가에 이미 반영된 경우도 감사 값으로 반환 */
+  discountAmt?: number
   items: {
     code: string
     name: string
@@ -66,6 +68,8 @@ export async function updateInboundBatch(params: {
   storeName?: string
   sourceCurrency?: InboundSourceCurrency
   fxRate?: number | null
+  /** 헤더 ส่วนลด(THB, 공급가). 저장 시 줄 단가에 배분 */
+  discountAmt?: number
   /** 있으면 품목·단가·수량까지 갱신 (재고·미지급 재계산) */
   list?: {
     date?: string
@@ -115,6 +119,7 @@ export async function registerInboundBatch(
     invoiceNo?: string
     sourceCurrency?: InboundSourceCurrency
     fxRate?: number | null
+    discountAmt?: number
   }
 ) {
   const res = await apiFetchWithOffline('/api/registerInboundBatch', {
@@ -129,6 +134,7 @@ export async function registerInboundBatch(
       invoiceNo: options?.invoiceNo || undefined,
       sourceCurrency: options?.sourceCurrency || undefined,
       fxRate: options?.fxRate ?? undefined,
+      discountAmt: options?.discountAmt ?? undefined,
     }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>

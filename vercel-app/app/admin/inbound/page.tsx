@@ -83,7 +83,12 @@ import { resolveInvoiceClientForTarget } from "@/lib/invoice-client-resolve"
 import { buildInboundTaxInvoiceData } from "@/lib/build-inbound-tax-invoice-data"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { cn, roundErp3, formatErpCostInputString, formatErpNum } from "@/lib/utils"
-import { buildItemTaxMapFromRows, computeInboundBatchAmounts } from "@/lib/inbound-payable-amount"
+import {
+  computeInboundBatchAmountsWithDiscount,
+  INBOUND_VENDOR_OTHER,
+  parseInboundDiscountAmt,
+} from "@/lib/inbound-discount"
+import { buildItemTaxMapFromRows } from "@/lib/inbound-payable-amount"
 import {
   type InboundSourceCurrency,
   allocateInboundThbByKrwLines,
@@ -151,6 +156,8 @@ export default function InboundPage() {
   /** 입고 매장: 본사만 선택. Omni 지점 Manager는 자기 매장만. Omni는 CM Office를 목록에 넣지 않음 */
   const [inStore, setInStore] = React.useState("")
   const [inVendor, setInVendor] = React.useState("")
+  /** 기타 매입처 직접 입력명 (inVendor === INBOUND_VENDOR_OTHER 일 때) */
+  const [inVendorOtherName, setInVendorOtherName] = React.useState("")
   const [inPoNo, setInPoNo] = React.useState("")
   const [inInvoiceNo, setInInvoiceNo] = React.useState("")
   const [inQty, setInQty] = React.useState("")
@@ -158,6 +165,10 @@ export default function InboundPage() {
   const [fxRate, setFxRate] = React.useState("")
   /** KRW 입고: 출금 바트 공급가 총액. 수량×원화 단가 비율로 줄을 나눈다 */
   const [thbSupplyTotal, setThbSupplyTotal] = React.useState("")
+  /** 헤더 ส่วนลด(THB, 공급가). 저장 시 줄 단가에 배분 */
+  const [discountAmt, setDiscountAmt] = React.useState("")
+  /** 수정 로드 시 DB에 남아 있는 과거 할인(이미 단가 반영) */
+  const [recordedDiscountAmt, setRecordedDiscountAmt] = React.useState<number | null>(null)
   const [cart, setCart] = React.useState<InboundCartItem[]>([])
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
@@ -303,9 +314,14 @@ export default function InboundPage() {
     return [...new Set(items.map((it) => String(it.category || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   }, [items])
 
+  const effectiveVendorName = React.useMemo(() => {
+    if (inVendor === INBOUND_VENDOR_OTHER) return inVendorOtherName.trim()
+    return inVendor.trim()
+  }, [inVendor, inVendorOtherName])
+
   /** 거래처 선택 시 해당 거래처 품목 (items.vendor + item_vendors, 입고 purpose=inbound로 매장 전용 포함) */
   const itemsForPicker = React.useMemo(() => {
-    if (!inVendor?.trim()) return items
+    if (!inVendor?.trim() || inVendor === INBOUND_VENDOR_OTHER) return items
     return itemsForVendor.length > 0 ? itemsForVendor : items.filter((i) => {
       const iv = String(i.vendor || "").trim().toLowerCase()
       const vName = inVendor.trim().toLowerCase()
@@ -317,7 +333,7 @@ export default function InboundPage() {
   }, [items, inVendor, purchaseVendors, itemsForVendor])
 
   React.useEffect(() => {
-    if (!inVendor?.trim()) {
+    if (!inVendor?.trim() || inVendor === INBOUND_VENDOR_OTHER) {
       setItemsForVendor([])
       return
     }
@@ -417,6 +433,9 @@ export default function InboundPage() {
         if (prefill.length > 0) {
           setCart(prefill)
           setInVendor(vendorName)
+          setInVendorOtherName("")
+          setDiscountAmt("")
+          setRecordedDiscountAmt(null)
           setInDate(inboundDate)
           setInPoNo(poNo)
           setFromPoNo(poNo)
@@ -438,9 +457,9 @@ export default function InboundPage() {
   }, [inDate, fromPoId, editingBatchId])
 
   React.useEffect(() => {
-    if (!editingBatchId || !inVendor.trim()) return
-    setCart((prev) => (prev.length ? prev.map((c) => ({ ...c, vendor: inVendor })) : prev))
-  }, [inVendor, editingBatchId])
+    if (!editingBatchId || !effectiveVendorName) return
+    setCart((prev) => (prev.length ? prev.map((c) => ({ ...c, vendor: effectiveVendorName })) : prev))
+  }, [effectiveVendorName, editingBatchId])
 
   const applyFromPoInboundDate = React.useCallback(() => {
     const ymd = fromPoInboundDateDraft.trim().slice(0, 10)
@@ -464,8 +483,10 @@ export default function InboundPage() {
       await appAlert(t("inAlertEnterQty"))
       return
     }
-    if (!inVendor) {
-      await appAlert(t("inAlertSelectVendor"))
+    if (!effectiveVendorName) {
+      await appAlert(
+        inVendor === INBOUND_VENDOR_OTHER ? t("inAlertEnterOtherVendor") : t("inAlertSelectVendor")
+      )
       return
     }
     const q = parseFloat(inQty.replace(/,/g, ""))
@@ -477,7 +498,7 @@ export default function InboundPage() {
       ...prev,
       {
         date: inDate || getBangkokTodayDateString(),
-        vendor: inVendor,
+        vendor: effectiveVendorName,
         code: selectedItem.code,
         name: selectedItem.name,
         spec: selectedItem.spec || "",
@@ -513,11 +534,14 @@ export default function InboundPage() {
     setInPoNo("")
     setInInvoiceNo("")
     setInVendor("")
+    setInVendorOtherName("")
     setSelectedItem(null)
     setInQty("")
     setSourceCurrency("THB")
     setFxRate("")
     setThbSupplyTotal("")
+    setDiscountAmt("")
+    setRecordedDiscountAmt(null)
   }, [])
 
   const resolveInboundStoreName = React.useCallback((): string | undefined => {
@@ -591,14 +615,21 @@ export default function InboundPage() {
         return
       }
     }
+    if (!effectiveVendorName && !cart[0]?.vendor?.trim()) {
+      await appAlert(
+        inVendor === INBOUND_VENDOR_OTHER ? t("inAlertEnterOtherVendor") : t("inAlertSelectVendor")
+      )
+      return
+    }
     const confirmKey = editingBatchId ? "inConfirmUpdate" : "inConfirmSave"
     const msg = t(confirmKey).replace("{count}", String(cart.length))
     if (!await appConfirm(msg)) return
     setSaving(true)
     try {
+      const vendorName = effectiveVendorName || cart[0]?.vendor || ""
       const list = cart.map((c, i) => ({
         date: inboundYmd,
-        vendor: inVendor.trim() || c.vendor,
+        vendor: vendorName || c.vendor,
         code: c.code,
         name: c.name,
         spec: c.spec,
@@ -607,16 +638,21 @@ export default function InboundPage() {
         ...(krwAllocation ? { thbUnitCost: krwAllocation.lines[i]?.thbUnit } : {}),
       }))
       const storeName = resolveInboundStoreName()
-      const vendorCode = purchaseVendors.find((v) => v.name === (inVendor.trim() || cart[0]?.vendor))?.code
+      const vendorCode =
+        inVendor === INBOUND_VENDOR_OTHER
+          ? undefined
+          : purchaseVendors.find((v) => v.name === vendorName)?.code
+      const parsedDiscount = parseInboundDiscountAmt(discountAmt)
       const fxOptions = {
         sourceCurrency,
         fxRate: sourceCurrency === "KRW" ? parsedFx : null,
+        discountAmt: parsedDiscount,
       }
 
       if (editingBatchId) {
         const res = await updateInboundBatch({
           batchId: editingBatchId,
-          vendorName: inVendor.trim() || cart[0]?.vendor,
+          vendorName,
           vendorCode,
           poNo: inPoNo.trim() || undefined,
           invoiceNo: inInvoiceNo.trim() || undefined,
@@ -655,6 +691,8 @@ export default function InboundPage() {
           setSourceCurrency("THB")
           setFxRate("")
           setThbSupplyTotal("")
+          setDiscountAmt("")
+          setRecordedDiscountAmt(null)
         } else {
           await appAlert(translateApiMessage(res.message, t) || t("inSaveFailed"))
         }
@@ -1083,9 +1121,19 @@ export default function InboundPage() {
         dateYmd: (inDate || c.date || "").slice(0, 10),
       }
     })
-    const { netTotal, vatTotal, grossTotal } = computeInboundBatchAmounts(lines, taxByCode)
-    return { net: netTotal, vat: vatTotal, gross: grossTotal }
-  }, [cart, items, inDate, sourceCurrency, fxRate, krwAllocation])
+    const withDisc = computeInboundBatchAmountsWithDiscount(
+      lines,
+      taxByCode,
+      parseInboundDiscountAmt(discountAmt)
+    )
+    return {
+      netBefore: withDisc.netBefore,
+      discount: withDisc.discount,
+      net: withDisc.net,
+      vat: withDisc.vat,
+      gross: withDisc.gross,
+    }
+  }, [cart, items, inDate, sourceCurrency, fxRate, krwAllocation, discountAmt])
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "summary" | "guide">("new")
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
@@ -1408,6 +1456,9 @@ export default function InboundPage() {
         }
         const batchDate = String(b.batchDate || row.date || getBangkokTodayDateString()).slice(0, 10)
         const vendorName = String(b.vendorName || row.vendor || "").trim()
+        const vendorInMaster = purchaseVendors.some(
+          (v) => v.name.trim().toLowerCase() === vendorName.toLowerCase()
+        )
         const prefill: InboundCartItem[] = (b.items || [])
           .filter((it) => String(it.code || "").trim())
           .map((it) => {
@@ -1450,7 +1501,13 @@ export default function InboundPage() {
         setEditingPurchaseOrderId(b.purchaseOrderId ?? null)
         setCart(prefill)
         setInDate(batchDate)
-        setInVendor(vendorName)
+        if (vendorInMaster) {
+          setInVendor(vendorName)
+          setInVendorOtherName("")
+        } else {
+          setInVendor(INBOUND_VENDOR_OTHER)
+          setInVendorOtherName(vendorName)
+        }
         setInPoNo(String(b.poNo || "").trim())
         setInInvoiceNo(String(b.invoiceNo || "").trim())
         setInStore(storeValue)
@@ -1458,6 +1515,11 @@ export default function InboundPage() {
         setThbSupplyTotal("")
         setFxRate(
           b.fxRate != null && Number(b.fxRate) > 0 ? formatInboundFxRateInput(Number(b.fxRate)) : ""
+        )
+        // 저장 시 할인은 이미 단가에 반영됨 → 재입력하면 이중 할인. 입력란은 비우고 안내만.
+        setDiscountAmt("")
+        setRecordedDiscountAmt(
+          b.discountAmt != null && Number(b.discountAmt) > 0 ? Number(b.discountAmt) : null
         )
         setSelectedItem(null)
         setInQty("")
@@ -1468,7 +1530,7 @@ export default function InboundPage() {
         setEditLoading(false)
       }
     },
-    [t, salesVendors, includeCanonicalHq, auth?.store]
+    [t, salesVendors, includeCanonicalHq, auth?.store, purchaseVendors]
   )
 
   const handleDeleteRow = React.useCallback(
@@ -1873,7 +1935,19 @@ export default function InboundPage() {
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("inVendor")}</label>
-                        <Select value={inVendor || "__none__"} onValueChange={(v) => setInVendor(v === "__none__" ? "" : v)} onOpenChange={(open) => !open && setInVendorSearch("")}>
+                        <Select
+                          value={inVendor || "__none__"}
+                          onValueChange={(v) => {
+                            if (v === "__none__") {
+                              setInVendor("")
+                              setInVendorOtherName("")
+                              return
+                            }
+                            setInVendor(v)
+                            if (v !== INBOUND_VENDOR_OTHER) setInVendorOtherName("")
+                          }}
+                          onOpenChange={(open) => !open && setInVendorSearch("")}
+                        >
                           <SelectTrigger className="mt-1 h-9">
                             <SelectValue placeholder={t("inVendorPlaceholder")} />
                           </SelectTrigger>
@@ -1894,8 +1968,17 @@ export default function InboundPage() {
                                   {v.name}
                                 </SelectItem>
                               ))}
+                            <SelectItem value={INBOUND_VENDOR_OTHER}>{t("inVendorOther")}</SelectItem>
                           </SelectContent>
                         </Select>
+                        {inVendor === INBOUND_VENDOR_OTHER ? (
+                          <Input
+                            value={inVendorOtherName}
+                            onChange={(e) => setInVendorOtherName(e.target.value)}
+                            className="mt-2 h-9"
+                            placeholder={t("inVendorOtherPlaceholder")}
+                          />
+                        ) : null}
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("inPoNo")}</label>
@@ -1955,6 +2038,8 @@ export default function InboundPage() {
                     editingBatchId={editingBatchId}
                     saving={saving || editLoading}
                     totals={cartTotals}
+                    discountAmt={discountAmt}
+                    recordedDiscountAmt={recordedDiscountAmt}
                     sourceCurrency={sourceCurrency}
                     fxRate={fxRate}
                     thbAllocation={krwAllocation}
@@ -1969,6 +2054,7 @@ export default function InboundPage() {
                     }}
                     onFxRateChange={setFxRate}
                     onThbSupplyTotalChange={setThbSupplyTotal}
+                    onDiscountAmtChange={setDiscountAmt}
                     onUpdateCost={handleUpdateCartCost}
                     onUpdateQty={handleUpdateCartQty}
                     onRemove={handleRemoveFromCart}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 import { deletePayableFromPO } from '@/lib/receivable-payable'
+import { parseInboundDiscountAmt } from '@/lib/inbound-discount'
 import { buildItemTaxMapFromRows, inboundLogDateIsoFromBangkokYmd } from '@/lib/inbound-payable-amount'
 import { computeInboundRegisterTotals, upsertInboundPayableTransaction } from '@/lib/inbound-payable-sync'
 import {
@@ -55,6 +56,9 @@ export async function POST(request: NextRequest) {
     if (fxHeaderErr) {
       return NextResponse.json({ success: false, message: fxHeaderErr }, { status: 400, headers })
     }
+    const discountAmt = parseInboundDiscountAmt(
+      typeof body === 'object' ? body?.discountAmt ?? body?.discount_amt : null
+    )
 
     const list = (Array.isArray(body) ? body : (body?.list || [])) as {
       date?: string
@@ -127,16 +131,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(resolvedLines, taxByCode)
+    const {
+      grossTotal,
+      batchDateYmd,
+      lines: discountedLines,
+      discountAmt: appliedDiscount,
+    } = computeInboundRegisterTotals(resolvedLines, taxByCode, discountAmt)
 
     await assertAccountingDateOpen(batchDateYmd, location || null)
 
+    const unitAfterByIdx = new Map(discountedLines.map((l, i) => [i, l.unitCost]))
+    // resolvedLines와 discountedLines는 동일 필터(code+qty>0) 순서 — 인덱스 매핑용 재구성
+    let discIdx = 0
     const rows = resolvedLines.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
+      const code = String(item.code || '').trim()
       const lineYmd = String(item.date || batchDateYmd).trim().slice(0, 10)
       const row: Record<string, unknown> = {
         location,
-        item_code: String(item.code || '').trim(),
+        item_code: code,
         item_name: String(item.name || '').trim(),
         spec: String(item.spec || '').trim() || '-',
         qty,
@@ -144,7 +157,12 @@ export async function POST(request: NextRequest) {
         vendor_target: String(item.vendor || '').trim(),
         log_type: 'Inbound',
       }
-      if (item.unitCostThb != null) {
+      const matched = code && qty > 0
+      const unitAfter = matched ? unitAfterByIdx.get(discIdx) : undefined
+      if (matched) discIdx += 1
+      if (unitAfter != null) {
+        row.unit_cost = unitAfter
+      } else if (item.unitCostThb != null) {
         row.unit_cost = item.unitCostThb
       }
       if (sourceCurrency === 'KRW' && item.sourceUnitCost != null) {
@@ -194,6 +212,7 @@ export async function POST(request: NextRequest) {
       vendor_code: effectiveVendorCode || vendorCode,
       batch_date: batchDateYmd,
       total_amount: grossTotal,
+      discount_amt: appliedDiscount,
       purchase_order_id: purchaseOrderId && !isNaN(purchaseOrderId) ? purchaseOrderId : null,
       source_currency: sourceCurrency,
       fx_rate: sourceCurrency === 'KRW' ? fxRate : null,

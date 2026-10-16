@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.inbound_batches (
   vendor_code TEXT DEFAULT NULL,
   batch_date DATE NOT NULL,
   total_amount NUMERIC(14,3) DEFAULT 0,
+  discount_amt NUMERIC(14,3) NOT NULL DEFAULT 0,
   purchase_order_id BIGINT DEFAULT NULL,
   invoice_no TEXT DEFAULT NULL,
   invoice_photo_url TEXT DEFAULT NULL,
@@ -28,6 +29,7 @@ ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS vendor_name TEXT;
 ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS vendor_code TEXT;
 ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS batch_date DATE;
 ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS total_amount NUMERIC(14,3) DEFAULT 0;
+ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS discount_amt NUMERIC(14,3) NOT NULL DEFAULT 0;
 ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS purchase_order_id BIGINT;
 ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS invoice_no TEXT;
 ALTER TABLE public.inbound_batches ADD COLUMN IF NOT EXISTS invoice_photo_url TEXT;

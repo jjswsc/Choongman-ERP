@@ -37,7 +37,11 @@ type InboundCartTableProps = {
   editingBatchId?: number | null
   saving?: boolean
   /** 공급가 / VAT / 합계 (VAT 포함) — 페이지에서 계산해 전달 (항상 THB) */
-  totals?: { net: number; vat: number; gross: number } | null
+  totals?: { netBefore: number; discount: number; net: number; vat: number; gross: number } | null
+  /** 헤더 ส่วนลด(THB) 입력값 */
+  discountAmt?: string
+  /** 수정 시 과거 할인(이미 단가 반영) 안내 */
+  recordedDiscountAmt?: number | null
   sourceCurrency?: InboundSourceCurrency
   fxRate?: string
   /** 원화 비율로 나눈 바트 공급가. 있으면 줄 금액은 이 값을 보여 준다 */
@@ -46,6 +50,7 @@ type InboundCartTableProps = {
   onSourceCurrencyChange?: (currency: InboundSourceCurrency) => void
   onFxRateChange?: (fxRate: string) => void
   onThbSupplyTotalChange?: (total: string) => void
+  onDiscountAmtChange?: (discountAmt: string) => void
   onUpdateCost: (idx: number, cost: string) => void
   onUpdateQty?: (idx: number, qty: string) => void
   onRemove: (idx: number) => void
@@ -59,6 +64,8 @@ export function InboundCartTable({
   editingBatchId = null,
   saving = false,
   totals = null,
+  discountAmt = "",
+  recordedDiscountAmt = null,
   sourceCurrency = "THB",
   fxRate = "",
   thbAllocation = null,
@@ -66,6 +73,7 @@ export function InboundCartTable({
   onSourceCurrencyChange,
   onFxRateChange,
   onThbSupplyTotalChange,
+  onDiscountAmtChange,
   onUpdateCost,
   onUpdateQty,
   onRemove,
@@ -413,11 +421,40 @@ export function InboundCartTable({
       </div>
 
       {totals && cart.length > 0 ? (
-        <div className="border-t px-5 py-3 bg-muted/30 space-y-1 text-xs">
+        <div className="border-t px-5 py-3 bg-muted/30 space-y-1.5 text-xs">
           <div className="flex justify-between">
             <span className="text-muted-foreground">{t("salesSupplyAmount")}</span>
-            <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.net)}</span>
+            <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.netBefore)}</span>
           </div>
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-muted-foreground shrink-0" htmlFor="inbound-discount-amt">
+              {t("inDiscount")}
+            </label>
+            {onDiscountAmtChange ? (
+              <Input
+                id="inbound-discount-amt"
+                type="text"
+                inputMode="decimal"
+                value={discountAmt}
+                onChange={(e) => onDiscountAmtChange(normalizeErpDecimalInput(e.target.value))}
+                onBlur={() => {
+                  const formatted = formatErpCostInputString(discountAmt)
+                  if (formatted !== discountAmt) onDiscountAmtChange(formatted)
+                }}
+                placeholder="0"
+                className="h-8 w-[140px] text-right text-sm"
+                disabled={saving}
+              />
+            ) : (
+              <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.discount)}</span>
+            )}
+          </div>
+          {totals.discount > 0 ? (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t("inSupplyAfterDiscount")}</span>
+              <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.net)}</span>
+            </div>
+          ) : null}
           <div className="flex justify-between">
             <span className="text-muted-foreground">{t("posVatLabel")}</span>
             <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.vat)}</span>
@@ -426,6 +463,12 @@ export function InboundCartTable({
             <span>{t("inv_total") || t("total")}</span>
             <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.gross)}</span>
           </div>
+          <p className="pt-0.5 text-[11px] text-muted-foreground leading-snug">{t("inDiscountHint")}</p>
+          {isEdit && recordedDiscountAmt != null && recordedDiscountAmt > 0 ? (
+            <p className="text-[11px] text-amber-700 leading-snug">
+              {t("inDiscountAlreadyApplied").replace("{amt}", formatErpNum(recordedDiscountAmt))}
+            </p>
+          ) : null}
           {isEdit ? (
             <p className="pt-1 text-[11px] text-muted-foreground leading-snug">{t("inEditDecimalHint")}</p>
           ) : null}

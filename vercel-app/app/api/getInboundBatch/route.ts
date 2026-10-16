@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       invoice_photo_url?: string | null
       source_currency?: string | null
       fx_rate?: number | null
+      discount_amt?: number | null
     }[]
     const batch = batchRows?.[0]
     if (!batch) {
@@ -122,6 +123,10 @@ export async function GET(request: NextRequest) {
         invoicePhotoUrl: batch.invoice_photo_url ?? undefined,
         sourceCurrency,
         fxRate: fxRate ?? undefined,
+        discountAmt:
+          batch.discount_amt != null && !isNaN(Number(batch.discount_amt))
+            ? Number(batch.discount_amt)
+            : 0,
         items,
       },
       { headers }

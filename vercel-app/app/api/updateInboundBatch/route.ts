@@ -6,6 +6,7 @@ import {
   supabaseUpdate,
 } from '@/lib/supabase-server'
 import { normalizeVendorCode } from '@/lib/vendor-code-policy'
+import { parseInboundDiscountAmt } from '@/lib/inbound-discount'
 import {
   buildItemTaxMapFromRows,
   inboundLogDateIsoFromBangkokYmd,
@@ -244,7 +245,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { grossTotal, batchDateYmd } = computeInboundRegisterTotals(resolvedLines, taxByCode)
+    const discountAmt = parseInboundDiscountAmt(body.discountAmt ?? body.discount_amt)
+    const {
+      grossTotal,
+      batchDateYmd,
+      lines: discountedLines,
+      discountAmt: appliedDiscount,
+    } = computeInboundRegisterTotals(resolvedLines, taxByCode, discountAmt)
 
     const vendorName =
       body.vendorName !== undefined
@@ -266,12 +273,15 @@ export async function POST(request: NextRequest) {
     )
     await assertAccountingDateOpen(batchDateYmd, location || null)
 
+    const unitAfterByIdx = new Map(discountedLines.map((l, i) => [i, l.unitCost]))
+    let discIdx = 0
     const rows = resolvedLines.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
+      const code = String(item.code || '').trim()
       const lineYmd = String(item.date || batchDateYmd).trim().slice(0, 10)
       const row: Record<string, unknown> = {
         location,
-        item_code: String(item.code || '').trim(),
+        item_code: code,
         item_name: String(item.name || '').trim(),
         spec: String(item.spec || '').trim() || '-',
         qty,
@@ -280,7 +290,12 @@ export async function POST(request: NextRequest) {
         log_type: 'Inbound',
         inbound_batch_id: batchId,
       }
-      if (item.unitCostThb != null) {
+      const matched = Boolean(code && qty > 0)
+      const unitAfter = matched ? unitAfterByIdx.get(discIdx) : undefined
+      if (matched) discIdx += 1
+      if (unitAfter != null) {
+        row.unit_cost = unitAfter
+      } else if (item.unitCostThb != null) {
         row.unit_cost = item.unitCostThb
       }
       if (sourceCurrency === 'KRW' && item.sourceUnitCost != null) {
@@ -302,6 +317,7 @@ export async function POST(request: NextRequest) {
       vendor_code: effectiveVendorCode,
       batch_date: batchDateYmd,
       total_amount: grossTotal,
+      discount_amt: appliedDiscount,
       source_currency: sourceCurrency,
       fx_rate: sourceCurrency === 'KRW' ? fxRate : null,
     }
