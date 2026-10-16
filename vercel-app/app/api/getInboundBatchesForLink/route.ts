@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
     }
 
     const matchValues = await resolveInboundVendorMatchValues(vendorCode, vendorName)
-    const vendorFilter = buildInboundVendorOrFilter(matchValues)
+    // vendorName이 있으면 기타 매입처(자유 입력)도 ilike 부분 매칭
+    const vendorFilter = buildInboundVendorOrFilter(matchValues, {
+      ilikeName: vendorName || undefined,
+    })
     if (!vendorFilter) {
       return NextResponse.json([], { headers })
     }

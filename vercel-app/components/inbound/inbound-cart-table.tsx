@@ -42,6 +42,8 @@ type InboundCartTableProps = {
   discountAmt?: string
   /** 수정 시 과거 할인(이미 단가 반영) 안내 */
   recordedDiscountAmt?: number | null
+  /** true면 할인 입력 잠금(이중 할인 방지) */
+  discountLocked?: boolean
   sourceCurrency?: InboundSourceCurrency
   fxRate?: string
   /** 원화 비율로 나눈 바트 공급가. 있으면 줄 금액은 이 값을 보여 준다 */
@@ -66,6 +68,7 @@ export function InboundCartTable({
   totals = null,
   discountAmt = "",
   recordedDiscountAmt = null,
+  discountLocked = false,
   sourceCurrency = "THB",
   fxRate = "",
   thbAllocation = null,
@@ -430,7 +433,7 @@ export function InboundCartTable({
             <label className="text-muted-foreground shrink-0" htmlFor="inbound-discount-amt">
               {t("inDiscount")}
             </label>
-            {onDiscountAmtChange ? (
+            {onDiscountAmtChange && !discountLocked ? (
               <Input
                 id="inbound-discount-amt"
                 type="text"
@@ -446,7 +449,9 @@ export function InboundCartTable({
                 disabled={saving}
               />
             ) : (
-              <span className={ADMIN_NUMERIC_CN}>฿{formatErpNum(totals.discount)}</span>
+              <span className={ADMIN_NUMERIC_CN}>
+                ฿{formatErpNum(discountLocked ? recordedDiscountAmt || 0 : totals.discount)}
+              </span>
             )}
           </div>
           {totals.discount > 0 ? (

@@ -59,7 +59,10 @@ export async function getInboundBatch(batchId: number) {
 export async function updateInboundBatch(params: {
   batchId: number
   vendorName?: string
-  vendorCode?: string
+  /** null이면 기존 코드 클리어(기타 매입처) */
+  vendorCode?: string | null
+  /** true면 마스터→기타 전환 시 옛 vendor_code 잔존 방지 */
+  clearVendorCode?: boolean
   poNo?: string
   invoiceNo?: string
   invoiceReceived?: boolean
@@ -70,6 +73,8 @@ export async function updateInboundBatch(params: {
   fxRate?: number | null
   /** 헤더 ส่วนลด(THB, 공급가). 저장 시 줄 단가에 배분 */
   discountAmt?: number
+  /** 이미 단가에 반영된 할인 감사값 유지(재배분 없음) */
+  preserveDiscountAmt?: number
   /** 있으면 품목·단가·수량까지 갱신 (재고·미지급 재계산) */
   list?: {
     date?: string

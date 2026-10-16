@@ -1439,10 +1439,13 @@ Only matters the employee must handle personally on a working day:
   inDiscount: 'Discount',
   inSupplyAfterDiscount: 'Supply after discount',
   inDiscountHint: 'Enter the invoice discount (ส่วนลด) total so VAT and grand total match the IV. On save it is allocated into unit costs.',
-  inDiscountAlreadyApplied: 'A previous discount of ฿{amt} is already in the unit costs. Enter a value only for an extra discount.',
+  inDiscountAlreadyApplied:
+    'A previous discount of ฿{amt} is already in the unit costs. Discount entry is locked — adjust unit costs if needed.',
   inVendorOther: 'Other vendor (type name)',
   inVendorOtherPlaceholder: 'Enter shop / vendor name',
   inAlertEnterOtherVendor: 'Please enter the other vendor name.',
+  inboundOtherVendorLinkHint:
+    'For emergency buys registered as Other vendor, type the shop name to find inbound batches.',
   inCurrency: 'Currency',
   inFxRate: 'FX rate (KRW per 1 THB)',
   inFxRatePlaceholder: 'e.g. 40',

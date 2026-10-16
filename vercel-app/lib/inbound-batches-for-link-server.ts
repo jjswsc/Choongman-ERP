@@ -14,11 +14,15 @@ export type InboundBatchLinkRow = {
 }
 
 /**
- * PostgREST or=(vendor_code.in.("X","Y"),vendor_name.in.("X","Y")).
+ * PostgREST or=(vendor_code.in.("X","Y"),vendor_name.in.("X","Y")[,vendor_name.ilike."*q*"]).
  * PostgREST는 URL 디코딩 후 논리 트리를 파싱하므로 %2C 인코딩만으로는 `Co.,Ltd.`의 쉼표·괄호가
  * 구분자로 해석된다 — 값은 반드시 큰따옴표로 감싼다.
+ * ilikeName: 기타 매입처(자유 입력) 부분 검색용.
  */
-export function buildInboundVendorOrFilter(matchValues: string[]): string {
+export function buildInboundVendorOrFilter(
+  matchValues: string[],
+  opts?: { ilikeName?: string }
+): string {
   const values: string[] = []
   const seen = new Set<string>()
   for (const raw of matchValues) {
@@ -29,9 +33,19 @@ export function buildInboundVendorOrFilter(matchValues: string[]): string {
     seen.add(key)
     values.push(encodeURIComponent(postgrestQuotedInList([trimmed])))
   }
-  if (!values.length) return ''
-  const list = values.join(',')
-  return `&or=(vendor_code.in.(${list}),vendor_name.in.(${list}))`
+  const orParts: string[] = []
+  if (values.length) {
+    const list = values.join(',')
+    orParts.push(`vendor_code.in.(${list})`, `vendor_name.in.(${list})`)
+  }
+  const ilikeRaw = String(opts?.ilikeName || '').trim()
+  if (ilikeRaw) {
+    // PostgREST: * = %, 값은 따옴표로 감싸 특수문자 안전
+    const pattern = `*${ilikeRaw.replace(/"/g, '')}*`
+    orParts.push(`vendor_name.ilike.${encodeURIComponent(`"${pattern}"`)}`)
+  }
+  if (!orParts.length) return ''
+  return `&or=(${orParts.join(',')})`
 }
 
 export async function resolveInboundVendorMatchValues(
@@ -39,8 +53,14 @@ export async function resolveInboundVendorMatchValues(
   vendorName: string
 ): Promise<string[]> {
   const matchValues: string[] = []
+  const push = (v: string) => {
+    const t = String(v || '').trim()
+    if (!t) return
+    if (matchValues.some((x) => x.toLowerCase() === t.toLowerCase())) return
+    matchValues.push(t)
+  }
   if (vendorCode) {
-    matchValues.push(vendorCode)
+    push(vendorCode)
     try {
       const vendorRows = (await supabaseSelectFilter('vendors', `code=eq.${encodeURIComponent(vendorCode)}`, {
         select: 'code,name,gps_name',
@@ -48,16 +68,43 @@ export async function resolveInboundVendorMatchValues(
       })) as { code?: string; name?: string; gps_name?: string }[]
       if (vendorRows?.[0]) {
         const v = vendorRows[0]
-        const vn = String(v.name || '').trim()
-        const gn = String(v.gps_name || '').trim()
-        if (vn && !matchValues.includes(vn)) matchValues.push(vn)
-        if (gn && !matchValues.includes(gn)) matchValues.push(gn)
+        push(String(v.name || ''))
+        push(String(v.gps_name || ''))
       }
     } catch {
       /* vendors 없으면 code만 사용 */
     }
-  } else if (vendorName) {
-    matchValues.push(vendorName)
+  }
+  if (vendorName) {
+    push(vendorName)
+    // 이름만 있을 때 마스터 code도 끌어와 코드 저장 배치와 매칭
+    if (!vendorCode) {
+      try {
+        const byName = (await supabaseSelectFilter(
+          'vendors',
+          `name=eq.${encodeURIComponent(vendorName)}`,
+          { select: 'code,name,gps_name', limit: 1 }
+        )) as { code?: string; name?: string; gps_name?: string }[]
+        if (byName?.[0]?.code) {
+          push(String(byName[0].code))
+          push(String(byName[0].name || ''))
+          push(String(byName[0].gps_name || ''))
+        } else {
+          const byGps = (await supabaseSelectFilter(
+            'vendors',
+            `gps_name=eq.${encodeURIComponent(vendorName)}`,
+            { select: 'code,name,gps_name', limit: 1 }
+          )) as { code?: string; name?: string; gps_name?: string }[]
+          if (byGps?.[0]?.code) {
+            push(String(byGps[0].code))
+            push(String(byGps[0].name || ''))
+            push(String(byGps[0].gps_name || ''))
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }
   return matchValues
 }

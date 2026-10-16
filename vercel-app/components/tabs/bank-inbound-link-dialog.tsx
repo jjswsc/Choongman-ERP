@@ -53,6 +53,8 @@ export function BankInboundLinkDialog({
   }, [t])
   const [vendorCode, setVendorCode] = React.useState("")
   const [vendorSearch, setVendorSearch] = React.useState("")
+  /** 기타 매입처(자유 입력) — vendor_name 부분 검색 */
+  const [otherVendorName, setOtherVendorName] = React.useState("")
   const [batches, setBatches] = React.useState<InboundBatchForLink[]>([])
   const [, setExistingLinks] = React.useState<{ inboundBatchId?: number; amount: number }[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -60,13 +62,17 @@ export function BankInboundLinkDialog({
   const [amounts, setAmounts] = React.useState<Record<number, number>>({})
 
   const effectiveVendor = (row?.vendorCode?.trim() || vendorCode?.trim() || "").trim()
+  const otherName = otherVendorName.trim()
+  const selectedVendorName =
+    vendorOptions.find((v) => v.code === effectiveVendor)?.name?.trim() || ""
+  const canQueryBatches = Boolean(effectiveVendor || otherName)
   const withdrawAmount = row && row.amount < 0 ? Math.abs(row.amount) : 0
   const allocatedSum = Object.values(amounts).reduce((s, v) => s + (Number(v) || 0), 0)
   const isMatch = withdrawAmount > 0 && allocatedSum > 0 && Math.abs(allocatedSum - withdrawAmount) < 1
-  const canSave = effectiveVendor && allocatedSum > 0 && !saving
+  const canSave = canQueryBatches && allocatedSum > 0 && !saving
 
-  React.useEffect(() => {
-    if (!row?.id || !effectiveVendor) {
+  const loadBatches = React.useCallback(() => {
+    if (!row?.id || !canQueryBatches) {
       setBatches([])
       setAmounts({})
       setExistingLinks([])
@@ -74,7 +80,11 @@ export function BankInboundLinkDialog({
     }
     setLoading(true)
     Promise.all([
-      getInboundBatchesForLink({ vendorCode: effectiveVendor, storeFilter }),
+      getInboundBatchesForLink({
+        vendorCode: effectiveVendor || undefined,
+        vendorName: otherName || selectedVendorName || undefined,
+        storeFilter,
+      }),
       getBankTransactionInboundLinks(row.id),
     ])
       .then(([batchesRes, links]) => {
@@ -87,12 +97,17 @@ export function BankInboundLinkDialog({
         setAmounts(init)
       })
       .finally(() => setLoading(false))
-  }, [row?.id, effectiveVendor, storeFilter])
+  }, [row?.id, canQueryBatches, effectiveVendor, otherName, selectedVendorName, storeFilter])
+
+  React.useEffect(() => {
+    loadBatches()
+  }, [loadBatches])
 
   React.useEffect(() => {
     if (row?.vendorCode?.trim()) setVendorCode(row.vendorCode)
     else setVendorCode("")
-  }, [row?.vendorCode])
+    setOtherVendorName("")
+  }, [row?.id, row?.vendorCode])
 
   const handleAmountChange = (batchId: number, value: string) => {
     const num = parseInt(String(value).replace(/\D/g, ""), 10) || 0
@@ -165,7 +180,25 @@ export function BankInboundLinkDialog({
               </div>
             )}
 
-            {effectiveVendor && (
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">
+                {tt("inVendorOther", "Other vendor (type name)")}
+              </label>
+              <Input
+                value={otherVendorName}
+                onChange={(e) => setOtherVendorName(e.target.value)}
+                placeholder={tt("inVendorOtherPlaceholder", "Enter shop / vendor name")}
+                className="h-9 text-sm"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
+                {tt(
+                  "inboundOtherVendorLinkHint",
+                  "For emergency buys registered as Other vendor, type the shop name to find inbound batches."
+                )}
+              </p>
+            </div>
+
+            {canQueryBatches && (
               <>
                 {loading ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">{tt("loading", "Loading...")}</p>
@@ -180,24 +213,7 @@ export function BankInboundLinkDialog({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[11px]"
-                        onClick={() => {
-                          if (!row?.id || !effectiveVendor) return
-                          setLoading(true)
-                          Promise.all([
-                            getInboundBatchesForLink({ vendorCode: effectiveVendor, storeFilter }),
-                            getBankTransactionInboundLinks(row.id),
-                          ])
-                            .then(([batchesRes, links]) => {
-                              setBatches(batchesRes || [])
-                              setExistingLinks(links || [])
-                              const init: Record<number, number> = {}
-                              for (const l of links || []) {
-                                if (l.inboundBatchId && l.amount > 0) init[l.inboundBatchId] = l.amount
-                              }
-                              setAmounts(init)
-                            })
-                            .finally(() => setLoading(false))
-                        }}
+                        onClick={() => loadBatches()}
                         disabled={loading}
                       >
                         {tt("store_refresh", "Refresh")}

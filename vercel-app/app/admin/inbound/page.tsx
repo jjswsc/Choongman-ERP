@@ -638,15 +638,18 @@ export default function InboundPage() {
         ...(krwAllocation ? { thbUnitCost: krwAllocation.lines[i]?.thbUnit } : {}),
       }))
       const storeName = resolveInboundStoreName()
-      const vendorCode =
-        inVendor === INBOUND_VENDOR_OTHER
-          ? undefined
-          : purchaseVendors.find((v) => v.name === vendorName)?.code
+      const isOtherVendor = inVendor === INBOUND_VENDOR_OTHER
+      const vendorCode = isOtherVendor
+        ? null
+        : purchaseVendors.find((v) => v.name === vendorName)?.code ?? null
       const parsedDiscount = parseInboundDiscountAmt(discountAmt)
+      const discountAlreadyInCosts =
+        !!editingBatchId && (recordedDiscountAmt != null && recordedDiscountAmt > 0)
       const fxOptions = {
         sourceCurrency,
         fxRate: sourceCurrency === "KRW" ? parsedFx : null,
-        discountAmt: parsedDiscount,
+        // 이미 단가에 반영된 할인은 재배분하지 않음
+        discountAmt: discountAlreadyInCosts ? 0 : parsedDiscount,
       }
 
       if (editingBatchId) {
@@ -654,11 +657,17 @@ export default function InboundPage() {
           batchId: editingBatchId,
           vendorName,
           vendorCode,
+          clearVendorCode: isOtherVendor,
           poNo: inPoNo.trim() || undefined,
           invoiceNo: inInvoiceNo.trim() || undefined,
           storeName: storeName || (includeCanonicalHq ? CANONICAL_OFFICE_STORE : auth?.store || ""),
           purchaseOrderId: editingPurchaseOrderId,
           list,
+          preserveDiscountAmt: discountAlreadyInCosts
+            ? recordedDiscountAmt || 0
+            : parsedDiscount > 0
+              ? parsedDiscount
+              : 0,
           ...fxOptions,
         })
         if (res.success) {
@@ -1511,12 +1520,24 @@ export default function InboundPage() {
         setInPoNo(String(b.poNo || "").trim())
         setInInvoiceNo(String(b.invoiceNo || "").trim())
         setInStore(storeValue)
-        setSourceCurrency(String(b.sourceCurrency || "").toUpperCase() === "KRW" ? "KRW" : "THB")
-        setThbSupplyTotal("")
+        const isKrwBatch = String(b.sourceCurrency || "").toUpperCase() === "KRW"
+        setSourceCurrency(isKrwBatch ? "KRW" : "THB")
+        // KRW 수정: 할인 반영된 THB 공급가 합을 채워 재저장 시 할인이 풀리지 않게 함
+        if (isKrwBatch) {
+          let thbSum = 0
+          for (const it of b.items || []) {
+            const q = Number(it.qty) || 0
+            const u = Number(it.unitCost) || 0
+            if (q > 0 && u >= 0) thbSum += q * u
+          }
+          setThbSupplyTotal(thbSum > 0 ? formatErpCostInputString(thbSum) : "")
+        } else {
+          setThbSupplyTotal("")
+        }
         setFxRate(
           b.fxRate != null && Number(b.fxRate) > 0 ? formatInboundFxRateInput(Number(b.fxRate)) : ""
         )
-        // 저장 시 할인은 이미 단가에 반영됨 → 재입력하면 이중 할인. 입력란은 비우고 안내만.
+        // 저장 시 할인은 이미 단가에 반영됨 → 재입력하면 이중 할인. 입력란은 비우고 잠금.
         setDiscountAmt("")
         setRecordedDiscountAmt(
           b.discountAmt != null && Number(b.discountAmt) > 0 ? Number(b.discountAmt) : null
@@ -2040,6 +2061,9 @@ export default function InboundPage() {
                     totals={cartTotals}
                     discountAmt={discountAmt}
                     recordedDiscountAmt={recordedDiscountAmt}
+                    discountLocked={
+                      !!editingBatchId && recordedDiscountAmt != null && recordedDiscountAmt > 0
+                    }
                     sourceCurrency={sourceCurrency}
                     fxRate={fxRate}
                     thbAllocation={krwAllocation}

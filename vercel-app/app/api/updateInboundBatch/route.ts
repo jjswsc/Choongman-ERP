@@ -55,9 +55,16 @@ type InboundLineBody = {
   thb_unit_cost?: number | string
 }
 
-async function resolveVendorCode(vendorName: string, preferred?: string | null): Promise<string | null> {
-  const pref = normalizeVendorCode(preferred)
-  if (pref) return pref
+async function resolveVendorCode(
+  vendorName: string,
+  preferred?: string | null,
+  opts?: { clearPreferred?: boolean }
+): Promise<string | null> {
+  // 기타 매입처로 바꿀 때는 기존 vendor_code를 쓰지 않는다
+  if (!opts?.clearPreferred) {
+    const pref = normalizeVendorCode(preferred)
+    if (pref) return pref
+  }
   if (!vendorName) return null
   try {
     const vRows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(vendorName)}`, {
@@ -107,13 +114,14 @@ export async function POST(request: NextRequest) {
 
     const existing = (await supabaseSelectFilter('inbound_batches', appendInventoryTenantFilter(`id=eq.${batchId}`, tenantScope), {
       limit: 1,
-      select: 'id,location,vendor_name,vendor_code,batch_date',
+      select: 'id,location,vendor_name,vendor_code,batch_date,discount_amt',
     })) as {
       id?: number
       location?: string
       vendor_name?: string
       vendor_code?: string
       batch_date?: string | null
+      discount_amt?: number | null
     }[] | null
     if (!existing?.[0]?.id) {
       return NextResponse.json({ success: false, message: '입고 배치를 찾을 수 없습니다.' }, { status: 404, headers })
@@ -134,7 +142,20 @@ export async function POST(request: NextRequest) {
     if (!list) {
       const patch: Record<string, unknown> = {}
       if (body.vendorName !== undefined) patch.vendor_name = String(body.vendorName || '').trim() || null
-      if (body.vendorCode !== undefined) patch.vendor_code = normalizeVendorCode(body.vendorCode) || null
+      const clearVendorCodeHeader =
+        body.clearVendorCode === true ||
+        body.clear_vendor_code === true ||
+        body.vendorCode === null ||
+        body.vendor_code === null
+      if (clearVendorCodeHeader) {
+        const nameForResolve =
+          body.vendorName !== undefined
+            ? String(body.vendorName || '').trim()
+            : String(existing[0].vendor_name || '').trim()
+        patch.vendor_code = await resolveVendorCode(nameForResolve, null, { clearPreferred: true })
+      } else if (body.vendorCode !== undefined) {
+        patch.vendor_code = normalizeVendorCode(body.vendorCode) || null
+      }
       if (body.poNo !== undefined) patch.po_no = String(body.poNo || '').trim() || null
       if (body.invoiceNo !== undefined) patch.invoice_no = String(body.invoiceNo || '').trim() || null
       if (body.invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(body.invoicePhotoUrl || '').trim() || null
@@ -246,21 +267,47 @@ export async function POST(request: NextRequest) {
     }
 
     const discountAmt = parseInboundDiscountAmt(body.discountAmt ?? body.discount_amt)
+    const hasPreserveField =
+      body.preserveDiscountAmt !== undefined || body.preserve_discount_amt !== undefined
+    const preserveDiscountAmt = parseInboundDiscountAmt(
+      body.preserveDiscountAmt ?? body.preserve_discount_amt
+    )
+    const existingDiscountAmt = parseInboundDiscountAmt(existing[0].discount_amt)
+    // 신규 할인(discountAmt>0)만 단가에 배분. 이미 반영된 할인은 preserve/기존 값으로 감사만 유지.
+    const allocateDiscount = discountAmt > 0
     const {
       grossTotal,
       batchDateYmd,
       lines: discountedLines,
-      discountAmt: appliedDiscount,
-    } = computeInboundRegisterTotals(resolvedLines, taxByCode, discountAmt)
+      discountAmt: newlyAppliedDiscount,
+    } = computeInboundRegisterTotals(resolvedLines, taxByCode, allocateDiscount ? discountAmt : 0)
+    let appliedDiscount = 0
+    if (allocateDiscount) {
+      appliedDiscount = newlyAppliedDiscount
+    } else if (hasPreserveField) {
+      appliedDiscount = preserveDiscountAmt
+    } else {
+      appliedDiscount = existingDiscountAmt
+    }
 
     const vendorName =
       body.vendorName !== undefined
         ? String(body.vendorName || '').trim()
         : String(list[0]?.vendor || '').trim() || String(existing[0].vendor_name || '').trim()
 
-    const preferredCode =
-      body.vendorCode !== undefined ? body.vendorCode : existing[0].vendor_code
-    const effectiveVendorCode = await resolveVendorCode(vendorName, preferredCode)
+    const clearVendorCode =
+      body.clearVendorCode === true ||
+      body.clear_vendor_code === true ||
+      body.vendorCode === null ||
+      body.vendor_code === null
+    const preferredCode = clearVendorCode
+      ? null
+      : body.vendorCode !== undefined || body.vendor_code !== undefined
+        ? body.vendorCode ?? body.vendor_code
+        : existing[0].vendor_code
+    const effectiveVendorCode = await resolveVendorCode(vendorName, preferredCode, {
+      clearPreferred: clearVendorCode,
+    })
 
     const location =
       body.storeName !== undefined

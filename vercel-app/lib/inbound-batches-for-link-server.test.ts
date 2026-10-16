@@ -14,6 +14,18 @@ describe('buildInboundVendorOrFilter', () => {
     )
   })
 
+  it('adds vendor_name ilike for free-text other vendor search', () => {
+    const clause = buildInboundVendorOrFilter(['TPD'], { ilikeName: 'ร้านฉุกเฉิน' })
+    const decoded = decodeURIComponent(clause)
+    expect(decoded).toContain('vendor_code.in.("TPD")')
+    expect(decoded).toContain('vendor_name.ilike."*ร้านฉุกเฉิน*"')
+  })
+
+  it('ilike-only filter when no exact match values', () => {
+    const clause = buildInboundVendorOrFilter([], { ilikeName: '7-11' })
+    expect(decodeURIComponent(clause)).toBe('&or=(vendor_name.ilike."*7-11*")')
+  })
+
   it('quotes vendor names containing commas and parentheses (PGRST100 regression)', () => {
     const clause = buildInboundVendorOrFilter(['1021', 'C.A.P. Intertrade Co.,Ltd.', 'Sawaddee Plastic (Thailand) Co.,Ltd.'])
     const decoded = decodeURIComponent(clause)
