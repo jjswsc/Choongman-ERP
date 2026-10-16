@@ -7220,7 +7220,7 @@ export const I18N_BASE_KO = {
   marketingInfluencersDirectoryOpenInquiry: '전체 조회에서 보기',
   marketingInfluencersDirectoryEmpty: '조건에 맞는 인플루언서 풀 항목이 없습니다.',
   marketingInfluencersInquiryEmpty: '조건에 맞는 인플루언서가 없습니다.',
-  marketingInfluencersSearchPlaceholder: '이름·팔로워·토픽·지점·캠페인·링크 검색…',
+  marketingInfluencersSearchPlaceholder: '이름·핸들·연락처·토픽·지점·캠페인·링크 (띄어쓰기 = AND)',
   marketingInfluencersInquiryColName: '인플루언서',
   marketingInfluencersInquiryColPeriod: '촬영·게시',
   marketingInfluencersInquiryColSummary: '토픽·형식·지점',

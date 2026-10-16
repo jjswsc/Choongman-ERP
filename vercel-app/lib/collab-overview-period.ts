@@ -21,12 +21,22 @@ export function getBangkokCurrentMonthRangeYmd(): { from: string; to: string } {
   return { from, to }
 }
 
-/** 목록·조회 롤링 구간: 종료=방콕 오늘, 시작=그로부터 30일 전(같은 시각 기준 30×24h) */
-export function getBangkokRolling30DayRangeYmd(): { from: string; to: string } {
+/** 목록·조회 롤링 구간: 종료=방콕 오늘, 시작=그로부터 N일 전(같은 시각 기준 N×24h) */
+export function getBangkokRollingDayRangeYmd(days: number): { from: string; to: string } {
   const to = getBangkokTodayYmd()
   const [yStr, mStr, dStr] = to.split("-")
   const anchor = new Date(`${yStr}-${mStr}-${dStr}T12:00:00+07:00`)
-  const fromMs = anchor.getTime() - 30 * 24 * 60 * 60 * 1000
+  const fromMs = anchor.getTime() - days * 24 * 60 * 60 * 1000
   const from = new Date(fromMs).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
   return { from, to }
+}
+
+/** 목록·조회 롤링 구간: 종료=방콕 오늘, 시작=그로부터 30일 전(같은 시각 기준 30×24h) */
+export function getBangkokRolling30DayRangeYmd(): { from: string; to: string } {
+  return getBangkokRollingDayRangeYmd(30)
+}
+
+/** 인플루언서 업로드 기록 기본 조회: 방콕 최근 90일 */
+export function getBangkokRolling90DayRangeYmd(): { from: string; to: string } {
+  return getBangkokRollingDayRangeYmd(90)
 }

@@ -162,6 +162,9 @@ function profileSearchBlob(p: MarketingInfluencerProfile): string {
     p.displayName,
     p.tiktokHandle,
     p.instagramHandle,
+    p.tiktokUrl,
+    p.instagramUrl,
+    p.facebookUrl,
     p.contact,
     p.contactName,
     p.contactPhone,
@@ -173,6 +176,7 @@ function profileSearchBlob(p: MarketingInfluencerProfile): string {
     p.ratePackage,
     p.extraCost,
     p.preferredStore,
+    p.rateCardUrl,
     ...p.contentCategories,
   ]
     .filter(Boolean)
@@ -205,7 +209,12 @@ function postDate(p: MarketingInfluencer): string {
   return (p.publishDate || "").trim() || tiktokVideoPostedYmd(p.platformLinks?.tiktok) || ""
 }
 
-type ProfileSort = "name" | "updated" | "followers" | "rate" | "inquired" | "uploads"
+/** 최근 업로드 비교용 날짜(게시일 → 촬영일 → TikTok 추정) */
+function postActivityDate(p: MarketingInfluencer): string {
+  return (p.publishDate || "").trim() || (p.shootingDate || "").trim() || tiktokVideoPostedYmd(p.platformLinks?.tiktok) || ""
+}
+
+type ProfileSort = "lastUpload" | "name" | "updated" | "followers" | "rate" | "inquired" | "uploads"
 
 function ProfileLiftSummary({ t, profileId, posts }: { t: TFn; profileId: string; posts: MarketingInfluencer[] }) {
   const [loading, setLoading] = React.useState(false)
@@ -298,7 +307,7 @@ export function MarketingInfluencerProfilesTab(props: {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
   const [search, setSearch] = React.useState("")
-  const [sortBy, setSortBy] = React.useState<ProfileSort>("name")
+  const [sortBy, setSortBy] = React.useState<ProfileSort>("lastUpload")
   const [uploadsFilter, setUploadsFilter] = React.useState<"" | "has" | "none">("")
   const [urlAddOpen, setUrlAddOpen] = React.useState(false)
   const [urlAddText, setUrlAddText] = React.useState("")
@@ -349,10 +358,27 @@ export function MarketingInfluencerProfilesTab(props: {
     const q = search.trim().toLowerCase()
     const tokens = q.split(/\s+/).filter(Boolean)
     const uploadsOf = (p: MarketingInfluencerProfile) => postsByProfile.get(p.id)?.length ?? 0
+    const lastUploadOf = (p: MarketingInfluencerProfile) => {
+      const posts = postsByProfile.get(p.id) || []
+      let max = ""
+      for (const post of posts) {
+        const d = postActivityDate(post)
+        if (d && d > max) max = d
+      }
+      return max
+    }
     const maxFollowers = (p: MarketingInfluencerProfile) =>
       Math.max(p.tiktokFollowers || 0, p.instagramFollowers || 0, p.facebookFollowers || 0)
     const byName = (a: MarketingInfluencerProfile, b: MarketingInfluencerProfile) => a.displayName.localeCompare(b.displayName)
     const cmp: Record<ProfileSort, (a: MarketingInfluencerProfile, b: MarketingInfluencerProfile) => number> = {
+      lastUpload: (a, b) => {
+        const da = lastUploadOf(a)
+        const db = lastUploadOf(b)
+        if (da && db) return db.localeCompare(da) || byName(a, b)
+        if (da && !db) return -1
+        if (!da && db) return 1
+        return (b.updatedAt || "").localeCompare(a.updatedAt || "") || byName(a, b)
+      },
       name: byName,
       updated: (a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "") || byName(a, b),
       followers: (a, b) => maxFollowers(b) - maxFollowers(a) || byName(a, b),
@@ -923,7 +949,7 @@ export function MarketingInfluencerProfilesTab(props: {
         <div className="w-40">
           <Label className="text-[10px] text-muted-foreground">{t("mktInfSortLabel")}</Label>
           <select className={cn(selectCn, "h-8 text-xs")} value={sortBy} onChange={(e) => setSortBy(e.target.value as ProfileSort)}>
-            {(["name", "updated", "followers", "rate", "inquired", "uploads"] as const).map((k) => (
+            {(["lastUpload", "name", "updated", "followers", "rate", "inquired", "uploads"] as const).map((k) => (
               <option key={k} value={k}>
                 {t(`mktInfSort_${k}`)}
               </option>

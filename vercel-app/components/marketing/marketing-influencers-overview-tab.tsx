@@ -10,13 +10,14 @@ import type { MarketingInfluencer, MarketingCampaign } from "@/lib/api-client"
 import { InfluencerPaymentBadge, InfluencerPostLinkIcons } from "@/components/marketing/marketing-influencer-post-badges"
 import {
   getBangkokCurrentMonthRangeYmd,
-  getBangkokRolling30DayRangeYmd,
+  getBangkokRolling90DayRangeYmd,
 } from "@/lib/collab-overview-period"
 
 type TFn = (key: string) => string
 
 type InquiryStatusFilter = "all" | "draft" | "ongoing" | "finish" | "unlinked"
 type PaymentFilter = "" | "unpaid" | "billed" | "paid" | "none"
+type InquirySort = "recent" | "name" | "cost"
 
 const overviewSelectClass =
   "h-8 w-full min-w-[6rem] max-w-[9rem] shrink-0 rounded-md border border-input bg-background px-1.5 text-[11px] disabled:opacity-60 cursor-pointer appearance-none"
@@ -120,12 +121,13 @@ export function MarketingInfluencersOverviewTab(props: {
     [onBulkLink, selected]
   )
 
-  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling30DayRangeYmd().from)
-  const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling30DayRangeYmd().to)
+  const [periodFrom, setPeriodFrom] = React.useState(() => getBangkokRolling90DayRangeYmd().from)
+  const [periodTo, setPeriodTo] = React.useState(() => getBangkokRolling90DayRangeYmd().to)
   const [searchDraft, setSearchDraft] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [inquiryStatusFilter, setInquiryStatusFilter] = React.useState<InquiryStatusFilter>("all")
   const [paymentFilter, setPaymentFilter] = React.useState<PaymentFilter>("")
+  const [sortBy, setSortBy] = React.useState<InquirySort>("recent")
   const lastApplySearchToken = React.useRef(0)
 
   React.useEffect(() => {
@@ -144,8 +146,26 @@ export function MarketingInfluencersOverviewTab(props: {
     setPeriodTo(r.to)
   }, [])
 
+  const resetPeriodTo90Days = React.useCallback(() => {
+    const r = getBangkokRolling90DayRangeYmd()
+    setPeriodFrom(r.from)
+    setPeriodTo(r.to)
+  }, [])
+
+  const clearPeriod = React.useCallback(() => {
+    setPeriodFrom("")
+    setPeriodTo("")
+  }, [])
+
   const runSearch = React.useCallback(() => {
     setSearchQuery(searchDraft.trim())
+  }, [searchDraft])
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => {
+      setSearchQuery(searchDraft.trim())
+    }, 250)
+    return () => window.clearTimeout(id)
   }, [searchDraft])
 
   const campaignById = React.useMemo(() => {
@@ -170,8 +190,13 @@ export function MarketingInfluencersOverviewTab(props: {
     if (paymentFilter) {
       rows = rows.filter((i) => (paymentFilter === "none" ? !i.paymentStatus : i.paymentStatus === paymentFilter))
     }
-    const q = searchQuery.trim().toLowerCase()
-    if (q) {
+    const tokens = searchQuery
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((tk) => tk.replace(/^@/, ""))
+    if (tokens.length) {
       rows = rows.filter((i) => {
         const camp = i.campaignId ? campaignById.get(String(i.campaignId)) : undefined
         const links = i.platformLinks || {}
@@ -181,8 +206,8 @@ export function MarketingInfluencersOverviewTab(props: {
           .join(" ")
         const menuStr = (i.providedMenus ?? [])
           .map((m) => {
-            const q = Math.max(1, Math.floor(Number(m.quantity) || 1))
-            return `${q}×${m.name} ${m.code}`
+            const qty = Math.max(1, Math.floor(Number(m.quantity) || 1))
+            return `${qty}×${m.name} ${m.code}`
           })
           .join(" ")
         const blob = [
@@ -204,11 +229,22 @@ export function MarketingInfluencersOverviewTab(props: {
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
-        return blob.includes(q)
+        return tokens.every((tk) => blob.includes(tk))
       })
     }
-    return rows
-  }, [influencers, periodFrom, periodTo, inquiryStatusFilter, paymentFilter, searchQuery, campaignById])
+    const activityDate = (i: MarketingInfluencer) => ((i.publishDate || i.shootingDate) ?? "").trim()
+    const costOf = (i: MarketingInfluencer) => ((i.actualCost ?? 0) > 0 ? i.actualCost ?? 0 : i.budget || 0)
+    const byName = (a: MarketingInfluencer, b: MarketingInfluencer) =>
+      ((a.contactName || a.name) ?? "").localeCompare((b.contactName || b.name) ?? "", "ko")
+    return [...rows].sort((a, b) => {
+      if (sortBy === "cost") return costOf(b) - costOf(a) || byName(a, b)
+      if (sortBy === "name") return byName(a, b)
+      const da = activityDate(a)
+      const db = activityDate(b)
+      if (da !== db) return db.localeCompare(da)
+      return byName(a, b)
+    })
+  }, [influencers, periodFrom, periodTo, inquiryStatusFilter, paymentFilter, searchQuery, campaignById, sortBy])
 
   /** 미지급·청구됨 건수와 금액(실지출, 없으면 예산) */
   const outstanding = React.useMemo(() => {
@@ -253,10 +289,43 @@ export function MarketingInfluencersOverviewTab(props: {
             variant="outline"
             size="sm"
             className="h-8 shrink-0 px-2 text-[11px]"
+            onClick={resetPeriodTo90Days}
+          >
+            {t("mktInfPeriodLast90")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 px-2 text-[11px]"
             onClick={resetPeriodToThisMonth}
           >
             {t("marketingCollabOverviewPeriodResetMonth")}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 px-2 text-[11px]"
+            onClick={clearPeriod}
+          >
+            {t("mktInfPeriodAll")}
+          </Button>
+          <div className="flex flex-col gap-0.5">
+            <Label className="whitespace-nowrap text-[9px] leading-tight text-muted-foreground">
+              {t("mktInfSortLabel")}
+            </Label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as InquirySort)}
+              className={overviewSelectClass}
+              disabled={loading}
+            >
+              <option value="recent">{t("mktInfSort_lastUpload")}</option>
+              <option value="name">{t("mktInfSort_name")}</option>
+              <option value="cost">{t("mktInfSort_cost")}</option>
+            </select>
+          </div>
           <div className="flex flex-col gap-0.5">
             <Label className="whitespace-nowrap text-[9px] leading-tight text-muted-foreground">
               {t("marketingAdsFilterStatus")}
