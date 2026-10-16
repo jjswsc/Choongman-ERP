@@ -1,27 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolvePettyCashEffectiveStore } from '@/lib/petty-cash-store-scope'
 import {
-  appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
   isSaasTenantQueryBlocked,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import {
+  buildPettyCashLedgerWithBalances,
+  fetchPettyCashOpeningBalances,
+  fetchPettyCashRowsInPeriod,
+} from '@/lib/petty-cash-ledger-server'
+import { getBangkokMonthRange } from '@/lib/bangkok-time'
 
-/** 잔액 계산용 전체 이력. getPettyCashList 와 동일 상한 */
-const PETTY_CASH_LEDGER_SELECT_LIMIT = 20000
-
-function toDateStr(val: string | Date | null | undefined): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-/** 해당 월 거래 전체 + 실시간 잔액 */
+/** 해당 월(또는 기간) 거래 + 실시간 잔액 — DB 날짜 필터로 20000 ASC 잘림 방지 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -39,7 +32,7 @@ export async function GET(request: NextRequest) {
   const scopeFilter = String(searchParams.get('scopeFilter') || searchParams.get('scope') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const departmentFilter = String(searchParams.get('departmentFilter') || searchParams.get('department') || '').trim()
-  let yearMonth = String(searchParams.get('yearMonth') || searchParams.get('yearMonth') || '').trim()
+  let yearMonth = String(searchParams.get('yearMonth') || '').trim()
   const startParam = String(searchParams.get('startStr') || searchParams.get('startDate') || '').trim()
   const endParam = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
   const userStore = String(auth.store || '').trim()
@@ -69,200 +62,36 @@ export async function GET(request: NextRequest) {
     endStr = endParam.slice(0, 10)
   } else {
     if (yearMonth.length < 7) {
-      const n = new Date()
-      yearMonth = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0')
+      yearMonth = getBangkokMonthRange().yearMonth
     }
-    const parts = yearMonth.split('-')
-    const year = parseInt(parts[0], 10) || new Date().getFullYear()
-    const month = parseInt(parts[1], 10) || 1
-    startStr = String(year) + '-' + String(month).padStart(2, '0') + '-01'
-    const lastDay = new Date(year, month, 0).getDate()
-    endStr = String(year) + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0')
+    const range = getBangkokMonthRange(yearMonth.slice(0, 7))
+    startStr = range.startStr
+    endStr = range.endStr
   }
 
   try {
-    let rows: {
-      id?: number
-      store?: string
-      trans_date?: string
-      trans_type?: string
-      amount?: number
-      memo?: string
-      receipt_url?: string
-      user_name?: string
-      account_subject_id?: number
-      invoice_received?: boolean
-      invoice_no?: string | null
-      invoice_photo_url?: string | null
-      vat_amount?: number | null
-      vendor_code?: string | null
-    }[] = []
-    if (effectiveStore) {
-      if (effectiveStore === 'Office' && !departmentFilter) {
-        const baseFilter =
-          'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)'
-        const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
-        try {
-          rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
-            order: 'trans_date.asc,id.asc',
-            limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
-            select: PETTY_CASH_LIST_COLS,
-          })) as typeof rows
-        } catch (e) {
-          if (isMissingSaasTenantColumnError(e)) {
-            markSaasTenantColumnMissing('petty_cash_transactions')
-            rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
-              order: 'trans_date.asc,id.asc',
-              limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
-              select: PETTY_CASH_LIST_COLS,
-            })) as typeof rows
-          } else {
-            throw e
-          }
-        }
-      } else {
-        const baseFilter = 'store=eq.' + encodeURIComponent(effectiveStore)
-        const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
-        try {
-          rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
-            order: 'trans_date.asc,id.asc',
-            limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
-            select: PETTY_CASH_LIST_COLS,
-          })) as typeof rows
-        } catch (e) {
-          if (isMissingSaasTenantColumnError(e)) {
-            markSaasTenantColumnMissing('petty_cash_transactions')
-            rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
-              order: 'trans_date.asc,id.asc',
-              limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
-              select: PETTY_CASH_LIST_COLS,
-            })) as typeof rows
-          } else {
-            throw e
-          }
-        }
-      }
-    } else {
-      const baseFilter = 'id=gt.0'
-      const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
-      try {
-        rows = (await supabaseSelectFilter('petty_cash_transactions', filter, {
-          order: 'trans_date.asc,id.asc',
-          limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
-          select: PETTY_CASH_LIST_COLS,
-        })) as typeof rows
-      } catch (e) {
-        if (isMissingSaasTenantColumnError(e)) {
-          markSaasTenantColumnMissing('petty_cash_transactions')
-          rows = (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
-            order: 'trans_date.asc,id.asc',
-            limit: PETTY_CASH_LEDGER_SELECT_LIMIT,
-            select: PETTY_CASH_LIST_COLS,
-          })) as typeof rows
-        } else {
-          throw e
-        }
-      }
-    }
+    const [rows, openingByStore] = await Promise.all([
+      fetchPettyCashRowsInPeriod({
+        startStr,
+        endStr,
+        effectiveStore,
+        departmentFilter,
+        tenantScope,
+      }),
+      fetchPettyCashOpeningBalances({
+        beforeDate: startStr,
+        effectiveStore,
+        departmentFilter,
+        tenantScope,
+      }),
+    ])
 
-    const startD = new Date(startStr + 'T00:00:00')
-    const endD = new Date(endStr + 'T23:59:59')
-    const storePrevBal: Record<string, number> = {}
-    const inMonth: {
-      id: number
-      store: string
-      trans_date: string
-      trans_type: string
-      amount: number
-      memo: string
-      receipt_url?: string
-      user_name: string
-      account_subject_id?: number | null
-      invoice_received?: boolean
-      invoice_no?: string | null
-      invoice_photo_url?: string | null
-      vat_amount?: number | null
-      vendor_code?: string | null
-    }[] = []
-
-    for (const r of rows || []) {
-      const dt = toDateStr(r.trans_date)
-      if (!dt) continue
-      const store = String(r.store || '').trim()
-      if (!store) continue
-      const amt = Number(r.amount) || 0
-      const dtD = new Date(dt + 'T12:00:00')
-
-      if (dtD < startD) {
-        if (!storePrevBal[store]) storePrevBal[store] = 0
-        storePrevBal[store] += amt
-        continue
-      }
-      if (dtD > endD) continue
-      inMonth.push({
-        id: r.id || 0,
-        store,
-        trans_date: dt,
-        trans_type: String(r.trans_type || 'expense').trim(),
-        amount: amt,
-        memo: String(r.memo || '').trim(),
-        receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
-        user_name: String(r.user_name || '').trim(),
-        account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
-        invoice_received: Boolean(r.invoice_received),
-        invoice_no: r.invoice_no,
-        invoice_photo_url: r.invoice_photo_url,
-        vat_amount: r.vat_amount,
-        vendor_code: r.vendor_code,
-      })
-    }
-
-    inMonth.sort((a, b) => {
+    const list = buildPettyCashLedgerWithBalances(rows, openingByStore)
+    // 월별 화면: 매장·날짜 ASC (기존과 동일)
+    list.sort((a, b) => {
       const c = a.store.localeCompare(b.store)
-      return c !== 0 ? c : a.trans_date.localeCompare(b.trans_date)
+      return c !== 0 ? c : a.trans_date.localeCompare(b.trans_date) || a.id - b.id
     })
-
-    const storeBal: Record<string, number> = { ...storePrevBal }
-    const list: {
-      id: number
-      store: string
-      trans_date: string
-      trans_type: string
-      amount: number
-      balance_after: number
-      memo: string
-      receipt_url?: string
-      user_name: string
-      account_subject_id?: number | null
-      accountSubjectId?: number | null
-      invoiceReceived?: boolean
-      invoiceNo?: string
-      invoicePhotoUrl?: string
-      vatAmount?: number
-      vendorCode?: string
-    }[] = []
-    for (const it of inMonth) {
-      if (!storeBal[it.store]) storeBal[it.store] = 0
-      storeBal[it.store] += it.amount
-      list.push({
-        id: it.id,
-        store: it.store,
-        trans_date: it.trans_date,
-        trans_type: it.trans_type,
-        amount: it.amount,
-        balance_after: storeBal[it.store],
-        memo: it.memo,
-        receipt_url: it.receipt_url,
-        user_name: it.user_name,
-        account_subject_id: it.account_subject_id ?? null,
-        accountSubjectId: it.account_subject_id ?? null,
-        invoiceReceived: Boolean(it.invoice_received),
-        ...(String(it.invoice_no || '').trim() ? { invoiceNo: String(it.invoice_no).trim() } : {}),
-        ...(String(it.invoice_photo_url || '').trim() ? { invoicePhotoUrl: String(it.invoice_photo_url).trim() } : {}),
-        ...(Number(it.vat_amount || 0) > 0 ? { vatAmount: Number(it.vat_amount) } : {}),
-        ...(String(it.vendor_code || '').trim() ? { vendorCode: String(it.vendor_code).trim() } : {}),
-      })
-    }
 
     return NextResponse.json(list, { headers })
   } catch (e) {

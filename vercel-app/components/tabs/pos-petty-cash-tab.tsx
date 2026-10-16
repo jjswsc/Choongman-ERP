@@ -31,6 +31,7 @@ import { ListPaginationBar } from '@/components/list-pagination-bar'
 import { cn } from '@/lib/utils'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { scopedPettyCashStoreOptions } from '@/lib/petty-cash-store-scope'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 function normalizePettyCashListPayload(data: unknown): { items: PettyCashItem[]; total: number; page: number } {
   if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as { items?: unknown }).items)) {
@@ -49,7 +50,7 @@ const typeKeys: Record<string, string> = {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 /** POS용 패티캐쉬 - 매장 스코프, 시재와 별도 */
@@ -75,7 +76,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
   const listPageRef = React.useRef(1)
 
   const [addStore, setAddStore] = React.useState('')
-  const [addType, setAddType] = React.useState<'receive' | 'expense' | 'replenish' | 'settle'>('receive')
+  const [addType, setAddType] = React.useState<'receive' | 'expense' | 'replenish' | 'settle'>('expense')
   const [addDate, setAddDate] = React.useState(todayStr)
   const [addAmount, setAddAmount] = React.useState('')
   const [addMemo, setAddMemo] = React.useState('')

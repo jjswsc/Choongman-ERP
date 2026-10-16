@@ -1,23 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolvePettyCashEffectiveStore } from '@/lib/petty-cash-store-scope'
 import {
-  appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
   isSaasTenantQueryBlocked,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
 } from '@/lib/saas-tenant-scope'
-
-function toDateStr(val: string | Date | null | undefined): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
+import {
+  buildPettyCashLedgerWithBalances,
+  fetchPettyCashOpeningBalances,
+  fetchPettyCashRowsInPeriod,
+} from '@/lib/petty-cash-ledger-server'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -36,8 +32,8 @@ export async function GET(request: NextRequest) {
     )
   }
   const { searchParams } = new URL(request.url)
-  const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
-  const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
+  let startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
+  let endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
   const scopeFilter = String(searchParams.get('scopeFilter') || searchParams.get('scope') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const departmentFilter = String(searchParams.get('departmentFilter') || searchParams.get('department') || '').trim()
@@ -67,113 +63,30 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  // 기간 없으면 방콕 오늘만 (전체 이력 2만 건 ASC 잘림으로 최근 건이 빠지던 경로 차단)
+  const today = getBangkokTodayDateString()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr)) startStr = today
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endStr)) endStr = today
+
   try {
-    let rows: {
-      id: number
-      store?: string
-      trans_date?: string
-      trans_type?: string
-      amount?: number
-      balance_after?: number
-      memo?: string
-      receipt_url?: string
-      user_name?: string
-      account_subject_id?: number
-      invoice_received?: boolean
-      invoice_no?: string | null
-      invoice_photo_url?: string | null
-      vat_amount?: number | null
-      vendor_code?: string | null
-    }[] = []
-    // 잔액 계산을 위해 날짜순(오래된순) 조회
-    if (effectiveStore) {
-      if (effectiveStore === 'Office' && !departmentFilter) {
-        rows = (await supabaseSelectFilter(
-          'petty_cash_transactions',
-          appendSaasTenantFilter(
-            'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
-            tenantScope,
-            'petty_cash_transactions'
-          ),
-          { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
-        )) as typeof rows
-      } else {
-        rows = (await supabaseSelectFilter(
-          'petty_cash_transactions',
-          appendSaasTenantFilter(
-            'store=eq.' + encodeURIComponent(effectiveStore),
-            tenantScope,
-            'petty_cash_transactions'
-          ),
-          { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
-        )) as typeof rows
-      }
-    } else {
-      rows = (await supabaseSelectFilter('petty_cash_transactions', appendSaasTenantFilter('id=gt.0', tenantScope, 'petty_cash_transactions'), {
-        order: 'trans_date.asc,id.asc',
-        limit: 20000,
-        select: PETTY_CASH_LIST_COLS,
-      })) as typeof rows
-    }
+    const [rows, openingByStore] = await Promise.all([
+      fetchPettyCashRowsInPeriod({
+        startStr,
+        endStr,
+        effectiveStore,
+        departmentFilter,
+        tenantScope,
+      }),
+      fetchPettyCashOpeningBalances({
+        beforeDate: startStr,
+        effectiveStore,
+        departmentFilter,
+        tenantScope,
+      }),
+    ])
 
-    const startD = startStr ? new Date(startStr + 'T00:00:00') : null
-    const endD = endStr ? new Date(endStr + 'T23:59:59') : null
-
-    // 날짜순(이미 asc 조회됨)으로 잔액 계산 (DB에 balance_after가 없을 수 있음)
-    const storeBal: Record<string, number> = {}
-    const list: {
-      id: number
-      store: string
-      trans_date: string
-      trans_type: string
-      amount: number
-      balance_after: number | null
-      memo: string
-      receipt_url?: string
-      user_name: string
-      account_subject_id?: number | null
-      accountSubjectId?: number | null
-      invoiceReceived?: boolean
-      invoiceNo?: string
-      invoicePhotoUrl?: string
-      vatAmount?: number
-      vendorCode?: string
-    }[] = []
-
-    for (const r of rows || []) {
-      const dt = toDateStr(r.trans_date)
-      if (!dt) continue
-      const store = String(r.store || '').trim()
-      if (!store) continue
-      const amt = Number(r.amount) || 0
-      if (!storeBal[store]) storeBal[store] = 0
-      storeBal[store] += amt
-
-      const dtD = new Date(dt + 'T12:00:00')
-      if (startD && dtD < startD) continue
-      if (endD && dtD > endD) continue
-
-      list.push({
-        id: r.id,
-        store,
-        trans_date: dt,
-        trans_type: String(r.trans_type || 'expense').trim(),
-        amount: amt,
-        balance_after: storeBal[store],
-        memo: String(r.memo || '').trim(),
-        receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
-        user_name: String(r.user_name || '').trim(),
-        account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
-        accountSubjectId: r.account_subject_id != null ? Number(r.account_subject_id) : null,
-        invoiceReceived: Boolean(r.invoice_received),
-        ...(String(r.invoice_no || '').trim() ? { invoiceNo: String(r.invoice_no).trim() } : {}),
-        ...(String(r.invoice_photo_url || '').trim() ? { invoicePhotoUrl: String(r.invoice_photo_url).trim() } : {}),
-        ...(Number(r.vat_amount || 0) > 0 ? { vatAmount: Number(r.vat_amount) } : {}),
-        ...(String(r.vendor_code || '').trim() ? { vendorCode: String(r.vendor_code).trim() } : {}),
-      })
-    }
-
-    // 최신순으로 정렬 (화면 표시용)
+    const list = buildPettyCashLedgerWithBalances(rows, openingByStore)
+    // 최신순 (화면 표시용)
     list.sort((a, b) => b.trans_date.localeCompare(a.trans_date) || b.id - a.id)
 
     const total = list.length

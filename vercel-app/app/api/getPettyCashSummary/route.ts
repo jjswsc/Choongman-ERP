@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseRpc, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseRpc } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { resolvePettyCashEffectiveStore } from '@/lib/petty-cash-store-scope'
 import { applyPettyCashClientFilters, computePettyCashPeriodSummary } from '@/lib/petty-cash-search'
-import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
 import type { PettyCashItem } from '@/lib/api-client'
 import {
-  appendSaasTenantFilter,
   isMissingSaasTenantColumnError,
   isSaasTenantQueryBlocked,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import {
+  fetchPettyCashRowsInPeriod,
+  toPettyCashDateStr,
+} from '@/lib/petty-cash-ledger-server'
 
 type RpcRow = {
   expense_total?: number
@@ -48,13 +50,6 @@ const EMPTY_SUMMARY = {
   source: 'rpc' as const,
 }
 
-function toDateStr(val: string | Date | null | undefined): string {
-  if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
 async function fallbackSummaryFromSelect(
   startStr: string,
   endStr: string,
@@ -63,61 +58,21 @@ async function fallbackSummaryFromSelect(
   filterOpts: Parameters<typeof applyPettyCashClientFilters>[1],
   tenantScope: SaasTenantScope
 ) {
-  let rows: {
-    trans_date?: string
-    trans_type?: string
-    amount?: number
-    memo?: string
-    user_name?: string
-    account_subject_id?: number
-    invoice_received?: boolean
-    vat_amount?: number | null
-  }[] = []
+  const rows = await fetchPettyCashRowsInPeriod({
+    startStr,
+    endStr,
+    effectiveStore,
+    departmentFilter,
+    tenantScope,
+  })
 
-  const runSelect = async (baseFilter: string) => {
-    const filter = appendSaasTenantFilter(baseFilter, tenantScope, 'petty_cash_transactions')
-    try {
-      return (await supabaseSelectFilter('petty_cash_transactions', filter, {
-        order: 'trans_date.asc,id.asc',
-        limit: 20000,
-        select: PETTY_CASH_LIST_COLS,
-      })) as typeof rows
-    } catch (e) {
-      if (isMissingSaasTenantColumnError(e)) {
-        markSaasTenantColumnMissing('petty_cash_transactions')
-        return (await supabaseSelectFilter('petty_cash_transactions', baseFilter, {
-          order: 'trans_date.asc,id.asc',
-          limit: 20000,
-          select: PETTY_CASH_LIST_COLS,
-        })) as typeof rows
-      }
-      throw e
-    }
-  }
-
-  if (effectiveStore) {
-    if (effectiveStore === 'Office' && !departmentFilter) {
-      rows = await runSelect(
-        'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)'
-      )
-    } else {
-      rows = await runSelect('store=eq.' + encodeURIComponent(effectiveStore))
-    }
-  } else {
-    rows = await runSelect('id=gt.0')
-  }
-
-  const startD = new Date(startStr + 'T00:00:00')
-  const endD = new Date(endStr + 'T23:59:59')
   const inRange: PettyCashItem[] = []
   for (const r of rows || []) {
-    const dt = toDateStr(r.trans_date)
+    const dt = toPettyCashDateStr(r.trans_date)
     if (!dt) continue
-    const dtD = new Date(dt + 'T12:00:00')
-    if (dtD < startD || dtD > endD) continue
     inRange.push({
       id: 0,
-      store: '',
+      store: String(r.store || ''),
       trans_date: dt,
       trans_type: String(r.trans_type || 'expense'),
       amount: Number(r.amount) || 0,
@@ -132,7 +87,11 @@ async function fallbackSummaryFromSelect(
   }
   const filtered = applyPettyCashClientFilters(inRange, filterOpts)
   const summary = computePettyCashPeriodSummary(filtered)
-  return { ...summary, source: 'fallback' as const, truncated: inRange.length >= 20000 }
+  return {
+    ...summary,
+    source: 'fallback' as const,
+    truncated: inRange.length >= 100_000,
+  }
 }
 
 export async function GET(request: NextRequest) {

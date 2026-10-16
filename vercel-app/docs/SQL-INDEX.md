@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **772**개 · 접두어 그룹 **97**개
+- `sql/` 최상위: **773**개 · 접두어 그룹 **97**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **69**개
 
@@ -973,6 +973,14 @@
 
 </details>
 
+<details><summary><code>inbound_*</code> (3)</summary>
+
+- [`inbound_batches_discount_amt.sql`](../sql/inbound_batches_discount_amt.sql) — log
+- [`inbound_krw_fx_fields.sql`](../sql/inbound_krw_fx_fields.sql)
+- [`inbound_po_receive_diagnostic.sql`](../sql/inbound_po_receive_diagnostic.sql) — diagnose
+
+</details>
+
 <details><summary><code>meta_*</code> (3)</summary>
 
 - [`meta_ad_account_switch_01_preview.sql`](../sql/meta_ad_account_switch_01_preview.sql) — preview
@@ -1051,13 +1059,6 @@
 
 - [`hq_outbound_duplicate_cleanup.sql`](../sql/hq_outbound_duplicate_cleanup.sql) — apply
 - [`hq_warehouse_stock_movement_agg.sql`](../sql/hq_warehouse_stock_movement_agg.sql)
-
-</details>
-
-<details><summary><code>inbound_*</code> (2)</summary>
-
-- [`inbound_krw_fx_fields.sql`](../sql/inbound_krw_fx_fields.sql)
-- [`inbound_po_receive_diagnostic.sql`](../sql/inbound_po_receive_diagnostic.sql) — diagnose
 
 </details>
 

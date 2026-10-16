@@ -42,7 +42,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
-import { getBangkokRecentYearMonths, getBangkokMonthRange } from "@/lib/bangkok-time"
+import { getBangkokRecentYearMonths, getBangkokMonthRange, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useAuth } from "@/lib/auth-context"
 import { canSearchAllPettyCashStores, scopedPettyCashStoreOptions } from "@/lib/petty-cash-store-scope"
 import {
@@ -93,7 +93,7 @@ import {
 } from "@/lib/petty-cash-search"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 const typeKeys: Record<string, string> = {
@@ -181,10 +181,7 @@ export function PettyCashTab({
   const [vendors, setVendors] = useState<VendorForPurchase[]>([])
   const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
   const [monthlySearchMode, setMonthlySearchMode] = useState<"month" | "period">("month")
-  const [monthlyPeriodStart, setMonthlyPeriodStart] = useState(() => {
-    const n = new Date()
-    return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-01"
-  })
+  const [monthlyPeriodStart, setMonthlyPeriodStart] = useState(() => getBangkokMonthRange().startStr)
   const [monthlyPeriodEnd, setMonthlyPeriodEnd] = useState(todayStr)
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
   const receiptCameraInputRef = useRef<HTMLInputElement>(null)
