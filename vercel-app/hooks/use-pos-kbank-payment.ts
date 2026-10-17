@@ -6,6 +6,7 @@ import type { KbankOutcomeState } from '@/components/pos/terminal/pos-terminal-d
 import {
   executeKbankCancelQr,
   executeKbankCheckStatus,
+  executeKbankFinalizeCounterOrder,
   executeKbankGenerateQr,
   executeKbankSettlement,
   executeKbankVoidPayment,
@@ -78,6 +79,13 @@ export interface UsePosKbankPaymentParams {
   t: (key: string) => string
   lang: LangCode
   setCustomerDisplayPaymentMessage: (msg: string) => void
+  /** pending finalize 없을 때 서버 마감 성공 후 (테이블 비우기·refetch) */
+  onAfterKbankCounterFinalize?: (result: {
+    orderId: number
+    tableName?: string | null
+    status?: string | null
+    storeCode?: string | null
+  }) => void
 }
 
 export interface KbankQrPaymentResult {
@@ -143,7 +151,8 @@ export interface UsePosKbankPaymentReturn {
   ) => string
   registerPendingKbankFinalize: (
     partnerTxnId: string,
-    fn: (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>
+    fn: (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>,
+    orderId?: number | null
   ) => void
   purgeKbankPendingFinalize: (partnerTxnId: string) => void
 
@@ -169,6 +178,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     t,
     lang,
     setCustomerDisplayPaymentMessage,
+    onAfterKbankCounterFinalize,
   } = params
 
   // -------------------------------------------------------------------------
@@ -219,9 +229,14 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
   const deferredKbankApprovalRef = useRef<
     Record<string, { txnNo?: string; cardBrands?: string[] }>
   >({})
+  /** partnerTxnUid → order id (승인 폴백·Cancel 시) */
+  const kbankPendingOrderIdRef = useRef<Record<string, number>>({})
+  const kbankActiveOrderIdRef = useRef(0)
   /** partnerTxnUid → โต๊ะ/주문 라벨 (성공 sticky) */
   const kbankQrDisplayLabelByTxnRef = useRef<Record<string, string>>({})
   const [linkposQrBridgeStatus, setLinkposQrBridgeStatus] = useState<'idle' | 'ok' | 'failed'>('idle')
+  const onAfterKbankCounterFinalizeRef = useRef(onAfterKbankCounterFinalize)
+  onAfterKbankCounterFinalizeRef.current = onAfterKbankCounterFinalize
 
   useEffect(() => {
     kbankOpsTxnUidRef.current = String(kbankOpsTxnUid || '').trim()
@@ -254,6 +269,8 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     kbankCcInquiryTriggeredRef.current = ''
     pendingKbankFinalizeRef.current = {}
     deferredKbankApprovalRef.current = {}
+    kbankPendingOrderIdRef.current = {}
+    kbankActiveOrderIdRef.current = 0
     setCustomerDisplayPaymentMessage('')
   }, [isKbankPilotStore, currentStoreId, setCustomerDisplayPaymentMessage])
 
@@ -504,11 +521,14 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
   const registerPendingKbankFinalize = useCallback(
     (
       partnerTxnId: string,
-      fn: (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>
+      fn: (approval: { txnNo?: string; cardBrands?: string[] }) => void | Promise<void>,
+      orderId?: number | null
     ) => {
       const key = String(partnerTxnId || '').trim()
       if (!key) return
       pendingKbankFinalizeRef.current[key] = fn
+      const oid = Number(orderId || 0)
+      if (oid > 0) kbankPendingOrderIdRef.current[key] = oid
       const deferred = deferredKbankApprovalRef.current[key]
       if (deferred) {
         tryRunKbankPendingFinalize(key, deferred)
@@ -522,6 +542,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
     if (!key) return
     delete pendingKbankFinalizeRef.current[key]
     delete deferredKbankApprovalRef.current[key]
+    delete kbankPendingOrderIdRef.current[key]
     delete kbankQrDisplayLabelByTxnRef.current[key]
   }, [])
 
@@ -572,6 +593,10 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const brands = input.cardBrands ?? kbankOpsCardBrands
       const approval = { txnNo: input.approvalCode, cardBrands: brands }
       const alreadyNotified = kbankCallbackNotifiedTxRef.current === refId
+      const paidAmount =
+        input.amount != null && Number.isFinite(input.amount)
+          ? input.amount
+          : Math.max(0, Number(liveKbankQrAmount || 0))
       if (!alreadyNotified) {
         clearKbankQrFromLinkpos()
         setLiveKbankQrPayload('')
@@ -581,16 +606,39 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
         }
         if (!tryRunKbankPendingFinalize(refId, approval)) {
           deferredKbankApprovalRef.current[refId] = approval
+          const fallbackOrderId =
+            Number(kbankPendingOrderIdRef.current[refId] || 0) ||
+            Number(kbankActiveOrderIdRef.current || 0) ||
+            0
+          if (fallbackOrderId > 0 && currentStoreId) {
+            void (async () => {
+              try {
+                const settled = await executeKbankFinalizeCounterOrder({
+                  orderId: fallbackOrderId,
+                  storeCode: currentStoreId,
+                  paymentQrAmount: paidAmount,
+                })
+                if (!settled.success) {
+                  console.warn('kbank finalize-counter-order fallback:', settled.message)
+                  return
+                }
+                onAfterKbankCounterFinalizeRef.current?.({
+                  orderId: settled.orderId ?? fallbackOrderId,
+                  tableName: settled.tableName,
+                  status: settled.status,
+                  storeCode: settled.storeCode || currentStoreId,
+                })
+              } catch (e) {
+                console.warn('kbank finalize-counter-order fallback error:', e)
+              }
+            })()
+          }
         }
       }
       kbankCallbackNotifiedTxRef.current = refId
       setKbankCallbackState('received')
       clearKbankApiPause()
       setCustomerDisplayPaymentMessage('')
-      const paidAmount =
-        input.amount != null && Number.isFinite(input.amount)
-          ? input.amount
-          : Math.max(0, Number(liveKbankQrAmount || 0))
       const paidTxnNo = String(input.approvalCode || '').trim().slice(0, 20)
       setKbankPaidVoidSnapshot((prev) => ({
         partnerTxnUid: refId,
@@ -773,6 +821,8 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       try {
       clearKbankQrSession()
       setKbankPaidVoidSnapshot(null)
+      const activeOid = Number(context?.orderId || 0)
+      if (activeOid > 0) kbankActiveOrderIdRef.current = activeOid
       const sessionGen = ++kbankQrSessionGenRef.current
       setCustomerDisplayPaymentMessage(t('posPaymentQr') + ' ' + (t('posLoading') || '로딩 중'))
 

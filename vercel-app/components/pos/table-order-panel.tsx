@@ -59,6 +59,10 @@ import {
 import { resolvePosOrderItemMenuDisplayName } from '@/lib/pos-order-item-display-name'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import { canStartPosLinePartialCancel, orderPaymentsSum } from '@/lib/pos-order-line-update'
+import {
+  isPosOrderFullyPaidButOpen,
+  resolveCounterKbankQrCloseStatus,
+} from '@/lib/pos-kbank-counter-qr-finalize'
 import { kitchenRoutingItemFromOrderItem } from '@/lib/pos-kitchen-slip-routing'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
@@ -403,8 +407,21 @@ export function TableOrderPanel({
   const servedCount = activeItems.filter((it) => itemServed[it.id]).length
   const allServed = activeItems.length > 0 ? servedCount >= activeItems.length : false
   const isServedReadyForPayment = order?.status === 'ready' && allServed
+  const fullyPaidButOpen = Boolean(
+    order &&
+      isPosOrderFullyPaidButOpen({
+        status: order.status,
+        total: order.total,
+        paymentCash: order.paymentCash,
+        paymentCard: order.paymentCard,
+        paymentQr: order.paymentQr,
+        paymentOther: order.paymentOther,
+        paymentDeliveryApp: order.paymentDeliveryApp,
+      })
+  )
 
   const [cancelling, setCancelling] = useState(false)
+  const [closingPaidBill, setClosingPaidBill] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
   const [moveTargetName, setMoveTargetName] = useState('')
@@ -601,6 +618,50 @@ export function TableOrderPanel({
 
   const handlePayClick = () => {
     onPay?.()
+  }
+
+  /** QR 등 전액 입금됐는데 status가 열린 채 남은 주문 — 원탭 마감 (이중 QR 방지) */
+  const handleCloseFullyPaidBill = async () => {
+    if (!order || closingPaidBill) return
+    const id = Number(order.id)
+    if (!(id > 0)) return
+    const orderTypeKey =
+      order.type === 'dine-in' ? 'dine_in' : order.type === 'takeout' ? 'takeout' : 'delivery'
+    const targetStatus = resolveCounterKbankQrCloseStatus(orderTypeKey)
+    setClosingPaidBill(true)
+    try {
+      if (isDemo && onDemoOrderReplace) {
+        onDemoOrderReplace({ ...order, status: targetStatus })
+        await onLeaveTable?.()
+        onServed?.()
+        return
+      }
+      const first = await updatePosOrderStatus({ id, status: targetStatus })
+      if (!first.success) {
+        const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
+        const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+        if (!canRetry) {
+          await appAlert(msg)
+          return
+        }
+        if (!await appConfirm(`${msg}\n\n후속 처리를 다시 시도할까요?`)) return
+        const retried = await updatePosOrderStatus({
+          id,
+          status: targetStatus,
+          retrySideEffects: true,
+        })
+        if (!retried.success) {
+          await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+          return
+        }
+      }
+      await onLeaveTable?.()
+      onServed?.()
+    } catch (e) {
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setClosingPaidBill(false)
+    }
   }
 
   const handleServeComplete = async () => {
@@ -1065,11 +1126,52 @@ export function TableOrderPanel({
               onOrderBalanceChange={setQrBalance}
             />
           ) : null}
-          {isPaidPrepaid && showTableActions ? (
+          {(isPaidPrepaid || fullyPaidButOpen) && showTableActions ? (
             <div className="@container/tbl flex flex-wrap items-center gap-1">{renderTableActions()}</div>
           ) : null}
 
-          {isPaidPrepaid ? (
+          {fullyPaidButOpen ? (
+            <>
+              <div className="flex flex-col gap-1 rounded-lg bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
+                <div className="flex items-center gap-2 text-base font-semibold">
+                  <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span>
+                    {t('posFullyPaidButOpenHint') ||
+                      '결제는 완료됐지만 테이블이 아직 열려 있습니다. 아래 버튼으로 마감하세요.'}
+                  </span>
+                </div>
+                <div className="pl-7 text-sm tabular-nums text-muted-foreground">
+                  {(Number(order?.total) || 0).toLocaleString()} ฿ ·{' '}
+                  {t('posPaymentQr') || 'QR'}{' '}
+                  {(Number(order?.paymentQr) || 0).toLocaleString()} ฿
+                </div>
+              </div>
+              {renderTotalRow()}
+              <Button
+                className="h-11 w-full text-base font-semibold"
+                disabled={closingPaidBill || cancelling}
+                onClick={() => {
+                  void handleCloseFullyPaidBill()
+                }}
+              >
+                {closingPaidBill
+                  ? t('posPaymentProcessing') || '처리 중…'
+                  : t('posClosePaidBillButton') || '결제 완료 · 테이블 닫기'}
+              </Button>
+              {canCancel && !listExpanded ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
+                  disabled={cancelling || closingPaidBill || removingItemId !== null}
+                  onClick={handleCancelOrder}
+                >
+                  {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}
+                </Button>
+              ) : null}
+            </>
+          ) : isPaidPrepaid ? (
             <>
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-5 h-5 shrink-0" />

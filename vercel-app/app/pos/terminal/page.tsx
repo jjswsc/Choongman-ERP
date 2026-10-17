@@ -57,6 +57,7 @@ import {
   getPosCryptoPaymentSettings,
   executeKbankCancelQr,
   executeKbankCheckStatus,
+  executeKbankFinalizeCounterOrder,
   executeKbankGenerateQr,
   executeKbankSettlement,
   executeKbankVoidPayment,
@@ -7039,6 +7040,10 @@ export default function PosTerminalPage() {
       const brands = input.cardBrands ?? kbankOpsCardBrands
       const approval = { txnNo: input.approvalCode, cardBrands: brands }
       const alreadyNotified = kbankCallbackNotifiedTxRef.current === refId
+      const paidAmount =
+        input.amount != null && Number.isFinite(input.amount)
+          ? input.amount
+          : Math.max(0, Number(liveKbankQrAmount || 0))
       // QR 대기 결제: 승인되면 등록된 후처리(주문 paid 마감·영수증). 콜백이 먼저 오면 deferred 후 등록 시 실행.
       if (!alreadyNotified) {
         clearKbankQrFromLinkpos()
@@ -7052,16 +7057,43 @@ export default function PosTerminalPage() {
         }
         if (!tryRunKbankPendingFinalize(refId, approval)) {
           deferredKbankApprovalRef.current[refId] = approval
+          /** pending finalize 유실·콜백 선행: 서버에서 status 마감 (웹훅과 동일 헬퍼) */
+          const fallbackOrderId =
+            Number(kbankPendingOrderIdRef.current[refId] || 0) ||
+            Number(kbankActiveOrderIdRef.current || 0) ||
+            Number(pendingDineInOrderId || 0) ||
+            Number(pendingTakeoutOrderId || 0) ||
+            Number(pendingDeliveryOrderId || 0) ||
+            0
+          if (fallbackOrderId > 0 && currentStoreId) {
+            void (async () => {
+              try {
+                const settled = await executeKbankFinalizeCounterOrder({
+                  orderId: fallbackOrderId,
+                  storeCode: currentStoreId,
+                  paymentQrAmount: paidAmount,
+                })
+                if (!settled.success) {
+                  console.warn('kbank finalize-counter-order fallback:', settled.message)
+                  return
+                }
+                const tableName = String(settled.tableName || '').trim()
+                const closedStatus = String(settled.status || '').toLowerCase()
+                if (tableName && (closedStatus === 'completed' || closedStatus === 'paid')) {
+                  clearTableOrder(currentStoreId, tableName)
+                }
+                void refetchStores({ scope: 'current', immediate: true })
+              } catch (e) {
+                console.warn('kbank finalize-counter-order fallback error:', e)
+              }
+            })()
+          }
         }
       }
       kbankCallbackNotifiedTxRef.current = refId
       setKbankCallbackState('received')
       clearKbankApiPause()
       setCustomerDisplayPaymentMessage('')
-      const paidAmount =
-        input.amount != null && Number.isFinite(input.amount)
-          ? input.amount
-          : Math.max(0, Number(liveKbankQrAmount || 0))
       const paidTxnNo = String(input.approvalCode || '').trim().slice(0, 20)
       setKbankPaidVoidSnapshot((prev) => ({
         partnerTxnUid: refId,
@@ -7099,11 +7131,16 @@ export default function PosTerminalPage() {
       liveKbankQrAmount,
       liveKbankQrType,
       currentStoreId,
+      pendingDineInOrderId,
+      pendingTakeoutOrderId,
+      pendingDeliveryOrderId,
       openKbankOutcomeModal,
       lang,
       tryRunKbankPendingFinalize,
       clearKbankQrFromLinkpos,
       clearKbankApiPause,
+      clearTableOrder,
+      refetchStores,
     ]
   )
 

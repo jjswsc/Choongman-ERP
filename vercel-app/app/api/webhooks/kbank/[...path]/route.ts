@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { finalizeMemberPortalPrepaidOrder } from '@/lib/member-portal-checkout-server'
+import { finalizeCounterPosKbankQrOrder } from '@/lib/pos-kbank-counter-qr-finalize'
 import { finalizeQrTableBillPayFromOrderId } from '@/lib/qr-table-server'
 import { isQrTableCreatedBy } from '@/lib/qr-table-types'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
@@ -349,7 +350,12 @@ export async function POST(
           partnerTransactionId: primaryLocalTxId || partnerTransactionId || undefined,
         })
         if (!finalized.ok) {
-          await supabaseUpdateByFilter('pos_orders', `id=eq.${matchedOrderId}`, { status: 'paid' })
+          // 카운터 POS: payment_qr 선저장 후 finalize 유실 시 completed/paid 마감
+          // (단순 status=paid 만 찍으면 홀 후불·금액 정합이 어긋날 수 있음)
+          await finalizeCounterPosKbankQrOrder({
+            orderId: matchedOrderId,
+            paymentQrAmount: amount,
+          })
         }
       }
     }

@@ -2235,6 +2235,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posTablePayPlatformNote: '배달앱(Grab/Line Man/Shopee) dine out 주문은 플랫폼에서 이미 결제되었습니다.',
     posPrepaidKeepTable: '선불 (결제 후 테이블 유지)',
     posPrepaidPaid: '선불 결제 완료',
+    posFullyPaidButOpenHint:
+      '결제는 완료됐지만 테이블이 아직 열려 있습니다. 아래 버튼으로 마감하세요. QR을 다시 만들지 마세요.',
+    posClosePaidBillButton: '결제 완료 · 테이블 닫기',
     posTableLeave: '퇴장 (테이블 비우기)',
     posTableMoveTitle: '테이블 이동',
     posTableMoveHint: '빈 테이블로만 이동할 수 있습니다. 이미 주문이 있는 테이블은 합석을 사용하세요.',

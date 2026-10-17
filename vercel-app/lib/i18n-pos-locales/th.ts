@@ -858,6 +858,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posPayAllToThisMethod: 'ชำระเต็มจำนวนด้วยช่องทางนี้',
     posPrepaidKeepTable: 'ชำระล่วงหน้า (รักษาโต๊ะหลังชำระ)',
     posPrepaidPaid: 'ชำระล่วงหน้าแล้ว',
+    posFullyPaidButOpenHint:
+      'ชำระเงินครบแล้ว แต่โต๊ะยังเปิดอยู่ครับ กดปุ่มด้านล่างเพื่อปิดบิล — ห้ามสร้าง QR ใหม่ครับ',
+    posClosePaidBillButton: 'ปิดบิล (ชำระแล้ว)',
     posTableLeave: 'ออกจากโต๊ะ (เคลียร์โต๊ะ)',
     posReceipt: 'ใบเสร็จ',
     posPrintBlocked: 'ป๊อปอัปถูกบล็อก โปรดอนุญาตป๊อปอัปเพื่อพิมพ์',

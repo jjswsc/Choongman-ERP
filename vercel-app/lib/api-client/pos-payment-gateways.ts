@@ -606,6 +606,51 @@ export async function executeKbankCheckStatus(params: {
   }
 }
 
+/** 카운터 QR 승인 후 pending finalize 유실 시 서버 status 마감 */
+export async function executeKbankFinalizeCounterOrder(params: {
+  orderId: number
+  storeCode?: string
+  paymentQrAmount?: number
+  amount?: number
+}): Promise<{
+  success: boolean
+  alreadyPaid?: boolean
+  orderId?: number
+  status?: string | null
+  tableName?: string | null
+  storeCode?: string | null
+  orderType?: string | null
+  message?: string
+}> {
+  const res = await apiFetch('/api/pos/kbank/finalize-counter-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId: params.orderId,
+      storeCode: params.storeCode,
+      paymentQrAmount: params.paymentQrAmount ?? params.amount,
+      amount: params.amount ?? params.paymentQrAmount,
+    }),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || !data.success) {
+    return {
+      success: false,
+      orderId: Number(data.orderId || params.orderId) || params.orderId,
+      message: String(data.message || `HTTP ${res.status}`),
+    }
+  }
+  return {
+    success: true,
+    alreadyPaid: Boolean(data.alreadyPaid),
+    orderId: Number(data.orderId || params.orderId) || params.orderId,
+    status: data.status != null ? String(data.status) : null,
+    tableName: data.tableName != null ? String(data.tableName) : null,
+    storeCode: data.storeCode != null ? String(data.storeCode) : null,
+    orderType: data.orderType != null ? String(data.orderType) : null,
+  }
+}
+
 export async function executeKbankCancelQr(params: {
   orderId?: number
   storeCode?: string

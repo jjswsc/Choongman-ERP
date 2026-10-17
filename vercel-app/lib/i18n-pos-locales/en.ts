@@ -2244,6 +2244,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posTablePayPlatformNote: 'Delivery app (Grab/Line Man/Shopee) dine-out orders are already paid on the platform.',
     posPrepaidKeepTable: 'Prepaid (keep table after payment)',
     posPrepaidPaid: 'Prepaid',
+    posFullyPaidButOpenHint:
+      'Payment is recorded but this table is still open. Close the bill below — do not create another QR.',
+    posClosePaidBillButton: 'Close bill (paid)',
     posTableLeave: 'Leave (clear table)',
     posTableMoveTitle: 'Move table',
     posTableMoveHint: 'Only empty tables. If the target already has an order, use merge instead.',
