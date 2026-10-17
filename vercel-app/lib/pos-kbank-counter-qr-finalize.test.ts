@@ -3,7 +3,7 @@ import {
   isPosOrderFullyPaidButOpen,
   resolveCounterKbankQrCloseStatus,
   resolveCounterKbankQrFinalizePatch,
-} from '@/lib/pos-kbank-counter-qr-finalize'
+} from '@/lib/pos-kbank-counter-qr-finalize-shared'
 
 describe('resolveCounterKbankQrCloseStatus', () => {
   it('uses completed for dine_in and empty type', () => {

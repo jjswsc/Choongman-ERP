@@ -62,7 +62,7 @@ import { canStartPosLinePartialCancel, orderPaymentsSum } from '@/lib/pos-order-
 import {
   isPosOrderFullyPaidButOpen,
   resolveCounterKbankQrCloseStatus,
-} from '@/lib/pos-kbank-counter-qr-finalize'
+} from '@/lib/pos-kbank-counter-qr-finalize-shared'
 import { kitchenRoutingItemFromOrderItem } from '@/lib/pos-kitchen-slip-routing'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
