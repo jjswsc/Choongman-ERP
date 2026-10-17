@@ -2196,6 +2196,10 @@ export const I18N_POS_KO: Record<string, string> = {
       '결산에 저장된 현금과 완료 주문 현금 합이 다릅니다. 「현금 맞추기」로 주문 기준으로 맞출 수 있습니다.',
     posSettlementCashReconcileBtn: '현금 맞추기',
     posSettlementCashReconcileDone: '결산 현금을 주문 합계에 맞췄습니다.',
+    posSettlementTillVsCashSalesBanner:
+      '시재 출금(순액 {till})이 당일 현금 매출({cash})과 다릅니다. 차 {diff} ฿. 출금은 현금 매출에 맞추세요(시재 남김만 제외).',
+    posSettlementDepositDrawerVarianceBanner:
+      '돈통 차이({drawer})가 당일 มัดจำ 현금({deposit})과 크기가 같습니다. มัดจำ은 매출 현금과 별도입니다. 출금은 현금 매출에 맞추고, มัดจำ은 별도 절차로 처리하세요.',
     posSettlementAutoQrLockedHint:
       'QR·PromptPay 등은 완료 주문·LinkPOS에서 집계된 금액입니다. 매장 계정에서는 수정할 수 없습니다. 오류가 있으면 당일 주문의 결제 정정(본사·회계) 또는 권한 계정으로만 조정하세요.',
     posSettlementAutoDeliveryLockedHint:

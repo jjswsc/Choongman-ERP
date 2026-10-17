@@ -2204,6 +2204,10 @@ export const I18N_POS_EN: Record<string, string> = {
       'Saved settlement cash differs from completed-order cash. Use “Align cash” to match settlement to orders.',
     posSettlementCashReconcileBtn: 'Align cash',
     posSettlementCashReconcileDone: 'Settlement cash was aligned to completed-order totals.',
+    posSettlementTillVsCashSalesBanner:
+      'Till net ({till}) does not match today’s cash sales ({cash}); gap {diff} ฿. Withdrawals should follow cash sales (except float left in drawer).',
+    posSettlementDepositDrawerVarianceBanner:
+      'Drawer variance ({drawer}) is about the size of today’s cash deposit ({deposit}). Deposits are not cash sales—withdraw to match cash sales; handle deposits separately.',
     posSettlementAutoQrLockedHint:
       'QR / PromptPay amounts come from completed orders and LinkPOS. Store accounts cannot edit them. If wrong, correct the order payment (head office / accounting) or use an authorized account.',
     posSettlementAutoDeliveryLockedHint:

@@ -57,7 +57,7 @@ export function SalesPaymentView({
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
           {tr(
             "salesPaymentCashReconcileMismatch",
-            "결산 현금({settlement})과 완료 주문 현금 합({live})이 {diff} 다릅니다. POS 결산(마감) 화면을 열면 주문 기준으로 자동 맞춤됩니다. 그래도 남으면 「현금 맞추기」를 누르세요."
+            "결산 현금({settlement})과 완료 주문 현금 합({live})이 {diff} 다릅니다. POS 결산(마감)을 열면 주문 기준으로 맞춥니다(มัดจำ이 예전에 섞인 날은 경고하지 않음). 남으면 「현금 맞추기」."
           )
             .replace(
               "{settlement}",

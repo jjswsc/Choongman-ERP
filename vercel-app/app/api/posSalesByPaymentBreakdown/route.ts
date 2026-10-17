@@ -47,6 +47,9 @@ import {
   sortPosPaymentSalesRows,
   type PosPaymentSalesBucketRow,
 } from '@/lib/pos-payment-tender-labels'
+import { posDepositCashDrawerDelta } from '@/lib/pos-deposit-domain'
+import { buildSettlementCashReconcile } from '@/lib/pos-settlement-sync-after-pay-correct'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 
 async function loadPaymentMethodNames(): Promise<Record<string, string>> {
   const map: Record<string, string> = {}
@@ -378,14 +381,35 @@ export async function GET(request: NextRequest) {
           100
       ) / 100
     )
-    const cashDiff = Math.round((settlementCashFromCredit - liveCashFromSummary) * 100) / 100
+    /** มัดจำ이 예전에 cash_amt에 섞인 날(Future)은 주문+มัดจำ과 같으면 불일치로 보지 않음 */
+    let depositCashDeltaForReconcile = 0
+    try {
+      const ledgerRows = (await supabaseSelectFilterStrippingUnknownColumns(
+        'pos_deposit_ledger',
+        `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`,
+        { select: 'kind,amount,tender,store_code', limit: 20000 },
+        'posSalesByPaymentBreakdownDeposit'
+      )) as { kind?: string; amount?: number; tender?: string; store_code?: string }[] | null
+      const scoped = (ledgerRows || []).filter((r) => {
+        if (!storeSet || storeSet.size === 0) return true
+        return storeSet.has(String(r.store_code ?? '').trim().toLowerCase())
+      })
+      depositCashDeltaForReconcile = posDepositCashDrawerDelta(scoped)
+    } catch (depositErr) {
+      console.warn('posSalesByPaymentBreakdown deposit ledger:', depositErr)
+    }
+    const reconciled = buildSettlementCashReconcile({
+      liveCash: liveCashFromSummary,
+      savedCash: settlementCashFromCredit,
+      depositCashDelta: depositCashDeltaForReconcile,
+    })
     const cashReconcile =
       settlementCashFromCredit > 0.005 || liveCashFromSummary > 0.005
         ? {
-            liveCash: liveCashFromSummary,
-            settlementCash: settlementCashFromCredit,
-            mismatch: Math.abs(cashDiff) > 0.02,
-            diff: cashDiff,
+            liveCash: reconciled.liveCash,
+            settlementCash: reconciled.savedCash ?? settlementCashFromCredit,
+            mismatch: reconciled.mismatch,
+            diff: reconciled.diff,
           }
         : null
 

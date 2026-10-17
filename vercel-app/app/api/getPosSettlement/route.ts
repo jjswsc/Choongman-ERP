@@ -23,6 +23,7 @@ import {
   buildSettlementCashReconcile,
   reconcilePosSettlementCashAmtToLive,
 } from '@/lib/pos-settlement-sync-after-pay-correct'
+import { shouldAutoAlignSettlementCashToLive } from '@/lib/pos-settlement-cash-ops-hints'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -481,8 +482,17 @@ export async function GET(request: NextRequest) {
       depositCashDelta: systemDepositCashDelta,
     })
     let cashReconcileAutoFixed = false
-    /** 결제 정정 후 마감 현금이 주문 합과 어긋난 채면, 결산 화면을 열 때 주문 기준으로 맞춘다(시재 cash_actual은 유지). */
-    if (cashReconcile.mismatch && settlementRow?.id && storeCode && /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)) {
+    /**
+     * 저장 cash_amt ≠ 주문 현금이면 결산 조회 시 주문 합으로 맞춘다(시재 cash_actual 유지).
+     * - Silom형: 결제 정정 후 마감만 남음
+     * - Future형: 예전에 มัดจำ을 cash_amt에 섞어 둔 날 → 매출 현금 줄만 주문 합으로 분리(มัดจำ은 별도 줄)
+     */
+    if (
+      shouldAutoAlignSettlementCashToLive(settlementRow?.cashAmt, systemCashFromOrders) &&
+      settlementRow?.id &&
+      storeCode &&
+      /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)
+    ) {
       try {
         const synced = await reconcilePosSettlementCashAmtToLive({
           storeCode,

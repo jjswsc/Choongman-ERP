@@ -50,6 +50,11 @@ import {
   sumSettlementBreakdownAmounts,
 } from '@/lib/pos-settlement-card-amount'
 import { posExpectedDrawerCash } from '@/lib/pos-deposit-domain'
+import {
+  cashSalesVsTillNetGap,
+  shouldExplainDepositDrawerVariance,
+  shouldWarnCashSalesVsTill,
+} from '@/lib/pos-settlement-cash-ops-hints'
 import { DEFAULT_OTHER_KEYS, DEFAULT_QR_KEYS } from '@/lib/pos-payment-default-keys'
 import {
   dispatchPosBusinessOpenUpdated,
@@ -1007,6 +1012,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   /** 권종 실사 − 「예상 돈통 시제」(시작+당일 현금 매출±시재 입출금 순액). Till 순액을 빼면 출금 분만큼 차이가 틀어짐 */
   const drawerDenomDeltaVsPosCash =
     openingCashActual != null ? cashActualNum - expectedDrawerByOpenAndCash : null
+  const warnTillVsCashSales =
+    !openMode && shouldWarnCashSalesVsTill(cashAmtNum, tillNetAppliedToDrawer)
+  const tillVsCashSalesGap = cashSalesVsTillNetGap(cashAmtNum, tillNetAppliedToDrawer)
+  const explainDepositDrawer =
+    !openMode && shouldExplainDepositDrawerVariance(systemDepositCashDelta, drawerDenomDeltaVsPosCash)
 
   /** 서버 확정(또는 이번 세션 즉시 확정) 마감은 저장/수정 재시도 차단 */
   const inputsLocked = (Boolean(settlement?.closed) || closedSavedOnce) && !canUnclose
@@ -2250,6 +2260,40 @@ ${footerStamp}
                 </div>
               </div>
 
+              {warnTillVsCashSales && (
+                <div
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                  data-tour="pos-tour-till-vs-cash-sales-banner"
+                >
+                  <p>
+                    {(
+                      t('posSettlementTillVsCashSalesBanner') ||
+                      '시재 출금(순액 {till})이 당일 현금 매출({cash})과 다릅니다. 차 {diff} ฿. 출금은 현금 매출에 맞추세요(시재 남김만 제외).'
+                    )
+                      .replace('{till}', formatBahtNum(tillNetAppliedToDrawer))
+                      .replace('{cash}', formatBahtNum(cashAmtNum))
+                      .replace('{diff}', formatBahtNum(Math.abs(tillVsCashSalesGap)))}
+                  </p>
+                </div>
+              )}
+              {explainDepositDrawer && (
+                <div
+                  className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                  data-tour="pos-tour-deposit-drawer-banner"
+                >
+                  <p>
+                    {(
+                      t('posSettlementDepositDrawerVarianceBanner') ||
+                      '돈통 차이({drawer})가 당일 มัดจำ 현금({deposit})과 크기가 같습니다. มัดจำ은 매출 현금과 별도입니다. 출금은 「당일 현금 매출」에 맞추고, มัดจำ은 시재/별도 절차로 처리하세요.'
+                    )
+                      .replace(
+                        '{drawer}',
+                        drawerDenomDeltaVsPosCash != null ? formatBahtNum(drawerDenomDeltaVsPosCash) : '-'
+                      )
+                      .replace('{deposit}', formatBahtNum(systemDepositCashDelta))}
+                  </p>
+                </div>
+              )}
               <div className="space-y-1 rounded-lg border border-blue-200 bg-blue-50/50 px-4 py-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('posMorningOpeningFloat') || '아침 시작 시제'}</span>

@@ -778,6 +778,10 @@ export const I18N_POS_TH: Record<string, string> = {
       'ยอดเงินสดที่บันทึกในปิดยอดไม่เท่ากับยอดเงินสดจากออเดอร์ที่เสร็จแล้ว กด「จัดยอดเงินสด」เพื่อให้ตรงกับออเดอร์ครับ',
     posSettlementCashReconcileBtn: 'จัดยอดเงินสด',
     posSettlementCashReconcileDone: 'ปรับยอดเงินสดในปิดยอดให้ตรงกับออเดอร์แล้วครับ',
+    posSettlementTillVsCashSalesBanner:
+      'ยอดรับ-จ่ายลิ้นชักสุทธิ ({till}) ไม่ตรงกับยอดขายเงินสดวันนี้ ({cash}) ต่าง {diff} ฿ — ให้ถอนใกล้เคียงยอดขายเงินสด (หักเงินตั้งต้นที่ต้องเหลือ) ครับ',
+    posSettlementDepositDrawerVarianceBanner:
+      'ส่วนต่างลิ้นชัก ({drawer}) ขนาดใกล้เคียงเงินสดมัดจำวันนี้ ({deposit}) — มัดจำไม่ใช่ยอดขายเงินสด ถอนให้ตรงยอดขายเงินสด ส่วนมัดจำจัดการแยกต่างหากครับ',
     posSettlementAutoQrLockedHint:
       'ยอด QR / พร้อมเพย์ มาจากออเดอร์ที่ปิดแล้วและ LinkPOS บัญชีร้านแก้ไขไม่ได้ หากผิดให้แก้การชำระที่ออเดอร์ (สำนักงานใหญ่ / บัญชี) หรือใช้บัญชีที่ได้รับอนุญาต',
     posSettlementAutoDeliveryLockedHint:
