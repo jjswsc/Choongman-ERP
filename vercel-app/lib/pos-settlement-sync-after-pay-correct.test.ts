@@ -123,4 +123,13 @@ describe('buildSettlementCashReconcile', () => {
     expect(r.mismatch).toBe(false)
     expect(r.diff).toBe(5010)
   })
+
+  it('after align saved=live clears mismatch (getPosSettlement autoFixed path)', () => {
+    const before = buildSettlementCashReconcile({ liveCash: 4227, savedCash: 5543, closed: true })
+    expect(before.mismatch).toBe(true)
+    expect(before.diff).toBe(1316)
+    const after = buildSettlementCashReconcile({ liveCash: 4227, savedCash: 4227, closed: true })
+    expect(after.mismatch).toBe(false)
+    expect(after.diff).toBe(0)
+  })
 })

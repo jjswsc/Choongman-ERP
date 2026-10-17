@@ -5360,7 +5360,7 @@ Only matters the employee must handle personally on a working day:
   salesPaymentBreakdownFootnote:
     'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved.',
   salesPaymentCashReconcileMismatch:
-    'Settlement cash ({settlement}) differs from completed-order cash ({live}) by {diff}. Opening POS settlement after a payment correction realigns them automatically.',
+    'Settlement cash ({settlement}) differs from completed-order cash ({live}) by {diff}. Open the POS settlement (close) screen to auto-align to orders; if it remains, tap “Align cash”.',
   salesDeliveryPlatformFootnote:
     'Percentages are share of delivery sales only. Older orders may infer platform from line items.',
   salesChannel: 'Channel',

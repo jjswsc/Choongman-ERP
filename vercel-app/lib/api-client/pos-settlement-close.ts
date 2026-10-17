@@ -102,6 +102,8 @@ export async function getPosSettlement(params: {
       mismatch: boolean
       diff: number
       closed: boolean
+      /** 이번 조회에서 주문 합에 맞춰 cash_amt를 저장까지 갱신했는지 */
+      autoFixed?: boolean
     }
     linkpos?: {
       approvedCount: number

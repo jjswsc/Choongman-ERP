@@ -21,6 +21,7 @@ import {
 } from '@/lib/pos-deposit-domain'
 import {
   buildSettlementCashReconcile,
+  reconcilePosSettlementCashAmtToLive,
 } from '@/lib/pos-settlement-sync-after-pay-correct'
 
 type TenderGroup = 'card' | 'qr'
@@ -473,12 +474,35 @@ export async function GET(request: NextRequest) {
     const closeRun = closeRuns?.[0]
 
     const settlementRow = list[0] ?? null
-    const cashReconcile = buildSettlementCashReconcile({
+    let cashReconcile = buildSettlementCashReconcile({
       liveCash: systemCashFromOrders,
       savedCash: settlementRow?.cashAmt,
       closed: settlementRow?.closed,
       depositCashDelta: systemDepositCashDelta,
     })
+    let cashReconcileAutoFixed = false
+    /** 결제 정정 후 마감 현금이 주문 합과 어긋난 채면, 결산 화면을 열 때 주문 기준으로 맞춘다(시재 cash_actual은 유지). */
+    if (cashReconcile.mismatch && settlementRow?.id && storeCode && /^\d{4}-\d{2}-\d{2}$/.test(settleYmd)) {
+      try {
+        const synced = await reconcilePosSettlementCashAmtToLive({
+          storeCode,
+          settleDateYmd: settleYmd,
+          who: 'system',
+        })
+        if (synced.status === 'synced' && synced.savedCashAfter != null) {
+          cashReconcileAutoFixed = true
+          settlementRow.cashAmt = synced.savedCashAfter
+          cashReconcile = buildSettlementCashReconcile({
+            liveCash: systemCashFromOrders,
+            savedCash: synced.savedCashAfter,
+            closed: settlementRow.closed,
+            depositCashDelta: systemDepositCashDelta,
+          })
+        }
+      } catch (reconcileErr) {
+        console.warn('getPosSettlement auto cash reconcile:', reconcileErr)
+      }
+    }
 
     return NextResponse.json(
       {
@@ -489,7 +513,10 @@ export async function GET(request: NextRequest) {
         systemDepositCashDelta,
         systemCryptoFromOrders,
         tillNetForSettleDate,
-        cashReconcile,
+        cashReconcile: {
+          ...cashReconcile,
+          autoFixed: cashReconcileAutoFixed,
+        },
         linkpos: {
           approvedCount: linkposApprovedCount,
           failedCount: linkposFailedCount,

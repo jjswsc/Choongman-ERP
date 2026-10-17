@@ -300,7 +300,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [systemDepositCashDelta, setSystemDepositCashDelta] = React.useState(0)
   const [systemCryptoFromOrders, setSystemCryptoFromOrders] = React.useState(0)
   const [cryptoAmt, setCryptoAmt] = React.useState('')
-  const [cashReconcileBanner, setCashReconcileBanner] = React.useState<'mismatch' | null>(null)
+  const [cashReconcileBanner, setCashReconcileBanner] = React.useState<
+    'mismatch' | 'reconciled' | null
+  >(null)
   const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
   const [closeRun, setCloseRun] = React.useState<PosCloseRun | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -607,7 +609,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         setSystemCashFromOrders(autoCashTotal)
         setSystemDepositCashDelta(autoDepositCash)
         setSystemCryptoFromOrders(autoCryptoTotal)
-        if (cashReconcile?.mismatch) {
+        if (cashReconcile?.autoFixed) {
+          setCashReconcileBanner('reconciled')
+        } else if (cashReconcile?.mismatch) {
           setCashReconcileBanner('mismatch')
         } else {
           setCashReconcileBanner(null)
@@ -1649,6 +1653,17 @@ ${footerStamp}
             </AdminTabsBarWithHelp>
 
             <TabsContent value="entry" className="space-y-4">
+              {cashReconcileBanner === 'reconciled' && (
+                <div
+                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+                  data-tour="pos-tour-cash-reconciled-banner"
+                >
+                  <p>
+                    {t('posSettlementCashReconciledBanner') ||
+                      '결제 정정·주문 변경으로 결산 현금이 주문 합계와 달라 자동으로 맞췄습니다. ERP 매출(Payment/Card) 현금도 같은 금액입니다.'}
+                  </p>
+                </div>
+              )}
               {cashReconcileBanner === 'mismatch' && (
                 <div
                   className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between"

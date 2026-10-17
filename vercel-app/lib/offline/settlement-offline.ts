@@ -223,6 +223,7 @@ export type PosSettlementResponse = {
     mismatch: boolean
     diff: number
     closed: boolean
+    autoFixed?: boolean
   }
   linkpos?: {
     approvedCount: number
