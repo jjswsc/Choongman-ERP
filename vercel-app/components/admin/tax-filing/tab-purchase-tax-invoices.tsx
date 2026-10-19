@@ -592,6 +592,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       sellerBranch: displaySellerBranchForUi(r.sellerBranch),
       netAmount: String(r.netAmount),
       vatAmount: String(r.vatAmount),
+      claimInFilingMonth:
+        purchaseTaxDocMonthMismatch(r.docDate, r.taxMonth) &&
+        String(r.taxMonth || "").slice(0, 7) === String(filingYearMonth || "").slice(0, 7),
     })
   }
 
@@ -1645,11 +1648,15 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                   <th className="p-1 min-w-[5.5rem] whitespace-nowrap" title={t("ptiSkipHint")}>
                     {t("ptiSkip")}
                   </th>
+                  <th className="p-1 min-w-[5.5rem] whitespace-nowrap" title={t("ptiCrossMonthHint")}>
+                    {t("ptiCrossMonthShort")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {visibleReviewRows.map(({ r, idx }) => {
                   const flags = purchaseTaxReviewFlags(r, filingYearMonth)
+                  const monthMismatch = purchaseTaxDocMonthMismatch(r.docDate, filingYearMonth)
                   return (
                   <tr key={`${r.page}-${idx}`} className={cn(r.skip && "opacity-50", !r.skip && flags.length > 0 && "bg-amber-50 dark:bg-amber-950/20")}>
                     <td className="p-1">
@@ -1696,6 +1703,28 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                         />
                         {reviewNoteChips(r)}
                       </label>
+                    </td>
+                    <td className="p-1 align-middle">
+                      {monthMismatch && !r.skip ? (
+                        <label className="flex items-center gap-1 whitespace-nowrap" title={t("ptiCrossMonthHint")}>
+                          <input
+                            type="checkbox"
+                            checked={!!r.claimInFilingMonth}
+                            onChange={(e) => patchReview(idx, { claimInFilingMonth: e.target.checked })}
+                            aria-label={t("ptiCrossMonth")}
+                          />
+                          <span
+                            className={cn(
+                              "rounded px-1 py-0.5 text-[10px] font-medium",
+                              r.claimInFilingMonth
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                            )}
+                          >
+                            {t("ptiCrossMonthShort")}
+                          </span>
+                        </label>
+                      ) : null}
                     </td>
                   </tr>
                   )
@@ -1767,7 +1796,19 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                     </td>
                   ) : null}
                   <td className="p-2 tabular-nums">{i + 1}</td>
-                  <td className="p-2 tabular-nums">{r.docDate}</td>
+                  <td className="p-2 tabular-nums">
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      {r.docDate}
+                      {purchaseTaxDocMonthMismatch(r.docDate, r.taxMonth) ? (
+                        <span
+                          className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                          title={tr(t, "ptiCrossMonthBadgeTitle", { month: r.taxMonth })}
+                        >
+                          {t("ptiCrossMonthShort")}
+                        </span>
+                      ) : null}
+                    </span>
+                  </td>
                   <td className="p-2">{r.invoiceNo}</td>
                   <td className="p-2">{r.sellerName}</td>
                   <td className="p-2 tabular-nums">{r.sellerTaxId}</td>

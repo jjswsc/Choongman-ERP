@@ -2985,6 +2985,13 @@ orderItemQty: 'จำนวน',
   ptiReviewVatShort: 'VAT',
   ptiReviewTinShort: 'TIN',
   ptiReviewAmountShort: 'ยอดว่าง',
+  ptiCrossMonth: 'ยื่นภาษีข้ามเดือน',
+  ptiCrossMonthShort: 'ข้ามเดือน',
+  ptiCrossMonthHint:
+    'ติ๊กถ้าใบกำกับเดือนอื่น (เช่น 07) จะยื่นรวมในงวดที่ค้นอยู่ตอนนี้ (เช่น 10) — วันที่ใบกำกับคงเดิม แต่ภาษีซื้อเข้างวดที่ยื่นครับ',
+  ptiCrossMonthReviewHint:
+    'แถวที่เดือนใบกำกับไม่ตรงกับงวดที่ค้น: ติ๊ก「ข้ามเดือน」ด้านขวาเพื่อบันทึกลงงวดนี้ หรือไม่ติ๊กไว้แล้วเปลี่ยนเดือนที่ค้นภายหลังครับ',
+  ptiCrossMonthBadgeTitle: 'ยื่นข้ามเดือนในงวด {month}',
   ptiSkipEmptyShort: 'อ่านไม่ได้',
   ptiSkipCopyShort: 'สำเนา',
   ptiSkipDupShort: 'ซ้ำ',
