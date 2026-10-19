@@ -430,6 +430,7 @@ import {
   posGuestCountSpread,
   posKitchenGuestSpread,
   readMainPosLastSeenOrderId,
+  shouldRunDineInAddonMetaScan,
   storeAutoPrintFlagsFromSettings,
   writeMainPosLastSeenOrderId,
   type StoreAutoPrintFlags,
@@ -6178,10 +6179,15 @@ export default function PosTerminalPage() {
             realtimeChannelHealthy: realtimeChannelHealthyRef.current,
             lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
           })
+          /** 홀 추가 영수증 ON일 때만 800행 스캔. 주방만 ON이면 pos_print_jobs(싱크호스트와 동일). */
           const wantMetaDineInAddonReceipt =
             autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
+          const wantDineInAddonMetaScan = shouldRunDineInAddonMetaScan({
+            skip: false,
+            receiptOnAddOrder: autoPrintReceiptOnAddOrder,
+            receiptOnOrder: autoPrintReceiptOnOrder,
+          })
           const wantMetaDineInAddonKitchen = autoPrintKitchenSlipOnOrder
-          const wantDineInAddonMetaScan = wantMetaDineInAddonReceipt || wantMetaDineInAddonKitchen
           if (needHeavyMetaScan || wantDineInAddonMetaScan) {
             try {
               const watchOrders = await getPosOrders({
