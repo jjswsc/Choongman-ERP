@@ -31,6 +31,7 @@ import {
   findPurchaseInvoiceConflict,
   purchaseTaxDocMonthMismatch,
   partitionPurchaseTaxReviewForSave,
+  purchaseTaxEffectiveClaimMonth,
   purchaseTaxReviewRowsInScanOrder,
   sortPurchaseTaxInvoicesForRegister,
   purchaseTaxInvoiceHasExtractedFields,
@@ -135,6 +136,8 @@ type FormState = {
   sellerBranch: string
   netAmount: string
   vatAmount: string
+  /** 수기: 발행 월 ≠ 조회 월일 때 조회 월로 ยื่นข้ามเดือน */
+  claimInFilingMonth?: boolean
 }
 
 type ReviewRow = FormState & {
@@ -144,6 +147,8 @@ type ReviewRow = FormState & {
   skipDupSeq?: number
   skipDupPage?: number
   skipDupInvoiceNo?: string
+  /** 스캔 검수: 발행일이 이전이어도 조회(신고) 월 PP.30에 합산 */
+  claimInFilingMonth?: boolean
 }
 
 const REVIEW_DRAFT_KEY = "cm_pti_review_draft"
@@ -301,6 +306,7 @@ const emptyForm = (storeName: string, month: string): FormState => ({
   sellerBranch: "",
   netAmount: "",
   vatAmount: "",
+  claimInFilingMonth: false,
 })
 
 function defaultStoreFromFilter(storeFilter: string, fallback: string): string {
@@ -481,22 +487,21 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   }, [rows])
 
   const reviewStats = React.useMemo(() => {
-    let keep = 0
     let skip = 0
     let problems = 0
-    let net = 0
-    let vat = 0
     for (const r of reviewRows) {
       if (purchaseTaxReviewIsProblem(r, filingYearMonth)) problems += 1
-      if (r.skip) {
-        skip += 1
-        continue
-      }
-      keep += 1
+      if (r.skip) skip += 1
+    }
+    // 지금 조회(신고) 월에 저장될 건만 합계·건수에 넣는다(ยื่นข้ามเดือน 포함).
+    const { toSave } = partitionPurchaseTaxReviewForSave(reviewRows, filingYearMonth)
+    let net = 0
+    let vat = 0
+    for (const r of toSave) {
       net += Number(r.netAmount) || 0
       vat += Number(r.vatAmount) || 0
     }
-    return { keep, skip, problems, net, vat }
+    return { keep: toSave.length, skip, problems, net, vat }
   }, [reviewRows, filingYearMonth])
 
   const visibleReviewRows = React.useMemo(() => {
@@ -595,10 +600,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
     setSaving(true)
     setError("")
     try {
+      const claimCross =
+        !!form.claimInFilingMonth && purchaseTaxDocMonthMismatch(form.docDate, filingYearMonth)
       const res = await savePurchaseTaxInvoice({
         id: form.id,
         storeName: form.storeName,
         docDate: form.docDate,
+        ...(claimCross ? { taxMonth: filingYearMonth } : {}),
         invoiceNo: form.invoiceNo,
         sellerName: form.sellerName,
         sellerTaxId: form.sellerTaxId,
@@ -1238,9 +1246,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
 
   const saveReview = async () => {
     const { viewMonth, toSave, leftover } = partitionPurchaseTaxReviewForSave(reviewRows, filingYearMonth)
-    const payload = purchaseTaxReviewRowsInScanOrder(toSave).map((r) => ({
+    const payload = purchaseTaxReviewRowsInScanOrder(toSave).map((r) => {
+      const claimMonth = purchaseTaxEffectiveClaimMonth(r, filingYearMonth)
+      const docMonthMismatch = purchaseTaxDocMonthMismatch(r.docDate, claimMonth)
+      return {
         storeName: r.storeName,
         docDate: r.docDate,
+        ...(docMonthMismatch || r.claimInFilingMonth ? { taxMonth: claimMonth } : {}),
         invoiceNo: r.invoiceNo,
         sellerName: r.sellerName,
         sellerTaxId: r.sellerTaxId,
@@ -1248,7 +1260,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         netAmount: Number(r.netAmount) || 0,
         vatAmount: Number(r.vatAmount) || 0,
         source: "pdf",
-      }))
+      }
+    })
     if (!payload.length) return
     setSaving(true)
     setSaveNotice("")
@@ -1288,7 +1301,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       const cur = prev[idx]
       if (!cur) return prev
       const next = [...prev]
-      next[idx] = { ...cur, ...patch }
+      const merged: ReviewRow = { ...cur, ...patch }
+      if (patch.docDate != null && !purchaseTaxDocMonthMismatch(merged.docDate, filingYearMonth)) {
+        merged.claimInFilingMonth = false
+      }
+      if (patch.skip === true) merged.claimInFilingMonth = false
+      next[idx] = merged
       return next
     })
   }
@@ -1494,7 +1512,20 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               </div>
               <div>
                 <Label className="text-xs">{t("ptiColDate")}</Label>
-                <Input className="h-8" type="date" value={form.docDate} onChange={(e) => setForm({ ...form, docDate: e.target.value })} />
+                <Input
+                  className="h-8"
+                  type="date"
+                  value={form.docDate}
+                  onChange={(e) => {
+                    const docDate = e.target.value
+                    const stillMismatch = purchaseTaxDocMonthMismatch(docDate, filingYearMonth)
+                    setForm({
+                      ...form,
+                      docDate,
+                      claimInFilingMonth: stillMismatch ? form.claimInFilingMonth : false,
+                    })
+                  }}
+                />
               </div>
               <div>
                 <Label className="text-xs">{t("ptiColInvoiceNo")}</Label>
@@ -1521,6 +1552,21 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                 <Input className="h-8" inputMode="decimal" value={form.vatAmount} onChange={(e) => setForm({ ...form, vatAmount: e.target.value })} />
               </div>
             </div>
+            {purchaseTaxDocMonthMismatch(form.docDate, filingYearMonth) ? (
+              <label className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!!form.claimInFilingMonth}
+                  onChange={(e) => setForm({ ...form, claimInFilingMonth: e.target.checked })}
+                />
+                <span>
+                  <span className="font-medium">{t("ptiCrossMonth")}</span>
+                  {" — "}
+                  {t("ptiCrossMonthHint")}
+                </span>
+              </label>
+            ) : null}
             <div className="flex gap-2">
               <Button type="button" size="sm" onClick={() => void onSave()} disabled={saving}>
                 {t("ptiSave")}
@@ -1548,8 +1594,13 @@ export function TaxFilingPurchaseTaxInvoicesTab({
               <span className="text-xs tabular-nums text-muted-foreground">
                 {tr(t, "ptiReviewKeep", { n: String(reviewStats.keep) })} · {tr(t, "ptiReviewSkip", { n: String(reviewStats.skip) })} · {t("ptiColNet")} {formatPp30Amount2(reviewStats.net)} · {t("ptiColVat")} {formatPp30Amount2(reviewStats.vat)}
               </span>
-              {reviewRows.some((r) => !r.skip && purchaseTaxDocMonthMismatch(r.docDate, filingYearMonth)) ? (
-                <span className="text-xs text-amber-700 dark:text-amber-400">{t("ptiSaveSwitchedMonthHint")}</span>
+              {reviewRows.some(
+                (r) =>
+                  !r.skip &&
+                  !r.claimInFilingMonth &&
+                  purchaseTaxDocMonthMismatch(r.docDate, filingYearMonth)
+              ) ? (
+                <span className="text-xs text-amber-700 dark:text-amber-400">{t("ptiCrossMonthReviewHint")}</span>
               ) : null}
               <div className="ml-auto flex flex-wrap items-center gap-1">
                 {storeSelectOptions.length ? (

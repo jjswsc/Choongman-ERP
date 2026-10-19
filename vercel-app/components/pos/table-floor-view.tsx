@@ -13,6 +13,7 @@ import {
 } from '@/lib/pos-ui-tokens'
 import type { PosFloorLabels, PosTableItem } from '@/lib/api-client'
 import { resolvePosFloorDisplayLabel, normalizePosTableColor, resolvePosTableEmptyColor, darkenPosTableColor, posTableColorIsDark } from '@/lib/pos-table-layout-payload'
+import { clampPosTableFloor } from '@/lib/pos-table-floor-match'
 import type { QrFloorMarker } from '@/lib/use-qr-floor-session-hints'
 
 const FLOOR_W = 720
@@ -78,8 +79,8 @@ export interface TableFloorViewProps {
   delayBadgeEnabled?: boolean
   delaySoundEnabled?: boolean
   delayAlertOverMin?: number
-  activeFloor?: 1 | 2 | 3
-  onFloorChange?: (floor: 1 | 2 | 3) => void
+  activeFloor?: number
+  onFloorChange?: (floor: number) => void
   /** 매장별 구역 표시명 (없으면 i18n posFloorLabel) */
   floorLabels?: PosFloorLabels
   /** 그리드 배경 칸 수 — 720×480 픽셀 그리드와 맞추려면 30×20 (24px 칸) */
@@ -192,9 +193,9 @@ export function TableFloorView({
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const floorLabelFallback = t('posFloorLabel') || 'Floor {n}'
-  const availableFloors = useMemo<(1 | 2 | 3)[]>(() => {
+  const availableFloors = useMemo<number[]>(() => {
     const floors = Array.from(
-      new Set(layout.map((item) => Math.min(3, Math.max(1, Number(item.floor ?? 1) || 1)) as 1 | 2 | 3))
+      new Set(layout.map((item) => clampPosTableFloor(Number(item.floor ?? 1) || 1)))
     ).sort((a, b) => a - b)
     return floors.length > 0 ? floors : [1]
   }, [layout])
@@ -215,7 +216,7 @@ export function TableFloorView({
 
   const tableStyles = useMemo(() => {
     return layout
-      .filter((item) => Math.min(3, Math.max(1, Number(item.floor ?? 1) || 1)) === activeFloor)
+      .filter((item) => clampPosTableFloor(Number(item.floor ?? 1) || 1) === activeFloor)
       .filter((item) => {
         if (!tableListMode || tableListMode === 'all') return true
         const raw = getTableStatus?.(item.id, String(item.name ?? '').trim() || item.id)
@@ -339,7 +340,7 @@ export function TableFloorView({
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                onFloorChange(floor as 1 | 2 | 3)
+                onFloorChange(floor)
               }}
               className={cn(
                 'rounded px-2 py-1 text-xs font-medium sm:text-sm',

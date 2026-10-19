@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
 
   if (!storeCode) {
-    return NextResponse.json({ layout: [], floorLabels: {}, occupiedTables: [] }, { headers })
+    return NextResponse.json({ layout: [], floorLabels: {}, floorCount: 3, occupiedTables: [] }, { headers })
   }
 
   try {
@@ -69,11 +69,16 @@ export async function GET(request: NextRequest) {
 
     // 관리자 테이블 구성과 POS 터미널이 항상 동일한 데이터를 보이도록, DB에 없으면 빈 배열만 반환.
     return NextResponse.json(
-      { layout: parsed.tables, floorLabels: parsed.floorLabels, storeCode },
+      {
+        layout: parsed.tables,
+        floorLabels: parsed.floorLabels,
+        floorCount: parsed.floorCount,
+        storeCode,
+      },
       { headers }
     )
   } catch (e) {
     console.error('getPosTableLayout:', e)
-    return NextResponse.json({ layout: [], floorLabels: {}, storeCode }, { headers })
+    return NextResponse.json({ layout: [], floorLabels: {}, floorCount: 3, storeCode }, { headers })
   }
 }

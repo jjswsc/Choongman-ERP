@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  clampPosTableFloor,
+  clampPosTableFloorCount,
   formatPosDineInTableNameForStorage,
+  POS_TABLE_FLOOR_MAX,
   posDineInTableLabelsMatch,
   resolveDineInOrderForLayoutTable,
 } from '@/lib/pos-table-floor-match'
@@ -34,5 +37,13 @@ describe('pos-table-floor-match', () => {
     expect(formatPosDineInTableNameForStorage('3', 2, true)).toBe('2F-3')
     expect(formatPosDineInTableNameForStorage('3', 1, true)).toBe('3')
     expect(formatPosDineInTableNameForStorage('3', 2, false)).toBe('3')
+  })
+
+  it('clamps floor and floorCount to max 8', () => {
+    expect(clampPosTableFloor(4)).toBe(4)
+    expect(clampPosTableFloor(99)).toBe(POS_TABLE_FLOOR_MAX)
+    expect(clampPosTableFloorCount(5)).toBe(5)
+    expect(clampPosTableFloorCount(1)).toBe(3)
+    expect(clampPosTableFloorCount(99)).toBe(POS_TABLE_FLOOR_MAX)
   })
 })

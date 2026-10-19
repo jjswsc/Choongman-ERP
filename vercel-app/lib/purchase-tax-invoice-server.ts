@@ -28,7 +28,7 @@ import {
   roundPurchaseTaxAmounts,
   serializeAttachmentUrls,
   sortPurchaseTaxInvoicesForRegister,
-  taxMonthFromDocDate,
+  resolvePurchaseTaxMonth,
   validatePurchaseTaxInvoiceInput,
   type PurchaseTaxInvoiceInput,
   type PurchaseTaxInvoiceRow,
@@ -195,7 +195,7 @@ function toDbPayload(
   const row: Record<string, unknown> = {
     store_name: String(input.storeName || '').trim(),
     buyer_tax_id: digitsTin13(input.buyerTaxId),
-    tax_month: taxMonthFromDocDate(docDate),
+    tax_month: resolvePurchaseTaxMonth({ docDate, taxMonth: input.taxMonth }),
     doc_date: docDate,
     invoice_no: normalizeInvoiceNo(input.invoiceNo),
     seller_name: String(input.sellerName || '').trim().slice(0, 500),

@@ -9,9 +9,8 @@ import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 export interface Table {
   id: string
   name: string
-  /** 테이블 배치 층 (1~3) — 다층 매장 홀 주문 매칭용 */
-  /** 구역 슬롯 1~3 (표시명은 매장 floorLabels) */
-  floor?: 1 | 2 | 3
+  /** 구역 슬롯 1~8 (표시명은 매장 floorLabels) — 다층 매장 홀 주문 매칭용 */
+  floor?: number
   seats: number
   x: number
   y: number

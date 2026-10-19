@@ -24,6 +24,8 @@ export type PurchaseTaxInvoiceInput = {
   storeName: string
   buyerTaxId: string
   docDate: string
+  /** YYYY-MM. 비우면 발행일(docDate) 월. ยื่นข้ามเดือน 시 신고 월을 넣는다. */
+  taxMonth?: string
   invoiceNo: string
   sellerName: string
   sellerTaxId: string
@@ -80,6 +82,41 @@ export function thaiTinChecksumOk(raw: unknown): boolean {
 export function taxMonthFromDocDate(docDate: string): string {
   const ymd = String(docDate || '').trim().slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd.slice(0, 7) : ''
+}
+
+/** 저장용 tax_month. 명시 override가 있으면 발행일과 달라도 된다(ยื่นข้ามเดือน). */
+export function resolvePurchaseTaxMonth(input: {
+  docDate: string
+  taxMonth?: string | null
+}): string {
+  const override = String(input.taxMonth || '').trim().slice(0, 7)
+  if (/^\d{4}-\d{2}$/.test(override)) return override
+  return taxMonthFromDocDate(input.docDate)
+}
+
+/**
+ * 검수 행이 어느 신고 월로 묶일지.
+ * claimInFilingMonth면 조회(신고) 월 — 발행일이 이전이어도 PP.30 그 달에 합산.
+ */
+export function purchaseTaxEffectiveClaimMonth(
+  row: { docDate?: string; claimInFilingMonth?: boolean; taxMonth?: string },
+  filingYearMonth: string
+): string {
+  const override = String(row.taxMonth || '').trim().slice(0, 7)
+  if (/^\d{4}-\d{2}$/.test(override)) return override
+  const filing = String(filingYearMonth || '').trim().slice(0, 7)
+  if (row.claimInFilingMonth && /^\d{4}-\d{2}$/.test(filing)) return filing
+  return taxMonthFromDocDate(String(row.docDate || ''))
+}
+
+/** 발행 월 → 신고 월이 몇 개월 뒤인지(음수면 신고가 더 이름). */
+export function purchaseTaxClaimMonthsLate(docDate: unknown, taxMonth: string): number {
+  const docM = taxMonthFromDocDate(String(docDate || ''))
+  const claim = String(taxMonth || '').trim().slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(docM) || !/^\d{4}-\d{2}$/.test(claim)) return 0
+  const [dy, dm] = docM.split('-').map(Number)
+  const [cy, cm] = claim.split('-').map(Number)
+  return (cy - dy) * 12 + (cm - dm)
 }
 
 export function formatSellerBranch(raw: unknown): string {
@@ -583,13 +620,13 @@ export function purchaseTaxDocMonthMismatch(docDate: unknown, taxMonth: string):
   return Boolean(month && want && month !== want)
 }
 
-/** 저장할 월과, 검수에 남겨 둘 다른 월 행을 나눈다. 다른 월은 저장 때 버리지 않는다. */
-export function partitionPurchaseTaxReviewForSave<T extends { docDate?: string; skip?: boolean }>(
-  rows: T[],
-  filingYearMonth: string
-): { viewMonth: string; toSave: T[]; leftover: T[] } {
+/** 저장할 월과, 검수에 남겨 둘 다른 월 행을 나눈다. 다른 월은 저장 때 버리지 않는다.
+ * claimInFilingMonth 행은 발행일과 달라도 조회(신고) 월로 저장한다. */
+export function partitionPurchaseTaxReviewForSave<
+  T extends { docDate?: string; skip?: boolean; claimInFilingMonth?: boolean; taxMonth?: string },
+>(rows: T[], filingYearMonth: string): { viewMonth: string; toSave: T[]; leftover: T[] } {
   const filing = String(filingYearMonth || '').trim().slice(0, 7)
-  const monthOf = (row: T) => taxMonthFromDocDate(String(row.docDate || ''))
+  const monthOf = (row: T) => purchaseTaxEffectiveClaimMonth(row, filing)
   const keepable = rows.filter((r) => !r.skip)
   const monthCounts = new Map<string, number>()
   for (const r of keepable) {
@@ -642,6 +679,7 @@ export type PurchaseTaxReviewFlag = 'vat' | 'month' | 'tin' | 'amount'
 export function purchaseTaxReviewFlags(
   row: {
     skip?: boolean
+    claimInFilingMonth?: boolean
     docDate?: string
     sellerTaxId?: string
     netAmount?: string | number
@@ -652,7 +690,10 @@ export function purchaseTaxReviewFlags(
   const flags: PurchaseTaxReviewFlag[] = []
   const tin = String(row.sellerTaxId || '').replace(/\D/g, '')
   if (tin && (tin.length !== 13 || !thaiTinChecksumOk(tin))) flags.push('tin')
-  if (!row.skip && purchaseTaxDocMonthMismatch(row.docDate, taxMonth)) flags.push('month')
+  // ยื่นข้ามเดือน 체크 시 월 불일치는 경고가 아니라 의도된 신고 월이다다.
+  if (!row.skip && !row.claimInFilingMonth && purchaseTaxDocMonthMismatch(row.docDate, taxMonth)) {
+    flags.push('month')
+  }
   if (!row.skip && purchaseTaxVatLooksWrong(row.netAmount, row.vatAmount)) flags.push('vat')
   const netRaw = String(row.netAmount ?? '').trim()
   const vatRaw = String(row.vatAmount ?? '').trim()

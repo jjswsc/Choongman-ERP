@@ -14,6 +14,8 @@ import {
   parsePurchaseTaxInvoiceVisionPayload,
   purchaseTaxDocMonthMismatch,
   partitionPurchaseTaxReviewForSave,
+  purchaseTaxEffectiveClaimMonth,
+  resolvePurchaseTaxMonth,
   purchaseTaxReviewRowsInScanOrder,
   sortPurchaseTaxInvoicesForRegister,
   purchaseTaxInvoiceDedupeKey,
@@ -173,6 +175,25 @@ describe('purchase tax invoice helpers', () => {
 
   it('takes tax_month from invoice date', () => {
     expect(taxMonthFromDocDate('2026-07-31')).toBe('2026-07')
+    expect(resolvePurchaseTaxMonth({ docDate: '2026-07-17' })).toBe('2026-07')
+    expect(resolvePurchaseTaxMonth({ docDate: '2026-07-17', taxMonth: '2026-10' })).toBe('2026-10')
+  })
+
+  it('claims other-month rows into the filing month when claimInFilingMonth is set', () => {
+    expect(
+      purchaseTaxEffectiveClaimMonth(
+        { docDate: '2026-07-17', claimInFilingMonth: true },
+        '2026-10'
+      )
+    ).toBe('2026-10')
+    const rows = [
+      { docDate: '2026-07-17', skip: false, claimInFilingMonth: true, invoiceNo: 'JUL' },
+      { docDate: '2026-07-20', skip: false, claimInFilingMonth: false, invoiceNo: 'KEEP' },
+    ]
+    const part = partitionPurchaseTaxReviewForSave(rows, '2026-10')
+    expect(part.viewMonth).toBe('2026-10')
+    expect(part.toSave.map((r) => r.invoiceNo)).toEqual(['JUL'])
+    expect(part.leftover.map((r) => r.invoiceNo)).toEqual(['KEEP'])
   })
 
   it('keeps other-month review rows when saving the lookup month', () => {

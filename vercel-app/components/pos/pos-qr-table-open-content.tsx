@@ -18,6 +18,7 @@ import { useT } from '@/lib/i18n'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
 import { canAccessPosOrder } from '@/lib/permissions'
 import { buffetTierDisplayName, defaultQrOrderStoreSettings } from '@/lib/qr-table-types'
+import { clampPosTableFloor, POS_TABLE_FLOOR_MAX } from '@/lib/pos-table-floor-match'
 import type { QrBuffetTier, QrOrderStoreSettings } from '@/lib/qr-table-types'
 import { resolvePosFloorDisplayLabel } from '@/lib/pos-table-layout-payload'
 import { Button } from '@/components/ui/button'
@@ -136,18 +137,18 @@ export function PosQrTableOpenContent() {
   const floors = React.useMemo(() => {
     const set = new Set<number>()
     for (const row of tables) {
-      const n = Math.floor(Number(row.floor) || 1)
-      if (n >= 1 && n <= 3) set.add(n)
+      const n = clampPosTableFloor(Number(row.floor) || 1)
+      if (n >= 1 && n <= POS_TABLE_FLOOR_MAX) set.add(n)
     }
     return [...set].sort((a, b) => a - b)
   }, [tables])
 
   const visibleTables = React.useMemo(() => {
     return tables
-      .filter((row) => floor === 'all' || Math.floor(Number(row.floor) || 1) === floor)
+      .filter((row) => floor === 'all' || clampPosTableFloor(Number(row.floor) || 1) === floor)
       .slice()
       .sort((a, b) => {
-        const fa = Math.floor(Number(a.floor) || 1) - Math.floor(Number(b.floor) || 1)
+        const fa = clampPosTableFloor(Number(a.floor) || 1) - clampPosTableFloor(Number(b.floor) || 1)
         if (fa) return fa
         return String(a.name).localeCompare(String(b.name), undefined, { numeric: true })
       })
@@ -336,7 +337,7 @@ export function PosQrTableOpenContent() {
                     className="h-10 touch-manipulation"
                     onClick={() => setFloor(n)}
                   >
-                    {resolvePosFloorDisplayLabel(n as 1 | 2 | 3, floorLabels, 'Floor {n}')}
+                    {resolvePosFloorDisplayLabel(n, floorLabels, 'Floor {n}')}
                   </Button>
                 ))}
               </div>

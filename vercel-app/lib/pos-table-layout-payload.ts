@@ -1,11 +1,16 @@
 /**
  * pos_table_layouts.layout_json 파싱/직렬화.
  * - 레거시: 테이블 배열만 저장
- * - v1: { v: 1, tables, floorLabels } — 매장별 구역(층) 표시명
+ * - v1: { v: 1, tables, floorLabels, floorCount? } — 매장별 구역(층) 표시명·슬롯 수
  */
 
 import type { PosTableFloor } from '@/lib/pos-table-floor-match'
-import { clampPosTableFloor } from '@/lib/pos-table-floor-match'
+import {
+  clampPosTableFloor,
+  clampPosTableFloorCount,
+  POS_TABLE_FLOOR_DEFAULT_COUNT,
+  POS_TABLE_FLOOR_MAX,
+} from '@/lib/pos-table-floor-match'
 
 export type PosFloorLabels = Partial<Record<PosTableFloor, string>>
 
@@ -92,6 +97,8 @@ export type PosTableLayoutTableRow = {
 export type PosTableLayoutParsed = {
   tables: PosTableLayoutTableRow[]
   floorLabels: PosFloorLabels
+  /** 관리자 Zone 탭 수 (기본 3, 최대 POS_TABLE_FLOOR_MAX) */
+  floorCount: number
 }
 
 const FLOOR_LABEL_MAX_LEN = 24
@@ -107,15 +114,44 @@ export function normalizePosFloorLabel(raw: unknown): string {
     .slice(0, FLOOR_LABEL_MAX_LEN)
 }
 
-/** 빈 문자열·숫자만 있는 키는 제외한 구역명 맵 */
+/** 빈 문자열·숫자만 있는 키는 제외한 구역명 맵 (키 1..MAX) */
 export function normalizePosFloorLabels(raw: unknown): PosFloorLabels {
   const src = asRecord(raw) ?? {}
   const out: PosFloorLabels = {}
-  for (const n of [1, 2, 3] as const) {
+  for (let n = 1; n <= POS_TABLE_FLOOR_MAX; n += 1) {
     const label = normalizePosFloorLabel(src[String(n)] ?? src[n as unknown as string])
     if (label) out[n] = label
   }
   return out
+}
+
+/** 테이블·라벨·저장된 floorCount로 실제 Zone 탭 수 결정 */
+export function resolvePosTableFloorCount(
+  tables: Array<{ floor?: number | null }> | undefined | null,
+  floorLabels: PosFloorLabels | undefined | null,
+  rawCount?: unknown
+): number {
+  let maxUsed = POS_TABLE_FLOOR_DEFAULT_COUNT
+  for (const t of tables || []) {
+    const f = clampPosTableFloor(Number(t?.floor ?? 1) || 1)
+    if (f > maxUsed) maxUsed = f
+  }
+  for (const key of Object.keys(floorLabels || {})) {
+    const n = Number(key)
+    if (Number.isFinite(n) && n >= 1 && n <= POS_TABLE_FLOOR_MAX && n > maxUsed) {
+      maxUsed = n
+    }
+  }
+  const fromRaw =
+    rawCount != null && rawCount !== ''
+      ? Math.trunc(Number(rawCount))
+      : POS_TABLE_FLOOR_DEFAULT_COUNT
+  const candidate = Math.max(
+    POS_TABLE_FLOOR_DEFAULT_COUNT,
+    maxUsed,
+    Number.isFinite(fromRaw) ? fromRaw : POS_TABLE_FLOOR_DEFAULT_COUNT
+  )
+  return clampPosTableFloorCount(candidate)
 }
 
 export function resolvePosFloorDisplayLabel(
@@ -155,35 +191,60 @@ function parseTablesArray(arr: unknown[]): PosTableLayoutTableRow[] {
     .filter((t): t is PosTableLayoutTableRow => t != null)
 }
 
+function withFloorCount(
+  tables: PosTableLayoutTableRow[],
+  floorLabels: PosFloorLabels,
+  rawCount?: unknown
+): PosTableLayoutParsed {
+  return {
+    tables,
+    floorLabels,
+    floorCount: resolvePosTableFloorCount(tables, floorLabels, rawCount),
+  }
+}
+
 /** DB layout_json → 테이블 + 구역명 (레거시 배열 호환) */
 export function parsePosTableLayoutJson(raw: unknown): PosTableLayoutParsed {
   if (Array.isArray(raw)) {
-    return { tables: parseTablesArray(raw), floorLabels: {} }
+    const tables = parseTablesArray(raw)
+    return withFloorCount(tables, {})
   }
   const obj = asRecord(raw)
-  if (!obj) return { tables: [], floorLabels: {} }
+  if (!obj) return withFloorCount([], {})
 
   if (Array.isArray(obj.tables)) {
-    return {
-      tables: parseTablesArray(obj.tables),
-      floorLabels: normalizePosFloorLabels(obj.floorLabels),
-    }
+    const tables = parseTablesArray(obj.tables)
+    const floorLabels = normalizePosFloorLabels(obj.floorLabels)
+    return withFloorCount(tables, floorLabels, obj.floorCount)
   }
 
   // 단일 테이블 객체처럼 보이면 무시 (비정상 데이터)
   if (obj.id != null && obj.x != null) {
     const one = mapTableRow(obj)
-    return { tables: one ? [one] : [], floorLabels: normalizePosFloorLabels(obj.floorLabels) }
+    const tables = one ? [one] : []
+    const floorLabels = normalizePosFloorLabels(obj.floorLabels)
+    return withFloorCount(tables, floorLabels, obj.floorCount)
   }
 
-  return { tables: [], floorLabels: normalizePosFloorLabels(obj.floorLabels) }
+  const floorLabels = normalizePosFloorLabels(obj.floorLabels)
+  return withFloorCount([], floorLabels, obj.floorCount)
 }
 
-/** 저장용 layout_json. 구역명이 있으면 wrapper, 없으면 레거시 배열 유지 가능 */
+export type PosTableLayoutSerialized =
+  | PosTableLayoutTableRow[]
+  | {
+      v: 1
+      tables: PosTableLayoutTableRow[]
+      floorLabels: PosFloorLabels
+      floorCount?: number
+    }
+
+/** 저장용 layout_json. 구역명 또는 floorCount>기본이면 wrapper */
 export function serializePosTableLayoutJson(
   tables: PosTableLayoutTableRow[],
-  floorLabels?: PosFloorLabels | null
-): PosTableLayoutTableRow[] | { v: 1; tables: PosTableLayoutTableRow[]; floorLabels: PosFloorLabels } {
+  floorLabels?: PosFloorLabels | null,
+  floorCount?: number | null
+): PosTableLayoutSerialized {
   const labels = normalizePosFloorLabels(floorLabels ?? {})
   const rows = tables.map((t) => {
     const color = normalizePosTableColor(t.color)
@@ -201,6 +262,14 @@ export function serializePosTableLayoutJson(
       ...(color ? { color } : {}),
     }
   })
-  if (Object.keys(labels).length === 0) return rows
-  return { v: 1, tables: rows, floorLabels: labels }
+  const resolvedCount = resolvePosTableFloorCount(rows, labels, floorCount)
+  const needWrapper =
+    Object.keys(labels).length > 0 || resolvedCount > POS_TABLE_FLOOR_DEFAULT_COUNT
+  if (!needWrapper) return rows
+  return {
+    v: 1,
+    tables: rows,
+    floorLabels: labels,
+    ...(resolvedCount > POS_TABLE_FLOOR_DEFAULT_COUNT ? { floorCount: resolvedCount } : {}),
+  }
 }

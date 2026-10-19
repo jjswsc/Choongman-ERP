@@ -89,13 +89,19 @@ export async function POST(req: NextRequest) {
     const persistStoreCode = String(existing?.store_code ?? storeCode).trim() || storeCode
 
     let floorLabels: PosFloorLabels = {}
+    let floorCount: number | undefined
     if (floorLabelsProvided) {
       floorLabels = normalizePosFloorLabels(body.floorLabels)
     } else if (existing?.layout_json != null) {
       floorLabels = parsePosTableLayoutJson(existing.layout_json).floorLabels
     }
+    if (body != null && typeof body === 'object' && 'floorCount' in body) {
+      floorCount = Number(body.floorCount)
+    } else if (existing?.layout_json != null) {
+      floorCount = parsePosTableLayoutJson(existing.layout_json).floorCount
+    }
 
-    const layoutJson = serializePosTableLayoutJson(layoutRows, floorLabels)
+    const layoutJson = serializePosTableLayoutJson(layoutRows, floorLabels, floorCount)
 
     if (existing?.store_code) {
       await supabaseUpdateByFilter(

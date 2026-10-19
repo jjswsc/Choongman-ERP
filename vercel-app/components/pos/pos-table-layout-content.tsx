@@ -22,6 +22,8 @@ import {
   CheckSquare,
   XSquare,
   Type,
+  Plus,
+  Minus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,10 +61,17 @@ import {
   normalizePosTableColor,
   resolvePosFloorDisplayLabel,
   resolvePosTableEmptyColor,
+  resolvePosTableFloorCount,
   darkenPosTableColor,
   posTableColorIsDark,
   POS_TABLE_LAYOUT_COLOR_PRESETS,
 } from "@/lib/pos-table-layout-payload"
+import {
+  clampPosTableFloor,
+  clampPosTableFloorCount,
+  POS_TABLE_FLOOR_DEFAULT_COUNT,
+  POS_TABLE_FLOOR_MAX,
+} from "@/lib/pos-table-floor-match"
 import { computeAutoLayoutSlots } from "@/lib/pos-table-auto-layout"
 import {
   buildPosTableBatchNames,
@@ -128,7 +137,8 @@ function normalizeLayoutItem(item: PosTableItem): PosTableItem {
   const nextH = Math.max(MIN_TABLE_H, Math.min(FLOOR_H, snapByGrid(Number(item.h ?? MIN_TABLE_H) || MIN_TABLE_H)))
   const nextX = Math.max(0, Math.min(FLOOR_W - nextW, snapByGrid(Number(item.x ?? 0) || 0)))
   const nextY = Math.max(0, Math.min(FLOOR_H - nextH, snapByGrid(Number(item.y ?? 0) || 0)))
-  return { ...item, w: nextW, h: nextH, x: nextX, y: nextY }
+  const floor = clampPosTableFloor(Number(item.floor ?? 1) || 1)
+  return { ...item, w: nextW, h: nextH, x: nextX, y: nextY, floor }
 }
 
 export function PosTableLayoutContent() {
@@ -150,7 +160,8 @@ export function PosTableLayoutContent() {
   const [showGrid, setShowGrid] = React.useState(true)
   const [gridCols, setGridCols] = React.useState(6)
   const [gridRows, setGridRows] = React.useState(5)
-  const [activeFloor, setActiveFloor] = React.useState<1 | 2 | 3>(1)
+  const [activeFloor, setActiveFloor] = React.useState(1)
+  const [floorCount, setFloorCount] = React.useState(POS_TABLE_FLOOR_DEFAULT_COUNT)
   const [floorLabels, setFloorLabels] = React.useState<PosFloorLabels>({})
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
@@ -190,17 +201,21 @@ export function PosTableLayoutContent() {
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const formatAutoTableName = React.useCallback(
-    (floor: 1 | 2 | 3, number: number) =>
+    (floor: number, number: number) =>
       `${resolvePosTableZoneNamePrefix(floor, floorLabels[floor])}${number}`,
     [floorLabels]
   )
   const floorLabelFallback = t("posFloorLabel") || "{n}F"
   const getFloorTabLabel = React.useCallback(
-    (floor: 1 | 2 | 3) => resolvePosFloorDisplayLabel(floor, floorLabels, floorLabelFallback),
+    (floor: number) => resolvePosFloorDisplayLabel(floor, floorLabels, floorLabelFallback),
     [floorLabels, floorLabelFallback]
   )
+  const floorTabs = React.useMemo(
+    () => Array.from({ length: floorCount }, (_, i) => i + 1),
+    [floorCount]
+  )
   const currentFloorLayout = React.useMemo(
-    () => layout.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) === activeFloor),
+    () => layout.filter((t) => clampPosTableFloor(Number(t.floor ?? 1) || 1) === activeFloor),
     [layout, activeFloor]
   )
   const currentFloorIdSet = React.useMemo(() => new Set(currentFloorLayout.map((t) => t.id)), [currentFloorLayout])
@@ -217,8 +232,7 @@ export function PosTableLayoutContent() {
     if (!storeCode) return
     try {
       const raw = window.localStorage.getItem(`${FLOOR_PREF_KEY}${storeCode}`)
-      const floor = Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
-      setActiveFloor(floor)
+      setActiveFloor(clampPosTableFloor(Number(raw ?? 1) || 1))
     } catch {
       setActiveFloor(1)
     }
@@ -238,14 +252,20 @@ export function PosTableLayoutContent() {
     setLoading(true)
     setIsFallbackLayout(false)
     getPosTableLayout({ storeCode, forceNetwork: true })
-      .then(({ layout: l, floorLabels: labels, isFallback }) => {
-        setLayout((l || []).map(normalizeLayoutItem))
-        setFloorLabels(normalizePosFloorLabels(labels ?? {}))
+      .then(({ layout: l, floorLabels: labels, floorCount: count, isFallback }) => {
+        const items = (l || []).map(normalizeLayoutItem)
+        const normalizedLabels = normalizePosFloorLabels(labels ?? {})
+        setLayout(items)
+        setFloorLabels(normalizedLabels)
+        const nextCount = resolvePosTableFloorCount(items, normalizedLabels, count)
+        setFloorCount(nextCount)
+        setActiveFloor((prev) => Math.min(prev, nextCount))
         setIsFallbackLayout(Boolean(isFallback))
       })
       .catch(() => {
         setLayout([])
         setFloorLabels({})
+        setFloorCount(POS_TABLE_FLOOR_DEFAULT_COUNT)
       })
       .finally(() => setLoading(false))
   }, [storeCode])
@@ -260,8 +280,7 @@ export function PosTableLayoutContent() {
       setTableNameInput(item?.name ?? "")
       setTableSeatsInput(item?.seats ?? 0)
       setTableColorInput(normalizePosTableColor(item?.color) ?? "")
-      const floor = Math.min(3, Math.max(1, Number(item?.floor ?? 1) || 1)) as 1 | 2 | 3
-      setActiveFloor(floor)
+      setActiveFloor(clampPosTableFloor(Number(item?.floor ?? 1) || 1))
     } else {
       setTableNameInput("")
       setTableSeatsInput(0)
@@ -416,7 +435,7 @@ export function PosTableLayoutContent() {
       })
     )
     setLayout((prev) => [
-      ...prev.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) !== activeFloor),
+      ...prev.filter((t) => clampPosTableFloor(Number(t.floor ?? 1) || 1) !== activeFloor),
       ...newTables,
     ])
     setSelectedIds(newTables.map((t) => t.id))
@@ -698,7 +717,7 @@ export function PosTableLayoutContent() {
       ))
     )
       return
-    setLayout((prev) => prev.filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) !== activeFloor))
+    setLayout((prev) => prev.filter((tbl) => clampPosTableFloor(Number(tbl.floor ?? 1) || 1) !== activeFloor))
     setSelectedId(null)
     setSelectedIds([])
   }
@@ -715,7 +734,11 @@ export function PosTableLayoutContent() {
     }
     setCopyLoading(true)
     try {
-      const { layout: sourceLayout, floorLabels: sourceLabels } = await getPosTableLayout({
+      const {
+        layout: sourceLayout,
+        floorLabels: sourceLabels,
+        floorCount: sourceFloorCount,
+      } = await getPosTableLayout({
         storeCode: source,
         forceNetwork: true,
       })
@@ -728,8 +751,12 @@ export function PosTableLayoutContent() {
         ...t,
         id: generateId(),
       })).map(normalizeLayoutItem)
+      const normalizedLabels = normalizePosFloorLabels(sourceLabels ?? {})
       setLayout(copied)
-      setFloorLabels(normalizePosFloorLabels(sourceLabels ?? {}))
+      setFloorLabels(normalizedLabels)
+      const nextCount = resolvePosTableFloorCount(copied, normalizedLabels, sourceFloorCount)
+      setFloorCount(nextCount)
+      setActiveFloor((prev) => Math.min(prev, nextCount))
       setSelectedId(null)
       setSelectedIds([])
       await appAlert(t("posTableLayoutCopyDone") || "테이블 배치를 복사했습니다. 저장 버튼을 눌러 적용하세요.")
@@ -750,11 +777,43 @@ export function PosTableLayoutContent() {
     })
   }
 
+  const handleAddFloor = () => {
+    if (floorCount >= POS_TABLE_FLOOR_MAX) return
+    const next = clampPosTableFloorCount(floorCount + 1)
+    setFloorCount(next)
+    setActiveFloor(next)
+    setSelectedId(null)
+    setSelectedIds([])
+  }
+
+  const handleRemoveLastFloor = async () => {
+    if (floorCount <= POS_TABLE_FLOOR_DEFAULT_COUNT) return
+    const last = floorCount
+    const hasTables = layout.some((t) => clampPosTableFloor(Number(t.floor ?? 1) || 1) === last)
+    if (hasTables) {
+      await appAlert(
+        t("posTableZoneRemoveBlocked") ||
+          "이 Zone에 테이블이 있어 삭제할 수 없습니다. 테이블을 먼저 옮기거나 삭제하세요."
+      )
+      return
+    }
+    setFloorLabels((prev) => {
+      const out: PosFloorLabels = { ...prev }
+      delete out[last]
+      return out
+    })
+    const next = clampPosTableFloorCount(floorCount - 1)
+    setFloorCount(next)
+    setActiveFloor((prev) => Math.min(prev, next))
+    setSelectedId(null)
+    setSelectedIds([])
+  }
+
   const handleNormalizeToNumericName = () => {
     const prefix = resolvePosTableZoneNamePrefix(activeFloor, floorLabels[activeFloor])
     setLayout((prev) => {
       const floorItems = prev
-        .filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor)
+        .filter((tbl) => clampPosTableFloor(Number(tbl.floor ?? 1) || 1) === activeFloor)
         .slice()
         .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x))
       const used = new Set<number>()
@@ -993,11 +1052,14 @@ export function PosTableLayoutContent() {
       const normalizedLayout = layout.map(normalizeLayoutItem)
       setLayout(normalizedLayout)
       const labelsToSave = normalizePosFloorLabels(floorLabels)
+      const countToSave = resolvePosTableFloorCount(normalizedLayout, labelsToSave, floorCount)
       setFloorLabels(labelsToSave)
+      setFloorCount(countToSave)
       const res = await savePosTableLayout({
         storeCode,
         layout: normalizedLayout,
         floorLabels: labelsToSave,
+        floorCount: countToSave,
       })
       if (res.success) {
         await appAlert(t("msg_saved") || "저장되었습니다.")
@@ -1093,8 +1155,8 @@ export function PosTableLayoutContent() {
       {/* 그리드 설정 & 테이블 생성 */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
-            {([1, 2, 3] as const).map((floor) => (
+          <div className="flex max-w-full flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+            {floorTabs.map((floor) => (
               <Button
                 key={floor}
                 type="button"
@@ -1107,6 +1169,28 @@ export function PosTableLayoutContent() {
                 {getFloorTabLabel(floor)}
               </Button>
             ))}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 shrink-0 px-0"
+              title={t("posTableZoneAdd") || "Zone 추가"}
+              disabled={floorCount >= POS_TABLE_FLOOR_MAX}
+              onClick={handleAddFloor}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 shrink-0 px-0"
+              title={t("posTableZoneRemove") || "마지막 Zone 삭제"}
+              disabled={floorCount <= POS_TABLE_FLOOR_DEFAULT_COUNT}
+              onClick={() => void handleRemoveLastFloor()}
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </Button>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="whitespace-nowrap text-xs font-medium text-slate-600">
@@ -1122,9 +1206,6 @@ export function PosTableLayoutContent() {
               maxLength={24}
             />
           </div>
-          <span className="text-[11px] text-slate-500">
-            {t("posTableZoneNameHint") || "층·방·테라스 등 매장에 맞게 이름을 바꿀 수 있습니다."}
-          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-600">{t("posTableGrid") || "가로"}</span>

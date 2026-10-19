@@ -43,10 +43,12 @@ function jsonError(status: number, error: string, extra?: Record<string, unknown
 }
 
 function parseBodyInput(body: Record<string, unknown>, fallbackStore: string): PurchaseTaxInvoiceInput {
+  const taxMonthRaw = String(body.taxMonth ?? body.tax_month ?? '').trim().slice(0, 7)
   return {
     storeName: String(body.storeName || body.store_name || fallbackStore || '').trim(),
     buyerTaxId: digitsTin13(body.buyerTaxId ?? body.buyer_tax_id),
     docDate: String(body.docDate || body.doc_date || '').slice(0, 10),
+    taxMonth: /^\d{4}-\d{2}$/.test(taxMonthRaw) ? taxMonthRaw : undefined,
     invoiceNo: String(body.invoiceNo || body.invoice_no || '').trim(),
     sellerName: String(body.sellerName || body.seller_name || '').trim(),
     sellerTaxId: digitsTin13(body.sellerTaxId ?? body.seller_tax_id),

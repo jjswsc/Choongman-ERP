@@ -253,6 +253,7 @@ import {
   resolveMemberPortalTakeoutTableDisplay,
 } from '@/lib/pos-member-portal-takeout-label'
 import {
+  clampPosTableFloor,
   layoutHasMultipleFloors,
   parsePosTableFloorFromLabel,
   posDineInTableMatchKey,
@@ -861,7 +862,7 @@ export default function PosTerminalPage() {
   const [servingTableId, setServingTableId] = useState<string | null>(null)
   /** 데모 홀: 저장 API 없이 서빙 패널용 주문만 오버레이 */
   const [demoDineInOrder, setDemoDineInOrder] = useState<{ tableId: string; order: Order } | null>(null)
-  const [activeFloor, setActiveFloor] = useState<1 | 2 | 3>(1)
+  const [activeFloor, setActiveFloor] = useState(1)
   const [deliveryApp, setDeliveryApp] = useState<DeliveryApp | null>(null)
   const [deliveryOrderNo, setDeliveryOrderNo] = useState('')
   const [takeoutMode, setTakeoutMode] = useState<TakeoutMode>('slot')
@@ -2244,8 +2245,7 @@ export default function PosTerminalPage() {
     if (!currentStoreId) return
     try {
       const raw = window.localStorage.getItem(`${FLOOR_PREF_KEY}${currentStoreId}`)
-      const floor = Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
-      setActiveFloor(floor)
+      setActiveFloor(clampPosTableFloor(Number(raw ?? 1) || 1))
     } catch {
       setActiveFloor(1)
     }
@@ -2262,10 +2262,10 @@ export default function PosTerminalPage() {
 
   const todayCompleted = todaySales?.completedCount ?? 0
   const totalSales = todaySales?.completedTotal ?? 0
-  const getTableFloor = (tableId: string | null | undefined): 1 | 2 | 3 => {
+  const getTableFloor = (tableId: string | null | undefined): number => {
     if (!tableId) return 1
     const raw = floorLayoutForView.find((tbl) => tbl.id === tableId)?.floor
-    return Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
+    return clampPosTableFloor(Number(raw ?? 1) || 1)
   }
 
   const dineInMultiFloorLayout = useMemo(() => layoutHasMultipleFloors(currentLayout), [currentLayout])
@@ -6563,11 +6563,11 @@ export default function PosTerminalPage() {
   useEffect(() => {
     if (selectedTableId || servingTableId) return
     const hasActiveFloorTable = floorLayoutForView.some(
-      (tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor
+      (tbl) => clampPosTableFloor(Number(tbl.floor ?? 1) || 1) === activeFloor
     )
     if (hasActiveFloorTable || floorLayoutForView.length === 0) return
     const floors = Array.from(
-      new Set(floorLayoutForView.map((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as 1 | 2 | 3))
+      new Set(floorLayoutForView.map((tbl) => clampPosTableFloor(Number(tbl.floor ?? 1) || 1)))
     ).sort((a, b) => a - b)
     if (floors[0] && floors[0] !== activeFloor) {
       setActiveFloor(floors[0])

@@ -31,7 +31,7 @@ COMMENT ON TABLE public.purchase_tax_invoices IS
 COMMENT ON COLUMN public.purchase_tax_invoices.buyer_tax_id IS
   '납세 주체 13자리 (store_tax_filing_profiles.tax_id). HQ vs เอกมัย 구분.';
 COMMENT ON COLUMN public.purchase_tax_invoices.tax_month IS
-  'YYYY-MM from doc_date (invoice date), not expense date.';
+  'YYYY-MM claim/filing month for PP.30. Usually from doc_date; may differ when claimed late (ยื่นข้ามเดือน).';
 COMMENT ON COLUMN public.purchase_tax_invoices.seller_branch IS
   'สำนักงานใหญ่ or สาขา 00001';
 COMMENT ON COLUMN public.purchase_tax_invoices.source IS

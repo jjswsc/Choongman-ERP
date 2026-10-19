@@ -14,7 +14,7 @@ export interface PosTableItem {
   y: number
   w: number
   h: number
-  /** 구역 슬롯 (1~3). UI 표시명은 floorLabels */
+  /** 구역 슬롯 (1~8). UI 표시명은 floorLabels */
   floor?: number
   /** rect | square - 테이블 형태 */
   shape?: string
@@ -26,8 +26,8 @@ export interface PosTableItem {
   color?: string
 }
 
-/** 매장별 구역(층·방 등) 표시명. 키는 슬롯 1~3 */
-export type PosFloorLabels = Partial<Record<1 | 2 | 3, string>>
+/** 매장별 구역(층·방 등) 표시명. 키는 슬롯 1~8 */
+export type PosFloorLabels = Partial<Record<number, string>>
 
 export function posTableLayoutCacheKey(storeCode: string): string {
   return `erp:posTableLayout:${storeCode.trim()}`
@@ -45,11 +45,13 @@ export async function getPosTableLayout(params: {
   const empty = {
     layout: [] as PosTableItem[],
     floorLabels: {} as PosFloorLabels,
+    floorCount: 3,
     storeCode: params.storeCode,
   }
   return fetchPosCatalogCached<{
     layout: PosTableItem[]
     floorLabels?: PosFloorLabels
+    floorCount?: number
     storeCode: string
     isFallback?: boolean
   }>(cacheKey, url, empty, { forceNetwork: Boolean(params.forceNetwork) })

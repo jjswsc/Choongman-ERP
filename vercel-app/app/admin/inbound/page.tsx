@@ -683,7 +683,7 @@ export default function InboundPage() {
         }
       } else {
         const res = await registerInboundBatch(list, storeName, {
-          vendorCode,
+          vendorCode: vendorCode ?? undefined,
           purchaseOrderId: fromPoId ?? undefined,
           poNo: inPoNo.trim() || undefined,
           invoiceNo: inInvoiceNo.trim() || undefined,

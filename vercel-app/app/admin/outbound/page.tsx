@@ -2121,6 +2121,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       await appAlert(t("outSelectForExcel"))
       return
     }
+    // 빌(인보이스) 1건 = Excel 1행. 품목별 분해하지 않음(화면 이력·청구 합계와 동일).
     const headers = [
       t("orderColDate"),
       t("orderColDeliveryDate"),
@@ -2129,7 +2130,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       t("outColOutboundType"),
       t("outColStore"),
       t("outColItem"),
-      t("spec"),
       t("outColQty"),
       t("inColAmount"),
       t("inv_vat7"),
@@ -2139,51 +2139,66 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     let sumAmount = 0
     let sumVat = 0
     let sumGrand = 0
+    const normDs = (s: string) => {
+      const v = String(s || "").trim()
+      if (v.includes("일부") || v.includes("Partial")) return t("outDeliveryPartial")
+      if (v.includes("배송완료") || v.includes("Delivered")) return t("outDeliveryDelivered")
+      if (v.includes("배송중") || v.includes("Transit")) return t("outDeliveryTransit")
+      return "-"
+    }
     for (const g of checked) {
-      const orderDate = g.date?.slice(0, 10) || ""
-      const deliveryDate = (g.items[0]?.deliveryDate || "").slice(0, 10) || "-"
+      const first = g.items[0]
+      const orderDate = first?.orderDate || g.date?.slice(0, 10) || ""
+      const deliveryDateYmds = [
+        ...new Set(
+          g.items
+            .map((it) => (it.deliveryDate || "").slice(0, 10))
+            .filter((d) => d && d !== "-")
+        ),
+      ].sort()
+      const deliveryDate =
+        deliveryDateYmds.length === 0
+          ? "-"
+          : deliveryDateYmds.length === 1
+            ? deliveryDateYmds[0]
+            : `${deliveryDateYmds[0]}~${deliveryDateYmds[deliveryDateYmds.length - 1]}`
       const type = g.type || "Force"
       const target = g.target || "-"
       const orderTypeLabel = type === "Force" ? t("outTypeForce") : t("outTypeOrder")
-      const deliveryStatus = g.items[0]?.deliveryStatus || ""
-      const normDs = (s: string) => {
-        const v = String(s || "").trim()
-        if (v.includes("일부") || v.includes("Partial")) return t("outDeliveryPartial")
-        if (v.includes("배송완료") || v.includes("Delivered")) return t("outDeliveryDelivered")
-        if (v.includes("배송중") || v.includes("Transit")) return t("outDeliveryTransit")
-        return "-"
-      }
+      const deliveryStatus = first?.deliveryStatus || ""
       const outboundTypeLabel = type === "Order" ? normDs(deliveryStatus) : "-"
-      for (const it of g.items) {
-        const name = it.name || "-"
-        const spec = it.spec || "-"
-        const amount = Number(it.amount ?? 0)
-        const vatTotals = thaiInvoiceTotalsFromRawSubtotal(amount)
-        sumAmount += amount
-        sumVat += vatTotals.vatRounded
-        sumGrand += vatTotals.grandTotal
-        dataRows.push([
-          orderDate,
-          deliveryDate,
-          g.invoiceNo || "-",
-          orderTypeLabel,
-          outboundTypeLabel,
-          target,
-          name,
-          spec,
-          String(it.qty ?? ""),
-          String(amount),
-          String(vatTotals.vatRounded),
-          String(vatTotals.grandTotal),
-        ])
-      }
+      const itemsSummary =
+        g.items.length === 1
+          ? `${first?.name || "-"}${first?.spec ? ` (${first.spec})` : ""}`
+          : g.items.length > 1
+            ? `${first?.name || "-"} ${t("inEtcCount")} ${g.items.length - 1}`
+            : "-"
+      const amount = Number(g.totalAmt ?? 0)
+      const qty = Number(g.totalQty ?? 0)
+      const vatTotals = thaiInvoiceTotalsFromRawSubtotal(amount)
+      sumAmount += amount
+      sumVat += vatTotals.vatRounded
+      sumGrand += vatTotals.grandTotal
+      dataRows.push([
+        orderDate,
+        deliveryDate,
+        g.invoiceNo || "-",
+        orderTypeLabel,
+        outboundTypeLabel,
+        target,
+        itemsSummary,
+        String(qty),
+        String(amount),
+        String(vatTotals.vatRounded),
+        String(vatTotals.grandTotal),
+      ])
     }
     const summaryLabel = t("inv_total")
     const summaryRow = headers.map(() => "")
     summaryRow[0] = summaryLabel
-    summaryRow[9] = String(sumAmount)
-    summaryRow[10] = String(sumVat)
-    summaryRow[11] = String(sumGrand)
+    summaryRow[8] = String(sumAmount)
+    summaryRow[9] = String(sumVat)
+    summaryRow[10] = String(sumGrand)
     downloadSummaryExcel(headers, dataRows, summaryRow, "outbound")
   }
 

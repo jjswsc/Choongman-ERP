@@ -19,12 +19,12 @@ import { shouldPreferOfflineCache } from '@/lib/offline/network'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 import {
+  clampPosTableFloor,
   parsePosTableFloorFromLabel,
   posDineInTableLabelsMatch,
   posDineInTableMatchKey,
   resolveDineInOrderForLayoutTable,
   type PosDineInTableRef,
-  type PosTableFloor,
 } from '@/lib/pos-table-floor-match'
 import { isDineInOrderForTableDisplay } from '@/lib/pos-sales-order-type-filter'
 import {
@@ -289,7 +289,7 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
 }
 
 function layoutItemToTableRef(t: PosTableItem): PosDineInTableRef {
-  const floor = Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) as PosTableFloor
+  const floor = clampPosTableFloor(Number(t.floor ?? 1) || 1)
   return {
     id: String(t.id ?? ''),
     name: String(t.name ?? '').trim() || String(t.id ?? ''),
@@ -507,11 +507,11 @@ function mergeFetchedOrdersWithLocal(fetched: Order[], prev: Order[]): Order[] {
 }
 
 function findPrevTableForMerge(tbl: Table, prevStore: Store): Table | undefined {
-  const tblFloor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+  const tblFloor = clampPosTableFloor(Number(tbl.floor ?? 1) || 1)
   const tblNorm = normalizePosTableNameForMatch(tbl.name)
   return prevStore.tables.find((pt) => {
     if (pt.id === tbl.id) return true
-    const ptFloor = Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor
+    const ptFloor = clampPosTableFloor(Number(pt.floor ?? 1) || 1)
     if (ptFloor !== tblFloor) return false
     return tblNorm ? normalizePosTableNameForMatch(pt.name) === tblNorm : false
   })
@@ -527,7 +527,7 @@ function mergeStoreTablesWithLocalOrders(
   const layoutPeers: PosDineInTableRef[] = nextStore.tables.map((pt) => ({
     id: pt.id,
     name: pt.name,
-    floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+    floor: clampPosTableFloor(Number(pt.floor ?? 1) || 1),
   }))
   const nextTables = nextStore.tables.map((tbl) => {
     const prevTable = findPrevTableForMerge(tbl, prevStore)
@@ -554,7 +554,7 @@ function mergeStoreTablesWithLocalOrders(
     if (prevKey && activeOrders?.length) {
       const fetched = activeOrders.find((o) => orderListMergeKey(o) === prevKey)
       if (fetched?.type === 'dine-in' && String(fetched.tableName ?? '').trim()) {
-        const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+        const floor = clampPosTableFloor(Number(tbl.floor ?? 1) || 1)
         const ref = { id: tbl.id, name: tbl.name, floor }
         if (!posDineInTableLabelsMatch(String(fetched.tableName ?? ''), ref, { layoutPeers })) {
           return tbl
@@ -576,7 +576,7 @@ function hydrateStoreTablesFromActiveOrders(store: Store, orders: Order[]): Stor
   const peers: PosDineInTableRef[] = store.tables.map((pt) => ({
     id: pt.id,
     name: pt.name,
-    floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+    floor: clampPosTableFloor(Number(pt.floor ?? 1) || 1),
   }))
   const assignedKeys = new Set<string>()
   for (const tbl of store.tables) {
@@ -588,7 +588,7 @@ function hydrateStoreTablesFromActiveOrders(store: Store, orders: Order[]): Stor
     ...store,
     tables: store.tables.map((tbl) => {
       if (tbl.order && isActiveTerminalListOrder(tbl.order)) return { ...tbl, isOccupied: true }
-      const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+      const floor = clampPosTableFloor(Number(tbl.floor ?? 1) || 1)
       const ref = { id: tbl.id, name: tbl.name, floor }
       const matched = dineInActive.find((o) => {
         const k = orderListMergeKey(o)
@@ -1024,12 +1024,12 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
         const peers: PosDineInTableRef[] = store.tables.map((pt) => ({
           id: pt.id,
           name: pt.name,
-          floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+          floor: clampPosTableFloor(Number(pt.floor ?? 1) || 1),
         }))
         return {
           ...store,
           tables: store.tables.map((t) => {
-            const floor = Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) as PosTableFloor
+            const floor = clampPosTableFloor(Number(t.floor ?? 1) || 1)
             const match = posDineInTableLabelsMatch(name, { id: t.id, name: t.name, floor }, { layoutPeers: peers })
             return match ? { ...t, order: undefined, isOccupied: false } : t
           }),
@@ -1403,12 +1403,12 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           const peers: PosDineInTableRef[] = store.tables.map((pt) => ({
             id: pt.id,
             name: pt.name,
-            floor: Math.min(3, Math.max(1, Number(pt.floor ?? 1) || 1)) as PosTableFloor,
+            floor: clampPosTableFloor(Number(pt.floor ?? 1) || 1),
           }))
           return {
             ...store,
             tables: store.tables.map((tbl) => {
-              const floor = Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as PosTableFloor
+              const floor = clampPosTableFloor(Number(tbl.floor ?? 1) || 1)
               const matched = posDineInTableLabelsMatch(
                 tableName,
                 { id: tbl.id, name: tbl.name, floor },

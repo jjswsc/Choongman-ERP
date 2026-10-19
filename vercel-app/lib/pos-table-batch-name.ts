@@ -3,6 +3,8 @@
  * 예: prefix "A-", start 1, step 1 → A-1, A-2, A-3 …
  */
 
+import { clampPosTableFloor } from '@/lib/pos-table-floor-match'
+
 export type PosTableBatchNameOptions = {
   count: number
   prefix?: string
@@ -43,7 +45,7 @@ export function resolvePosTableZoneNamePrefix(
   floor: number,
   zoneLabel?: string | null
 ): string {
-  const f = Math.min(3, Math.max(1, Math.trunc(Number(floor) || 1)))
+  const f = clampPosTableFloor(Number(floor) || 1)
   const zone = String(zoneLabel ?? '')
     .replace(/\s+/g, ' ')
     .trim()

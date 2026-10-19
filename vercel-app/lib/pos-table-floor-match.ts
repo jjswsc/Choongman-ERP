@@ -1,9 +1,22 @@
 import { normalizePosTableNameForMatch } from '@/lib/pos-print-translate'
 
-export type PosTableFloor = 1 | 2 | 3
+/** 구역(Zone) 슬롯 상한 — 관리자 Table Layout에서 + 로 추가 */
+export const POS_TABLE_FLOOR_MAX = 8
+/** 기존 매장 기본 탭 수 (1~3 항상 표시) */
+export const POS_TABLE_FLOOR_DEFAULT_COUNT = 3
+
+/** 구역 슬롯 번호 (1..POS_TABLE_FLOOR_MAX) */
+export type PosTableFloor = number
 
 export function clampPosTableFloor(n: number): PosTableFloor {
-  return Math.min(3, Math.max(1, Math.trunc(n) || 1)) as PosTableFloor
+  return Math.min(POS_TABLE_FLOOR_MAX, Math.max(1, Math.trunc(n) || 1))
+}
+
+export function clampPosTableFloorCount(n: number): number {
+  return Math.min(
+    POS_TABLE_FLOOR_MAX,
+    Math.max(POS_TABLE_FLOOR_DEFAULT_COUNT, Math.trunc(n) || POS_TABLE_FLOOR_DEFAULT_COUNT)
+  )
 }
 
 /** `1F-3`, `2층 4번`, `F2-3` 등 라벨 앞쪽 층 번호 */
