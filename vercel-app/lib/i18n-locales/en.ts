@@ -3341,7 +3341,7 @@ Only matters the employee must handle personally on a working day:
   taxFilingTabWorkflow: 'Unified workflow',
   taxFilingTabPp30: 'PP.30',
   taxFilingTabPurchaseTaxInv: 'Purchase tax invoices',
-  ptiHint: 'Expense register is separate. PP.30 input VAT comes only from this register: manual entry, inbound tax invoices, or scanned PDF (text layer, QR, Thai OCR). Empty seller names are filled from vendors, saved reviews, and the Revenue Department VAT search. Review before save.',
+  ptiHint: 'Expense register is separate. PP.30 input VAT comes only from this register: manual entry, inbound tax invoices, or scanned PDF (text layer, QR, Thai OCR). Empty seller names are filled from vendors, saved reviews, and the Revenue Department VAT search. Review before save. For an earlier-month invoice claimed in this filing month, check 「Cross-mo.」 in review or manual entry.',
   ptiAdd: 'Add manually',
   ptiEdit: 'Edit',
   ptiSave: 'Save',
