@@ -109,16 +109,6 @@ export function purchaseTaxEffectiveClaimMonth(
   return taxMonthFromDocDate(String(row.docDate || ''))
 }
 
-/** 발행 월 → 신고 월이 몇 개월 뒤인지(음수면 신고가 더 이름). */
-export function purchaseTaxClaimMonthsLate(docDate: unknown, taxMonth: string): number {
-  const docM = taxMonthFromDocDate(String(docDate || ''))
-  const claim = String(taxMonth || '').trim().slice(0, 7)
-  if (!/^\d{4}-\d{2}$/.test(docM) || !/^\d{4}-\d{2}$/.test(claim)) return 0
-  const [dy, dm] = docM.split('-').map(Number)
-  const [cy, cm] = claim.split('-').map(Number)
-  return (cy - dy) * 12 + (cm - dm)
-}
-
 export function formatSellerBranch(raw: unknown): string {
   const s = String(raw || '').trim()
   if (!s) return SELLER_BRANCH_HQ
