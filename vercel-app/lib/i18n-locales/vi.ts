@@ -488,6 +488,13 @@ export const I18N_BASE_VI = {
   ptiReviewVatShort: 'VAT',
   ptiReviewTinShort: 'TIN',
   ptiReviewAmountShort: 'Amount',
+  ptiCrossMonth: 'Claim in this filing month',
+  ptiCrossMonthShort: 'Cross-mo.',
+  ptiCrossMonthHint:
+    'Check if an invoice from another month (e.g. 07) should be included in the filing month you are viewing (e.g. 10). The invoice date stays the same; input VAT posts to the filing month.',
+  ptiCrossMonthReviewHint:
+    'Rows whose invoice month differs from the lookup month: check 「Cross-mo.」 on the right to save into this filing month, or leave unchecked and change the lookup month later.',
+  ptiCrossMonthBadgeTitle: 'Claimed late in {month}',
   ptiSkipEmptyShort: 'Unread',
   ptiSkipCopyShort: 'Copy',
   ptiSkipDupShort: 'Dup',
