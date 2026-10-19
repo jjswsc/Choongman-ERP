@@ -15,24 +15,24 @@ import { posOrdersRealtimeChannelName, posPrintJobsInsertChannelName } from '@/l
 import { buildDineInAddKitchenAutoPrintDedupeKey } from '@/lib/pos-kitchen-dine-in-delta'
 
 describe('MAIN_POS_KITCHEN_JOB_POLL_MS', () => {
-  it('uses 30s safety-net poll; 5s only when print-jobs realtime is down', () => {
-    expect(MAIN_POS_KITCHEN_JOB_POLL_MS).toBe(30_000)
-    expect(MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS).toBe(30_000)
+  it('uses 45s safety-net poll; 10s only when print-jobs realtime is down', () => {
+    expect(MAIN_POS_KITCHEN_JOB_POLL_MS).toBe(45_000)
+    expect(MAIN_POS_KITCHEN_JOB_POLL_HEALTHY_MS).toBe(45_000)
     expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: false, realtimeRecentlyActive: false })).toBe(
-      30_000
+      45_000
     )
-    expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: true })).toBe(30_000)
-    expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(30_000)
-    expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(5_000)
+    expect(resolveKitchenPrintJobPollMs({ realtimeChannelHealthy: true, realtimeRecentlyActive: true })).toBe(45_000)
+    expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(45_000)
+    expect(resolveKitchenPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(10_000)
   })
 })
 
 describe('MAIN_POS_TABLE_QR_JOB_POLL_MS', () => {
   it('aliases table QR safety-net interval to the unified print-job poll', () => {
     expect(MAIN_POS_TABLE_QR_JOB_POLL_MS).toBe(MAIN_POS_KITCHEN_JOB_POLL_MS)
-    expect(MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS).toBe(5_000)
-    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(30_000)
-    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(5_000)
+    expect(MAIN_POS_TABLE_QR_JOB_POLL_UNHEALTHY_MS).toBe(10_000)
+    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: true })).toBe(45_000)
+    expect(resolveTableQrPrintJobPollMs({ jobsInsertChannelHealthy: false })).toBe(10_000)
   })
 })
 
