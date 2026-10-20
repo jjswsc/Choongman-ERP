@@ -62,8 +62,11 @@ export function posQueueConfigFromMap(map: Map<string, string>): PosQueueConfig 
   }
 }
 
-export function isPosQueueEnabledForStore(config: PosQueueConfig, storeCode: string): boolean {
-  const norm = normPosQueueStoreCode(storeCode)
-  if (!norm) return false
-  return config.allStores || config.storeCodes.has(norm)
+/**
+ * 매장 코드가 있으면 전 매장에서 사용한다.
+ * 시범 때 `pos_queue_all_stores=false` + `pos_queue_store_codes`(유니온몰)로 막았던 제한은 적용하지 않는다.
+ * 번호는 DB에서 매장·영업일마다 따로 발급된다.
+ */
+export function isPosQueueEnabledForStore(_config: PosQueueConfig, storeCode: string): boolean {
+  return normPosQueueStoreCode(storeCode).length > 0
 }
