@@ -1,7 +1,7 @@
--- 자리 대기 번호표 — Union Mall만 시범 켜기 (system_settings 3키, pos_orders 미변경 · 영업 중 실행 가능)
--- 다른 매장 추가: pos_queue_store_codes 배열에 매장 코드를 넣고 다시 실행
--- 전 매장 켜기: pos_queue_all_stores = true
--- LINE 호출 끄기: pos_queue_line_notify_enabled = false
+-- 자리 대기 번호표 — (역사) Union Mall만 시범 켜기. 다시 실행하지 말 것.
+-- 전 매장 사용은 pos_queue_tickets_06_enable_all_stores.sql
+-- 이 파일은 system_settings 3키를 시범 값으로 되돌린다. pos_orders 는 건드리지 않는다.
+-- LINE 호출만 끄려면 pos_queue_line_notify_enabled = false (06 실행 후 그 키만 따로)
 INSERT INTO public.system_settings (key, value_json, updated_at)
 VALUES
   ('pos_queue_store_codes', '["CM Union Mall"]'::jsonb, (NOW() AT TIME ZONE 'Asia/Bangkok')),

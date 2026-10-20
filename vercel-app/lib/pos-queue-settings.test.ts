@@ -27,30 +27,47 @@ describe('posQueueSettingValueText', () => {
 })
 
 describe('posQueueConfigFromMap', () => {
-  it('defaults to disabled stores and LINE notify on', () => {
+  it('parses a missing map as all-stores off and LINE notify on', () => {
     const cfg = posQueueConfigFromMap(new Map())
     expect(cfg.allStores).toBe(false)
     expect(cfg.lineNotifyEnabled).toBe(true)
-    expect(isPosQueueEnabledForStore(cfg, 'CM Union Mall')).toBe(false)
+    expect(cfg.storeCodes.size).toBe(0)
   })
 
-  it('enables listed stores case-insensitively', () => {
+  it('parses listed stores case-insensitively', () => {
     const cfg = posQueueConfigFromMap(new Map([['pos_queue_store_codes', '["CM Union Mall"]']]))
-    expect(isPosQueueEnabledForStore(cfg, 'cm  union mall')).toBe(true)
-    expect(isPosQueueEnabledForStore(cfg, 'CM Silom')).toBe(false)
+    expect(cfg.storeCodes.has('cm union mall')).toBe(true)
+    expect(cfg.storeCodes.has('cm silom')).toBe(false)
   })
 
-  it('accepts comma text and all-stores flag', () => {
+  it('accepts comma text and the all-stores flag', () => {
     const cfg = posQueueConfigFromMap(
       new Map([
         ['pos_queue_store_codes', 'CM Silom, CM MBK'],
         ['pos_queue_line_notify_enabled', 'false'],
       ])
     )
-    expect(isPosQueueEnabledForStore(cfg, 'CM MBK')).toBe(true)
+    expect(cfg.storeCodes.has('cm mbk')).toBe(true)
     expect(cfg.lineNotifyEnabled).toBe(false)
     const all = posQueueConfigFromMap(new Map([['pos_queue_all_stores', 'true']]))
-    expect(isPosQueueEnabledForStore(all, 'CM Anything')).toBe(true)
-    expect(isPosQueueEnabledForStore(all, '')).toBe(false)
+    expect(all.allStores).toBe(true)
+  })
+})
+
+describe('isPosQueueEnabledForStore', () => {
+  it('enables every store, including when the pilot allowlist is only Union Mall', () => {
+    const pilot = posQueueConfigFromMap(
+      new Map([
+        ['pos_queue_store_codes', '["CM Union Mall"]'],
+        ['pos_queue_all_stores', 'false'],
+      ])
+    )
+    expect(isPosQueueEnabledForStore(pilot, 'CM Union Mall')).toBe(true)
+    expect(isPosQueueEnabledForStore(pilot, 'cm  union mall')).toBe(true)
+    expect(isPosQueueEnabledForStore(pilot, 'CM Silom')).toBe(true)
+    expect(isPosQueueEnabledForStore(pilot, '1042')).toBe(true)
+    expect(isPosQueueEnabledForStore(posQueueConfigFromMap(new Map()), 'CM Anything')).toBe(true)
+    expect(isPosQueueEnabledForStore(pilot, '')).toBe(false)
+    expect(isPosQueueEnabledForStore(pilot, '   ')).toBe(false)
   })
 })

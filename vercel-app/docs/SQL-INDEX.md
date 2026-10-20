@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **773**개 · 접두어 그룹 **97**개
+- `sql/` 최상위: **775**개 · 접두어 그룹 **97**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **69**개
 
-<details><summary><code>pos_*</code> (226)</summary>
+<details><summary><code>pos_*</code> (227)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -295,6 +295,7 @@
 - [`pos_queue_tickets_03_verify.sql`](../sql/pos_queue_tickets_03_verify.sql) — verify
 - [`pos_queue_tickets_04_store_code_check.sql`](../sql/pos_queue_tickets_04_store_code_check.sql) — verify
 - [`pos_queue_tickets_05_store_codes_text.sql`](../sql/pos_queue_tickets_05_store_codes_text.sql) — log
+- [`pos_queue_tickets_06_enable_all_stores.sql`](../sql/pos_queue_tickets_06_enable_all_stores.sql) — log
 - [`pos_sales_payment_tender_gap_diagnostic.sql`](../sql/pos_sales_payment_tender_gap_diagnostic.sql) — diagnose
 - [`pos_settlements_align_app_columns.sql`](../sql/pos_settlements_align_app_columns.sql)
 - [`pos_settlements_bootstrap.sql`](../sql/pos_settlements_bootstrap.sql)
@@ -475,7 +476,7 @@
 
 </details>
 
-<details><summary><code>get_*</code> (24)</summary>
+<details><summary><code>get_*</code> (25)</summary>
 
 - [`get_collab_discount_usage_by_store_daily_rpc.sql`](../sql/get_collab_discount_usage_by_store_daily_rpc.sql) — rpc
 - [`get_collab_discount_usage_rpc.sql`](../sql/get_collab_discount_usage_rpc.sql) — rpc
@@ -489,6 +490,7 @@
 - [`get_member_line_reach.sql`](../sql/get_member_line_reach.sql)
 - [`get_member_list_cursor_status.sql`](../sql/get_member_list_cursor_status.sql)
 - [`get_my_order_history_rpc.sql`](../sql/get_my_order_history_rpc.sql) — rpc
+- [`get_petty_cash_opening_balances.sql`](../sql/get_petty_cash_opening_balances.sql) — log
 - [`get_petty_cash_summary.sql`](../sql/get_petty_cash_summary.sql)
 - [`get_pos_cancel_reason_summary.sql`](../sql/get_pos_cancel_reason_summary.sql)
 - [`get_pos_channel_settlement_gross.sql`](../sql/get_pos_channel_settlement_gross.sql)

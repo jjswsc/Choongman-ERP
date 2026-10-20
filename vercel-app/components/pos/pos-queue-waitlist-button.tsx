@@ -16,7 +16,7 @@ const PosQueueWaitlistDialog = dynamic(
 
 const BADGE_POLL_MS = 60_000
 
-/** 매장 설정(pos_queue_store_codes)으로 켜진 매장에서만 보인다 */
+/** 매장 코드가 있으면 보인다. 목록 API가 enabled=false 이면 숨긴다. */
 export function PosQueueWaitlistButton(props: {
   storeCode: string
   t: (key: string) => string
