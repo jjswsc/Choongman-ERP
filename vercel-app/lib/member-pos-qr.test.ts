@@ -9,6 +9,7 @@ describe('member-pos-qr', () => {
 
   it('parses structured member QR with scanner delimiters', () => {
     expect(parseMemberPosScanInput('CM|MEM|M0007359')).toEqual({ memberNo: 'M0007359' })
+    expect(parseMemberPosScanInput('OM|MEM|M0007359')).toEqual({ memberNo: 'M0007359' })
     expect(parseMemberPosScanInput('CM~MEM~M0007359')).toEqual({ memberNo: 'M0007359' })
     expect(parseMemberPosScanInput('CM-MEM-M0007359')).toEqual({ memberNo: 'M0007359' })
   })

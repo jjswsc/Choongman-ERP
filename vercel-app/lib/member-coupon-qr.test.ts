@@ -25,8 +25,24 @@ describe('member-coupon-qr', () => {
     })
   })
 
+  it('builds Omni coupon qr without CM prefix', () => {
+    const raw = buildMemberCouponQrPayload({
+      memberNo: 'M0001001',
+      couponCode: 'welcome10',
+      issueId: 42,
+      brandKey: 'omnifoodtech',
+    })
+    expect(raw).toBe('OM|CPN|M0001001|WELCOME10|42')
+    expect(parseMemberCouponQrPayload(raw)).toEqual({
+      memberNo: 'M0001001',
+      couponCode: 'WELCOME10',
+      issueId: 42,
+    })
+  })
+
   it('detects prefixed payloads', () => {
     expect(isMemberCouponQrPayload('CM|CPN|A|B')).toBe(true)
+    expect(isMemberCouponQrPayload('OM|CPN|A|B')).toBe(true)
     expect(isMemberCouponQrPayload('CM~CPN~A~B')).toBe(true)
     expect(isMemberCouponQrPayload('CM-CPN-A-B')).toBe(true)
     expect(isMemberCouponQrPayload('WELCOME10')).toBe(false)

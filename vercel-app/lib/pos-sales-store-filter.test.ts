@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendStoreCodeFilter,
+  canonicalSalesStoreRowKey,
   parseStoreList,
   resolveBankRowStoreName,
   resolveStoresFromParams,
@@ -38,6 +39,20 @@ describe('appendStoreCodeFilter', () => {
     expect(out).toContain('store_code=')
     const decoded = decodeURIComponent(out.split('store_code=')[1] ?? '')
     expect(decoded).toBe('in.(A,CM A,B,CM B)')
+  })
+})
+
+describe('canonicalSalesStoreRowKey', () => {
+  it('keeps Choongman named/alphanumeric codes with CM prefix', () => {
+    expect(canonicalSalesStoreRowKey('CT001')).toBe('CM CT001')
+    expect(canonicalSalesStoreRowKey('CM Ekkamai')).toBe('CM Ekkamai')
+    expect(canonicalSalesStoreRowKey('Ekkamai')).toBe('CM Ekkamai')
+  })
+
+  it('does not invent CM for Omni numeric store codes', () => {
+    expect(canonicalSalesStoreRowKey('1001')).toBe('1001')
+    expect(canonicalSalesStoreRowKey('CM 1001')).toBe('1001')
+    expect(canonicalSalesStoreRowKey('CM 1048')).toBe('1048')
   })
 })
 

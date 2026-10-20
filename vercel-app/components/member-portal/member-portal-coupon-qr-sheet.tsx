@@ -3,6 +3,7 @@
 import * as React from "react"
 import QRCode from "qrcode"
 import { QrCode, X } from "lucide-react"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { buildMemberCouponQrPayload } from "@/lib/member-coupon-qr"
 import { useMemberPortalLang } from "@/lib/member-portal-lang-context"
 import { MP_MAX_WIDTH } from "@/lib/member-portal-design"
@@ -25,11 +26,18 @@ export function MemberPortalCouponQrSheet({
   issueId,
 }: MemberPortalCouponQrSheetProps) {
   const { t } = useMemberPortalLang()
+  const brand = useAppBrandConfig()
   const [qrDataUrl, setQrDataUrl] = React.useState("")
   const displayCode = String(couponCode ?? "").trim().toUpperCase()
   const qrPayload = React.useMemo(
-    () => buildMemberCouponQrPayload({ memberNo, couponCode: displayCode, issueId }),
-    [memberNo, displayCode, issueId]
+    () =>
+      buildMemberCouponQrPayload({
+        memberNo,
+        couponCode: displayCode,
+        issueId,
+        brandKey: brand.key,
+      }),
+    [memberNo, displayCode, issueId, brand.key]
   )
 
   React.useEffect(() => {

@@ -1,16 +1,29 @@
-/** 회원 쿠폰 POS 스캔용 QR 페이로드 (회원번호 + 쿠폰코드 + 발급 ID) */
+/** 회원 쿠폰 POS 스캔용 QR 페이로드 (회원번호 + 쿠폰코드 + 발급 ID). Omni는 OM|CPN| */
 export const MEMBER_COUPON_QR_PREFIX = 'CM|CPN|'
+export const MEMBER_COUPON_QR_PREFIX_OMNI = 'OM|CPN|'
 
-/** USB 스캐너가 `|` 대신 `~`·`-` 등으로 출력하는 경우가 많음 */
-export const MEMBER_COUPON_QR_PREFIX_RE = /^CM[\|~:\-]CPN[\|~:\-]/i
+/** USB 스캐너가 `|` 대신 `~`·`-` 등으로 출력하는 경우가 많음 — CM·OM 모두 인식 */
+export const MEMBER_COUPON_QR_PREFIX_RE = /^(?:CM|OM)[\|~:\-]CPN[\|~:\-]/i
 
 const MEMBER_COUPON_QR_FIELD_SPLIT_RE = /[\|~:\-\uFF5E\u223C\u02DC\u2053\x1D\x1E;]+/
 
-const MEMBER_POS_QR_PREFIX_RE = /^CM[\|~:\-]MEM[\|~:\-]/i
+const MEMBER_POS_QR_PREFIX_RE = /^(?:CM|OM)[\|~:\-]MEM[\|~:\-]/i
 
 function isMemberPosQrPayload(raw: string): boolean {
   const text = normalizeCouponScanDelimiters(String(raw ?? '').trim())
-  return MEMBER_POS_QR_PREFIX_RE.test(text) || text.toUpperCase().startsWith('CM:MEM:')
+  const upper = text.toUpperCase()
+  return (
+    MEMBER_POS_QR_PREFIX_RE.test(text) ||
+    upper.startsWith('CM:MEM:') ||
+    upper.startsWith('OM:MEM:')
+  )
+}
+
+function memberCouponQrPrefixForBrand(brandKey?: string | null): string {
+  const k = String(brandKey || '').trim().toLowerCase()
+  return k === 'omnifoodtech' || k === 'omni' || k === 'saas'
+    ? MEMBER_COUPON_QR_PREFIX_OMNI
+    : MEMBER_COUPON_QR_PREFIX
 }
 
 /** 스캐너·키보드가 보내는 다양한 구분 문자를 ASCII `|~:-` 로 통일 */
@@ -32,13 +45,16 @@ export function buildMemberCouponQrPayload(params: {
   memberNo: string
   couponCode: string
   issueId?: number
+  /** omnifoodtech 이면 OM|CPN| (기본 CM|CPN|) */
+  brandKey?: string | null
 }): string {
   const memberNo = String(params.memberNo ?? '').trim()
   const couponCode = String(params.couponCode ?? '').trim().toUpperCase()
   const issueId = Math.max(0, Math.trunc(Number(params.issueId ?? 0) || 0))
   if (!memberNo || !couponCode) return ''
-  if (issueId > 0) return `${MEMBER_COUPON_QR_PREFIX}${memberNo}|${couponCode}|${issueId}`
-  return `${MEMBER_COUPON_QR_PREFIX}${memberNo}|${couponCode}`
+  const prefix = memberCouponQrPrefixForBrand(params.brandKey)
+  if (issueId > 0) return `${prefix}${memberNo}|${couponCode}|${issueId}`
+  return `${prefix}${memberNo}|${couponCode}`
 }
 
 function extractMemberCouponQrBody(text: string): string | null {
@@ -47,8 +63,12 @@ function extractMemberCouponQrBody(text: string): string | null {
   if (MEMBER_COUPON_QR_PREFIX_RE.test(trimmed)) {
     return trimmed.replace(MEMBER_COUPON_QR_PREFIX_RE, '')
   }
-  if (trimmed.startsWith('CM:CPN:')) {
+  const upper = trimmed.toUpperCase()
+  if (upper.startsWith('CM:CPN:')) {
     return trimmed.slice('CM:CPN:'.length)
+  }
+  if (upper.startsWith('OM:CPN:')) {
+    return trimmed.slice('OM:CPN:'.length)
   }
   return null
 }
@@ -67,7 +87,12 @@ export function parseMemberCouponQrPayload(raw: string): MemberCouponQrPayload |
 
 export function isMemberCouponQrPayload(raw: string): boolean {
   const text = String(raw ?? '').trim()
-  return MEMBER_COUPON_QR_PREFIX_RE.test(text) || text.startsWith('CM:CPN:')
+  const upper = text.toUpperCase()
+  return (
+    MEMBER_COUPON_QR_PREFIX_RE.test(text) ||
+    upper.startsWith('CM:CPN:') ||
+    upper.startsWith('OM:CPN:')
+  )
 }
 
 function splitCouponScanFields(text: string): string[] {

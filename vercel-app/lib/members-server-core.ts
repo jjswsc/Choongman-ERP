@@ -1103,17 +1103,25 @@ export async function getMemberSummaryById(
   }
 }
 
-function buildReferralCode(memberNo: string, memberId: number): string {
+/** 추천코드 접두 — 충만 CM, Omni OM (Omni에 CM이 들어가면 운영·식별에 방해) */
+function buildReferralCode(
+  memberNo: string,
+  memberId: number,
+  brandKey: 'choongman' | 'omnifoodtech' = 'choongman'
+): string {
   const digits = toText(memberNo).replace(/[^\d]/g, '')
   const suffix = digits.slice(-6) || String(memberId).padStart(6, '0')
-  return `CM${suffix}`
+  const prefix = brandKey === 'omnifoodtech' ? 'OM' : 'CM'
+  return `${prefix}${suffix}`
 }
 
 export async function ensureMemberReferralCode(memberId: number): Promise<string> {
   const member = await getMemberSummaryById(memberId)
   if (!member) throw new Error('회원을 찾을 수 없습니다.')
   if (toText(member.referralCode)) return toText(member.referralCode)
-  const code = buildReferralCode(member.memberNo, member.id)
+  const { getServerAppBrandConfig } = await import('@/lib/app-brand-server')
+  const brand = await getServerAppBrandConfig()
+  const code = buildReferralCode(member.memberNo, member.id, brand.key)
   await supabaseUpdateByFilter('members', `id=eq.${memberId}`, {
     referral_code: code,
     updated_at: getBangkokDateTimeString(),

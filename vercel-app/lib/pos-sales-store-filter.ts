@@ -135,13 +135,20 @@ export function rowMatchesAnySalesStoreSelection(
 
 /**
  * 매장별 집계 행 키 통합: `Ekkamai` / `CM Ekkamai` 등을 한 줄로 합칠 때 사용.
- * CM 접두가 있으면 그 표기를 우선, 없으면 사전순 첫 변형.
+ * - 충만 문자 코드: CM 접두 표기를 우선 (`CT001` → `CM CT001`).
+ * - Omni 숫자 매장코드(1001 등): CM을 붙이지 않음 (`CM 1001` → `1001`). 매출 리포트·차트에 CM이 보이면 Omni 운영에 방해됨.
  */
 export function canonicalSalesStoreRowKey(storeCode: string): string {
   const raw = String(storeCode ?? '').trim()
   if (!raw || raw === '(미지정)') return raw || '(미지정)'
   const variants = storeCodeSearchVariants(raw)
   const withCm = variants.filter((v) => /^CM\s+/i.test(v))
+  const withoutCm = variants.filter((v) => !/^CM\s+/i.test(v))
+  const digitCore = raw.replace(/^CM\s+/i, '').trim()
+  if (/^\d{3,6}$/.test(digitCore)) {
+    const pool = withoutCm.length > 0 ? withoutCm : variants
+    return pool.slice().sort((a, b) => a.localeCompare(b))[0] ?? digitCore
+  }
   const pool = withCm.length > 0 ? withCm : variants
   return pool.slice().sort((a, b) => a.localeCompare(b))[0] ?? raw
 }
