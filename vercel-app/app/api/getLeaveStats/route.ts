@@ -16,6 +16,13 @@ import { isEffectivelyResignedForStaffRollup } from '@/lib/erp-store-master-shar
 import { requireAuth } from '@/lib/verify-auth'
 import { hasOfficeStaffScope } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  appendSaasTenantFilter,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
 const LAKIJ_DAYS_PER_YEAR = 3
@@ -39,6 +46,13 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tenantScope = await resolveSaasTenantScope({ auth })
+  if (
+    isSaasTenantQueryBlocked(tenantScope, 'employees') ||
+    isSaasTenantQueryBlocked(tenantScope, 'leave_requests')
+  ) {
+    return NextResponse.json([], { headers })
+  }
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
@@ -110,9 +124,10 @@ export async function GET(request: NextRequest) {
       `${empSelectBase},employee_code`,
       empSelectBase,
     ]
-    const empFilter = storeFilter
+    const empFilterBase = storeFilter
       ? `store=ilike.${encodeURIComponent(storeFilter)}`
       : 'id=not.is.null'
+    const empFilter = appendSaasTenantFilter(empFilterBase, tenantScope, 'employees')
     let empSelectErr: unknown
     for (const select of empSelectCandidates) {
       try {
@@ -125,6 +140,10 @@ export async function GET(request: NextRequest) {
         empSelectErr = null
         break
       } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('employees')
+          return NextResponse.json([], { headers })
+        }
         const em = e instanceof Error ? e.message : String(e)
         if (!/42703|column/i.test(em)) throw e
         empSelectErr = e
@@ -134,24 +153,23 @@ export async function GET(request: NextRequest) {
     empRows = (empRows || []).filter((emp) => isEmployeeIncludedInLeaveStats(emp, staffFilter))
 
     let leaveRows: LeaveRow[] = []
-    if (storeFilter) {
-      leaveRows = (await supabaseSelectFilterAllPages(
-        'leave_requests',
-        `store=ilike.${encodeURIComponent(storeFilter)}`,
-        {
-          order: 'leave_date.asc',
-          select: 'store,name,type,leave_date,status,employee_id',
-          pageSize: 2000,
-          maxRows: LEAVE_STATS_MAX_ROWS,
-        }
-      )) as LeaveRow[]
-    } else {
-      leaveRows = (await supabaseSelectFilterAllPages('leave_requests', 'leave_date=not.is.null', {
+    const leaveFilterBase = storeFilter
+      ? `store=ilike.${encodeURIComponent(storeFilter)}`
+      : 'leave_date=not.is.null'
+    const leaveFilter = appendSaasTenantFilter(leaveFilterBase, tenantScope, 'leave_requests')
+    try {
+      leaveRows = (await supabaseSelectFilterAllPages('leave_requests', leaveFilter, {
         order: 'leave_date.asc',
         select: 'store,name,type,leave_date,status,employee_id',
         pageSize: 2000,
         maxRows: LEAVE_STATS_MAX_ROWS,
       })) as LeaveRow[]
+    } catch (e) {
+      if (isMissingSaasTenantColumnError(e)) {
+        markSaasTenantColumnMissing('leave_requests')
+        return NextResponse.json([], { headers })
+      }
+      throw e
     }
 
     const bangkokYear = parseInt(getBangkokTodayDateString().slice(0, 4), 10)
