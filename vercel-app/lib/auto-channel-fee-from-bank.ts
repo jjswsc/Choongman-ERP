@@ -43,6 +43,7 @@ export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
     try {
       const grossRow = await fetchChannelGrossCoveringNet({ storeCode, settleDate, channel, net })
       const gross = roundSettlementMoney(Number(grossRow.gross) || 0)
+      // NET이 GROSS 수수료 밴드 밖이면 post 하지 않음(소액 칩·당일 POS 통째 매칭 차단).
       const decision = autoPostChannelFeeDecision(channel, gross, net)
       if (decision === 'skip') continue
       if (decision === 'no-fee') return

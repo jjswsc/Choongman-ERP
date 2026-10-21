@@ -50,6 +50,19 @@ describe('weekend batch GROSS cover', () => {
     expect(isPlausibleCoverFee('card', 9913, 869.91)).toBe(false)
   })
 
+  it('rejects same-day GROSS cover when fee band fails (tiny bank chip)', () => {
+    expect(
+      pickGrossCoveringNet({
+        settleDate: '2026-09-05',
+        net: 34.9,
+        channel: 'grab',
+        grossByDate: { '2026-09-05': 1319 },
+      })
+    ).toBeNull()
+    expect(autoPostChannelFeeDecision('grab', 1319, 34.9)).toBe('skip')
+    expect(autoPostChannelFeeDecision('grab', 1319, 951.32)).toBe('post')
+  })
+
   it('auto-posts card when FEE is GROSS − bank NET in the card band', () => {
     expect(autoPostChannelFeeDecision('card', 9913, 9426.18)).toBe('post')
   })

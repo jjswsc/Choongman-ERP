@@ -3,6 +3,7 @@ import { fetchPosChannelSettlementGross } from '@/lib/pos-channel-settlement-gro
 import {
   appendCoverMemo,
   claimedCoverDatesFromSettlements,
+  isPlausibleCoverFee,
   pickGrossCoveringNet,
   weekendCoverNeighborDates,
 } from '@/lib/pos-channel-cover-gross'
@@ -32,7 +33,11 @@ export async function fetchChannelGrossCoveringNet(params: {
     partial: false,
   }
   if (net <= 0) return single
-  if (day0.gross + 0.02 >= net) return single
+  if (day0.gross + 0.02 >= net) {
+    if (isPlausibleCoverFee(channel, day0.gross, net)) return single
+    // 소액 NET + 당일 통째 GROSS → 자동정산이 붙지 않도록 GROSS 0 으로 넘긴다.
+    return { ...single, gross: 0, orderCount: 0, cardFeeTotal: 0 }
+  }
 
   const neighbors = weekendCoverNeighborDates(settleDate)
   const claimedRows = (await supabaseSelectFilter(

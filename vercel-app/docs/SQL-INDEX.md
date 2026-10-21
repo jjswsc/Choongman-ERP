@@ -72,9 +72,9 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **775**개 · 접두어 그룹 **97**개
+- `sql/` 최상위: **783**개 · 접두어 그룹 **97**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **69**개
+- `sql/archive/` (진단 전용 등 보관): **72**개
 
 <details><summary><code>pos_*</code> (227)</summary>
 
@@ -362,6 +362,47 @@
 
 </details>
 
+<details><summary><code>fix_*</code> (36)</summary>
+
+- [`fix_abc_company_1001_align_malatang01.sql`](../sql/fix_abc_company_1001_align_malatang01.sql) — apply
+- [`fix_barbq_chicken_option_prices.sql`](../sql/fix_barbq_chicken_option_prices.sql) — apply
+- [`fix_channel_fee_rematch_sep2026_01_preview.sql`](../sql/fix_channel_fee_rematch_sep2026_01_preview.sql) — preview, apply
+- [`fix_channel_fee_rematch_sep2026_02_apply.sql`](../sql/fix_channel_fee_rematch_sep2026_02_apply.sql) — apply, log
+- [`fix_channel_fee_rematch_sep2026_03_conflict_preview.sql`](../sql/fix_channel_fee_rematch_sep2026_03_conflict_preview.sql) — preview, apply
+- [`fix_channel_fee_rematch_sep2026_04_alt_bank_candidates.sql`](../sql/fix_channel_fee_rematch_sep2026_04_alt_bank_candidates.sql) — apply
+- [`fix_channel_fee_rematch_sep2026_05_apply_free_only.sql`](../sql/fix_channel_fee_rematch_sep2026_05_apply_free_only.sql) — apply, log
+- [`fix_channel_fee_rematch_sep2026_06_bank_store_check.sql`](../sql/fix_channel_fee_rematch_sep2026_06_bank_store_check.sql) — verify, apply
+- [`fix_channel_fee_rematch_sep2026_07_apply_safe.sql`](../sql/fix_channel_fee_rematch_sep2026_07_apply_safe.sql) — apply, log
+- [`fix_channel_fee_rematch_sep2026_08_verify.sql`](../sql/fix_channel_fee_rematch_sep2026_08_verify.sql) — verify, apply
+- [`fix_erp_stores_code_1001_not_tenant_prefix.sql`](../sql/fix_erp_stores_code_1001_not_tenant_prefix.sql) — apply
+- [`fix_hq_like_receivable_01_delete_apo89.sql`](../sql/fix_hq_like_receivable_01_delete_apo89.sql) — apply
+- [`fix_hq_like_receivable_02_delete_cm_office_receive.sql`](../sql/fix_hq_like_receivable_02_delete_cm_office_receive.sql) — apply
+- [`fix_hq_warehouse_accounting_po_receivable.sql`](../sql/fix_hq_warehouse_accounting_po_receivable.sql) — apply
+- [`fix_member_coupon_issued_after_paid_m004579.sql`](../sql/fix_member_coupon_issued_after_paid_m004579.sql) — apply
+- [`fix_omnifoodtech_admin_password_hash.sql`](../sql/fix_omnifoodtech_admin_password_hash.sql) — apply
+- [`fix_pay_correct_inflated_discounts.sql`](../sql/fix_pay_correct_inflated_discounts.sql) — apply
+- [`fix_payroll_wht_ledger_pnd3_to_pnd1.sql`](../sql/fix_payroll_wht_ledger_pnd3_to_pnd1.sql) — apply
+- [`fix_pos_menus_abc_company_tenant_alias.sql`](../sql/fix_pos_menus_abc_company_tenant_alias.sql) — apply
+- [`fix_pos_menus_malatang01_after_deploy.sql`](../sql/fix_pos_menus_malatang01_after_deploy.sql) — apply
+- [`fix_pos_menus_null_tenant_backfill.sql`](../sql/fix_pos_menus_null_tenant_backfill.sql) — backfill, apply
+- [`fix_pos_menus_scope_store_1001_malatang01.sql`](../sql/fix_pos_menus_scope_store_1001_malatang01.sql) — apply
+- [`fix_pos_order_birthday_coupon_total_cmthestreet_20260801_015.sql`](../sql/fix_pos_order_birthday_coupon_total_cmthestreet_20260801_015.sql) — apply
+- [`fix_pos_orders_tenant_id_for_sales_rpc.sql`](../sql/fix_pos_orders_tenant_id_for_sales_rpc.sql) — rpc, apply
+- [`fix_pos_sales_analytics_agg_timeout.sql`](../sql/fix_pos_sales_analytics_agg_timeout.sql) — apply
+- [`fix_pos_sales_business_ymd_overnight.sql`](../sql/fix_pos_sales_business_ymd_overnight.sql) — apply
+- [`fix_reactivate_inactive_line_shells_no_phone.sql`](../sql/fix_reactivate_inactive_line_shells_no_phone.sql) — apply
+- [`fix_rpkm2026_member_promo_code.sql`](../sql/fix_rpkm2026_member_promo_code.sql) — apply
+- [`fix_silom_tax_wh_195_dup_delete.sql`](../sql/fix_silom_tax_wh_195_dup_delete.sql) — apply
+- [`fix_stamp_reward_coupon_gdfstamp.sql`](../sql/fix_stamp_reward_coupon_gdfstamp.sql) — apply
+- [`fix_store_visit_duplicate_opens_2026_08_07.sql`](../sql/fix_store_visit_duplicate_opens_2026_08_07.sql) — apply
+- [`fix_tax_entity_mapping_choongman_live.sql`](../sql/fix_tax_entity_mapping_choongman_live.sql) — apply
+- [`fix_tax_invoice_reference_apo_to_po_no.sql`](../sql/fix_tax_invoice_reference_apo_to_po_no.sql) — apply
+- [`fix_tax_outbound_iv_mirror_02_apply.sql`](../sql/fix_tax_outbound_iv_mirror_02_apply.sql) — apply, log
+- [`fix_tax_outbound_iv_mirror_04_company_dedupe.sql`](../sql/fix_tax_outbound_iv_mirror_04_company_dedupe.sql) — apply, log
+- [`fix_wht_ledger_natural_person_pnd3.sql`](../sql/fix_wht_ledger_natural_person_pnd3.sql) — apply
+
+</details>
+
 <details><summary><code>member_*</code> (36)</summary>
 
 - [`member_coupon_promo_codes.sql`](../sql/member_coupon_promo_codes.sql)
@@ -440,39 +481,6 @@
 - [`marketing_meta_ig_and_campaign_map.sql`](../sql/marketing_meta_ig_and_campaign_map.sql)
 - [`marketing_tenant_id.sql`](../sql/marketing_tenant_id.sql)
 - [`marketing_tiktok_connections.sql`](../sql/marketing_tiktok_connections.sql)
-
-</details>
-
-<details><summary><code>fix_*</code> (28)</summary>
-
-- [`fix_abc_company_1001_align_malatang01.sql`](../sql/fix_abc_company_1001_align_malatang01.sql) — apply
-- [`fix_barbq_chicken_option_prices.sql`](../sql/fix_barbq_chicken_option_prices.sql) — apply
-- [`fix_erp_stores_code_1001_not_tenant_prefix.sql`](../sql/fix_erp_stores_code_1001_not_tenant_prefix.sql) — apply
-- [`fix_hq_like_receivable_01_delete_apo89.sql`](../sql/fix_hq_like_receivable_01_delete_apo89.sql) — apply
-- [`fix_hq_like_receivable_02_delete_cm_office_receive.sql`](../sql/fix_hq_like_receivable_02_delete_cm_office_receive.sql) — apply
-- [`fix_hq_warehouse_accounting_po_receivable.sql`](../sql/fix_hq_warehouse_accounting_po_receivable.sql) — apply
-- [`fix_member_coupon_issued_after_paid_m004579.sql`](../sql/fix_member_coupon_issued_after_paid_m004579.sql) — apply
-- [`fix_omnifoodtech_admin_password_hash.sql`](../sql/fix_omnifoodtech_admin_password_hash.sql) — apply
-- [`fix_pay_correct_inflated_discounts.sql`](../sql/fix_pay_correct_inflated_discounts.sql) — apply
-- [`fix_payroll_wht_ledger_pnd3_to_pnd1.sql`](../sql/fix_payroll_wht_ledger_pnd3_to_pnd1.sql) — apply
-- [`fix_pos_menus_abc_company_tenant_alias.sql`](../sql/fix_pos_menus_abc_company_tenant_alias.sql) — apply
-- [`fix_pos_menus_malatang01_after_deploy.sql`](../sql/fix_pos_menus_malatang01_after_deploy.sql) — apply
-- [`fix_pos_menus_null_tenant_backfill.sql`](../sql/fix_pos_menus_null_tenant_backfill.sql) — backfill, apply
-- [`fix_pos_menus_scope_store_1001_malatang01.sql`](../sql/fix_pos_menus_scope_store_1001_malatang01.sql) — apply
-- [`fix_pos_order_birthday_coupon_total_cmthestreet_20260801_015.sql`](../sql/fix_pos_order_birthday_coupon_total_cmthestreet_20260801_015.sql) — apply
-- [`fix_pos_orders_tenant_id_for_sales_rpc.sql`](../sql/fix_pos_orders_tenant_id_for_sales_rpc.sql) — rpc, apply
-- [`fix_pos_sales_analytics_agg_timeout.sql`](../sql/fix_pos_sales_analytics_agg_timeout.sql) — apply
-- [`fix_pos_sales_business_ymd_overnight.sql`](../sql/fix_pos_sales_business_ymd_overnight.sql) — apply
-- [`fix_reactivate_inactive_line_shells_no_phone.sql`](../sql/fix_reactivate_inactive_line_shells_no_phone.sql) — apply
-- [`fix_rpkm2026_member_promo_code.sql`](../sql/fix_rpkm2026_member_promo_code.sql) — apply
-- [`fix_silom_tax_wh_195_dup_delete.sql`](../sql/fix_silom_tax_wh_195_dup_delete.sql) — apply
-- [`fix_stamp_reward_coupon_gdfstamp.sql`](../sql/fix_stamp_reward_coupon_gdfstamp.sql) — apply
-- [`fix_store_visit_duplicate_opens_2026_08_07.sql`](../sql/fix_store_visit_duplicate_opens_2026_08_07.sql) — apply
-- [`fix_tax_entity_mapping_choongman_live.sql`](../sql/fix_tax_entity_mapping_choongman_live.sql) — apply
-- [`fix_tax_invoice_reference_apo_to_po_no.sql`](../sql/fix_tax_invoice_reference_apo_to_po_no.sql) — apply
-- [`fix_tax_outbound_iv_mirror_02_apply.sql`](../sql/fix_tax_outbound_iv_mirror_02_apply.sql) — apply, log
-- [`fix_tax_outbound_iv_mirror_04_company_dedupe.sql`](../sql/fix_tax_outbound_iv_mirror_04_company_dedupe.sql) — apply, log
-- [`fix_wht_ledger_natural_person_pnd3.sql`](../sql/fix_wht_ledger_natural_person_pnd3.sql) — apply
 
 </details>
 
@@ -1485,7 +1493,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (69)</summary>
+<details><summary><code>archive/</code> (72)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1493,6 +1501,9 @@
 - [`archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql`](../sql/archive/diagnose/diagnose_bank_expense_link_empty_candidates.sql)
 - [`archive/diagnose/diagnose_barbq_chicken_option_bom.sql`](../sql/archive/diagnose/diagnose_barbq_chicken_option_bom.sql)
 - [`archive/diagnose/diagnose_bbq_two_phase_fields.sql`](../sql/archive/diagnose/diagnose_bbq_two_phase_fields.sql)
+- [`archive/diagnose/diagnose_channel_fee_implausible_sep2026_01_list.sql`](../sql/archive/diagnose/diagnose_channel_fee_implausible_sep2026_01_list.sql)
+- [`archive/diagnose/diagnose_channel_fee_implausible_sep2026_02_bank_link.sql`](../sql/archive/diagnose/diagnose_channel_fee_implausible_sep2026_02_bank_link.sql)
+- [`archive/diagnose/diagnose_channel_fee_implausible_sep2026_03_extreme_candidates.sql`](../sql/archive/diagnose/diagnose_channel_fee_implausible_sep2026_03_extreme_candidates.sql)
 - [`archive/diagnose/diagnose_cm006_july_outbound_vs_inbound.sql`](../sql/archive/diagnose/diagnose_cm006_july_outbound_vs_inbound.sql)
 - [`archive/diagnose/diagnose_cm027_sep_stock_01_asof.sql`](../sql/archive/diagnose/diagnose_cm027_sep_stock_01_asof.sql)
 - [`archive/diagnose/diagnose_cm027_sep_stock_02_summary.sql`](../sql/archive/diagnose/diagnose_cm027_sep_stock_02_summary.sql)

@@ -149,6 +149,8 @@ export function pickGrossCoveringNet(params: {
     params.settleDateGross != null ? params.settleDateGross : Number(byDate.get(settleDate) || 0)
   )
   if (dayGross > 0 && dayGross + 0.02 >= net) {
+    // 당일 GROSS≥NET 이어도 수수료율이 밴드 밖이면(소액 입금↔당일 통째 GROSS) 매칭으로 보지 않는다.
+    if (!isPlausibleCoverFee(params.channel, dayGross, net)) return null
     return { coverDates: [settleDate], gross: dayGross, fee: deriveFeeFromGrossNet(dayGross, net) }
   }
   if (dayGross <= 0.02) return null
