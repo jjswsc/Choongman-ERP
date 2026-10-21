@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowLeft, ArrowUp, Plus, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,7 @@ import {
   DAILY_PLAN_ROLES,
   DAILY_PLAN_WORKDAY_MINUTES,
   ROUTINE_TEMPLATE_STATUSES,
+  type DailyPlanRole,
 } from "@/lib/daily-plan-generate"
 import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 
@@ -47,11 +48,11 @@ function blankItem(): RoutineTemplateItemDto {
   }
 }
 
-function blankTemplate(): RoutineTemplateDto {
+function blankTemplate(roleScope: DailyPlanRole = "supervisor"): RoutineTemplateDto {
   return {
     id: 0,
     name: "",
-    roleScope: "supervisor",
+    roleScope,
     position: "all",
     storeName: "",
     status: "draft",
@@ -72,7 +73,10 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
+  const [roleFilter, setRoleFilter] = useState<string>("all")
   const [edit, setEdit] = useState<RoutineTemplateDto | null>(null)
+
+  const goBackToList = () => setEdit(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -90,8 +94,13 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   }, [load])
 
   const visible = useMemo(
-    () => list.filter((x) => showArchived || x.status !== "archived"),
-    [list, showArchived]
+    () =>
+      list.filter(
+        (x) =>
+          (showArchived || x.status !== "archived") &&
+          (roleFilter === "all" || x.roleScope === roleFilter)
+      ),
+    [list, showArchived, roleFilter]
   )
 
   const fixedMinutes = (tpl: RoutineTemplateDto) =>
@@ -136,7 +145,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         return
       }
       await appAlert(t("dp_saved_ok"))
-      setEdit(null)
+      goBackToList()
       await load()
     } finally {
       setSaving(false)
@@ -151,7 +160,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
       await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
       return
     }
-    setEdit(null)
+    goBackToList()
     await load()
   }
 
@@ -161,6 +170,18 @@ export function DailyPlanTemplates({ t }: { t: T }) {
     return (
       <Card>
         <CardContent className="space-y-3 p-3">
+          <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={goBackToList}>
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              {t("dp_back")}
+            </Button>
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">
+              {edit.name.trim() || t("dp_tpl_new")}
+              <span className="ml-2 font-normal text-muted-foreground">
+                · {label.role(edit.roleScope)} · {label.position(edit.position)}
+              </span>
+            </p>
+          </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             <Input
               value={edit.name}
@@ -430,7 +451,8 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                 ) : null}
               </>
             ) : null}
-            <Button variant="ghost" onClick={() => setEdit(null)}>
+            <Button variant="ghost" onClick={goBackToList}>
+              <ArrowLeft className="mr-1 h-4 w-4" />
               {t("dp_back")}
             </Button>
           </div>
@@ -443,11 +465,29 @@ export function DailyPlanTemplates({ t }: { t: T }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {canEdit ? (
-          <Button size="sm" onClick={() => setEdit(blankTemplate())}>
+          <Button
+            size="sm"
+            onClick={() =>
+              setEdit(blankTemplate(roleFilter !== "all" ? (roleFilter as DailyPlanRole) : "supervisor"))
+            }
+          >
             <Plus className="mr-1 h-4 w-4" />
             {t("dp_tpl_new")}
           </Button>
         ) : null}
+        <div className="flex gap-1">
+          {["all", ...DAILY_PLAN_ROLES].map((r) => (
+            <Button
+              key={r}
+              size="sm"
+              variant={roleFilter === r ? "default" : "outline"}
+              className="h-8 text-xs"
+              onClick={() => setRoleFilter(r)}
+            >
+              {r === "all" ? t("dp_all") : label.role(r)}
+            </Button>
+          ))}
+        </div>
         <label className="flex items-center gap-1 text-xs">
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
           {t("dp_tpl_show_archived")}
