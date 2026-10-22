@@ -24,6 +24,7 @@ import { parseChannelSettlementCsv } from '@/lib/parse-channel-settlement-csv'
 import { appendCoverMemo, channelFeePctBand, isPlausibleCoverFee } from '@/lib/pos-channel-cover-gross'
 import {
   deriveFeeFromGrossNet,
+  resolveChannelSettlementFormAmounts,
   roundSettlementMoney,
   settlementPostedMatchesForm,
 } from '@/lib/pos-channel-settlement'
@@ -81,11 +82,50 @@ export function PosChannelSettlementPanel({
   const [csvImporting, setCsvImporting] = React.useState(false)
   const [coverDates, setCoverDates] = React.useState<string[]>([])
   const [coverPartial, setCoverPartial] = React.useState(false)
+  /** POS 조회 결과인지, Posted 폴백인지 — GROSS=0 오해 방지 */
+  const [grossSource, setGrossSource] = React.useState<'pos' | 'posted' | 'empty'>('empty')
   const csvInputRef = React.useRef<HTMLInputElement>(null)
   const netRef = React.useRef(net)
+  const postedRef = React.useRef(posted)
+  const grossSourceRef = React.useRef(grossSource)
   React.useEffect(() => {
     netRef.current = net
   }, [net])
+  React.useEffect(() => {
+    postedRef.current = posted
+  }, [posted])
+  React.useEffect(() => {
+    grossSourceRef.current = grossSource
+  }, [grossSource])
+
+  const preferredNetAmount = React.useCallback(() => {
+    const fromField = roundSettlementMoney(Number(netRef.current) || 0)
+    if (fromField > 0) return fromField
+    if (initialNet != null && initialNet > 0) return roundSettlementMoney(initialNet)
+    return 0
+  }, [initialNet])
+
+  const applyResolvedAmounts = React.useCallback(
+    (posGross: number, settlements: PosChannelSettlementRow[]) => {
+      const existing = settlements.find((p) => p.channel === channel)
+      const preferredNet = preferredNetAmount()
+      const resolved = resolveChannelSettlementFormAmounts({
+        posGross,
+        posted: existing,
+        preferredNet: preferredNet > 0 ? preferredNet : null,
+      })
+      setGross(resolved.gross)
+      setGrossSource(resolved.source)
+      if (resolved.net > 0) setNet(String(resolved.net))
+      setFee(resolved.fee > 0 ? String(resolved.fee) : '')
+      if (resolved.source === 'posted') {
+        setCoverDates([])
+        setCoverPartial(false)
+      }
+      return resolved
+    },
+    [channel, preferredNetAmount]
+  )
 
   const loadGross = React.useCallback(async () => {
     if (!storeCode || !settleDate) return
@@ -93,9 +133,7 @@ export function PosChannelSettlementPanel({
     setCoverDates([])
     setCoverPartial(false)
     try {
-      const fromField = roundSettlementMoney(Number(netRef.current) || 0)
-      const netForLoad =
-        fromField > 0 ? fromField : initialNet != null && initialNet > 0 ? initialNet : 0
+      const netForLoad = preferredNetAmount()
       const res = await getPosChannelSettlementGross({
         storeCode,
         settleDate,
@@ -104,7 +142,6 @@ export function PosChannelSettlementPanel({
       })
       if (res.success) {
         const g = roundSettlementMoney(Number(res.gross) || 0)
-        setGross(g)
         setCoverDates(Array.isArray(res.coverDates) ? res.coverDates : [])
         setCoverPartial(Boolean(res.partial))
         setSuggestedFee(res.suggestedFee != null ? roundSettlementMoney(res.suggestedFee) : null)
@@ -114,13 +151,17 @@ export function PosChannelSettlementPanel({
             : null
         )
         setFeeSourceKey(res.suggestedFeeSource ?? null)
+        applyResolvedAmounts(g, postedRef.current)
+      } else {
+        applyResolvedAmounts(0, postedRef.current)
       }
     } catch (e) {
       console.error('loadGross:', e)
+      applyResolvedAmounts(0, postedRef.current)
     } finally {
       setLoadingGross(false)
     }
-  }, [storeCode, settleDate, channel, initialNet])
+  }, [storeCode, settleDate, channel, preferredNetAmount, applyResolvedAmounts])
 
   const loadPosted = React.useCallback(async () => {
     if (!storeCode || !settleDate) return
@@ -128,11 +169,16 @@ export function PosChannelSettlementPanel({
       const res = await getPosChannelSettlements({ storeCode, settleDate })
       if (res.success && res.settlements) {
         setPosted(res.settlements)
+        postedRef.current = res.settlements
+        // POS GROSS가 이미 있으면 덮지 않음. 비어 있을 때만 Posted 폴백.
+        if (grossSourceRef.current !== 'pos') {
+          applyResolvedAmounts(0, res.settlements)
+        }
       }
     } catch (e) {
       console.error('loadPosted:', e)
     }
-  }, [storeCode, settleDate])
+  }, [storeCode, settleDate, applyResolvedAmounts])
 
   React.useEffect(() => {
     if (!initialChannel) return
@@ -140,6 +186,8 @@ export function PosChannelSettlementPanel({
   }, [initialChannel])
 
   React.useEffect(() => {
+    setGrossSource('empty')
+    grossSourceRef.current = 'empty'
     void loadGross()
     void loadPosted()
   }, [loadGross, loadPosted])
@@ -151,6 +199,7 @@ export function PosChannelSettlementPanel({
     setSuggestedFee(null)
     setPlatformFeePct(null)
     setFeeSourceKey(null)
+    setGrossSource('empty')
   }, [channel, settleDate, storeCode, initialNet])
 
   React.useEffect(() => {
@@ -160,11 +209,12 @@ export function PosChannelSettlementPanel({
   }, [initialNet])
 
   React.useEffect(() => {
+    if (grossSource === 'posted') return
     if (initialNet == null || initialNet <= 0 || gross <= 0) return
     const netNum = roundSettlementMoney(initialNet)
     const feeNum = deriveFeeFromGrossNet(gross, netNum)
     setFee(feeNum > 0 ? String(feeNum) : '')
-  }, [initialNet, gross])
+  }, [initialNet, gross, grossSource])
 
   const onNetChange = (raw: string) => {
     setNet(raw)
@@ -378,6 +428,12 @@ export function PosChannelSettlementPanel({
         <div className="rounded-md bg-background/80 px-3 py-2 border">
           <span className="text-muted-foreground text-xs">GROSS (1130)</span>
           <p className="font-bold tabular-nums">{formatBaht(gross)} ฿</p>
+          {grossSource === 'posted' ? (
+            <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-1">
+              {t('posChannelSettleGrossFromPosted') ||
+                '등록된 정산(Posted) 금액입니다. POS와 다르면 Load POS GROSS를 누르세요.'}
+            </p>
+          ) : null}
           {coverDates.length > 1 ? (
             <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
               {(coverPartial

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { linesForPosChannelSettlement, settlementPostedMatchesForm } from './pos-channel-settlement'
+import {
+  linesForPosChannelSettlement,
+  resolveChannelSettlementFormAmounts,
+  settlementPostedMatchesForm,
+} from './pos-channel-settlement'
 
 describe('linesForPosChannelSettlement', () => {
   it('posts bank + fee + 1130 when bank net is not yet posted', () => {
@@ -69,5 +73,35 @@ describe('linesForPosChannelSettlement', () => {
         { gross: 9913, fee: 486.82, net: 9426.18 }
       )
     ).toBe(true)
+  })
+
+  it('fills form from Posted when POS GROSS is empty', () => {
+    expect(
+      resolveChannelSettlementFormAmounts({
+        posGross: 0,
+        posted: { gross: 27160, fee: 9114.86, net: 18045.14 },
+        preferredNet: 18045.14,
+      })
+    ).toEqual({
+      gross: 27160,
+      fee: 9114.86,
+      net: 18045.14,
+      source: 'posted',
+    })
+  })
+
+  it('prefers POS GROSS over Posted', () => {
+    expect(
+      resolveChannelSettlementFormAmounts({
+        posGross: 20000,
+        posted: { gross: 27160, fee: 9114.86, net: 18045.14 },
+        preferredNet: 18045.14,
+      })
+    ).toEqual({
+      gross: 20000,
+      fee: 1954.86,
+      net: 18045.14,
+      source: 'pos',
+    })
   })
 })

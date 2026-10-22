@@ -72,6 +72,8 @@ export const I18N_POS_KO: Record<string, string> = {
       '수수료율은 계산하지 마세요.\n위 숫자와 초록 Posted가 같으면 끝입니다.\n다르면 통장 입금을 확인한 뒤 Repost journal만 누르세요.\nGrab/LINE/Shopee에 ✓가 있으면 건드리지 마세요.\n평소는 노란 칩+저장만 하면 됩니다.',
     posChannelSettlePostedMismatch:
       'Posted 금액이 위 GROSS/FEE/NET과 다릅니다. 통장 입금을 확인한 뒤 Repost journal만 누르세요.',
+    posChannelSettleGrossFromPosted:
+      '등록된 정산(Posted) 금액입니다. POS와 다르면 Load POS GROSS를 누르세요.',
     posChannelSettlePosted: '채널 정산 분개가 생성되었습니다.',
     posChannelSettleAlreadyPosted: '이미 동일 금액으로 분개되어 있습니다.',
     posChannelSettleNoGross: 'POS 채권(GROSS)이 없습니다.',

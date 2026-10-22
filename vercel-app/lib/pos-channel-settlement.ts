@@ -51,6 +51,44 @@ export function settlementPostedMatchesForm(
   )
 }
 
+/**
+ * POS GROSS 조회가 비었을 때, 이미 저장된 채널 정산(Posted)으로 폼 금액을 채운다.
+ * 은행 화면에서 GROSS=0처럼 보여 Posted와 불일치로 보이던 UX를 줄인다.
+ */
+export function resolveChannelSettlementFormAmounts(params: {
+  posGross: number
+  posted?: { gross?: number; fee?: number; net?: number } | null
+  preferredNet?: number | null
+}): {
+  gross: number
+  fee: number
+  net: number
+  source: 'pos' | 'posted' | 'empty'
+} {
+  const preferredNet = roundSettlementMoney(Number(params.preferredNet) || 0)
+  const posGross = roundSettlementMoney(Number(params.posGross) || 0)
+  if (posGross > 0.02) {
+    return {
+      gross: posGross,
+      net: preferredNet,
+      fee: deriveFeeFromGrossNet(posGross, preferredNet),
+      source: 'pos',
+    }
+  }
+  const postedGross = roundSettlementMoney(Number(params.posted?.gross) || 0)
+  if (postedGross <= 0.02) {
+    return { gross: 0, fee: 0, net: preferredNet, source: 'empty' }
+  }
+  const postedNet = roundSettlementMoney(Number(params.posted?.net) || 0)
+  const net = preferredNet > 0.02 ? preferredNet : postedNet
+  const postedFee = roundSettlementMoney(Number(params.posted?.fee) || 0)
+  const fee =
+    postedFee > 0.02 && Math.abs(postedGross - postedFee - net) <= 0.02
+      ? postedFee
+      : deriveFeeFromGrossNet(postedGross, net)
+  return { gross: postedGross, fee, net, source: 'posted' }
+}
+
 export type ChannelSettlementJournalLine = {
   accountCode: string
   accountName: string

@@ -3358,6 +3358,8 @@ export const I18N_POS_TH: Record<string, string> = {
       'ไม่ต้องคิด % ค่าธรรมเนียมเองครับ\nตัวเลขด้านบน กับแถวสีเขียว Posted ตรงกัน = เสร็จแล้ว ไม่ต้องกดอะไรครับ\nถ้าไม่ตรง → เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ\nGrab / LINE MAN / Shopee มี ✓ แล้ว = ห้ามแตะครับ\nปกติกดชิปเหลือง + บันทึก ก็พอครับ',
     posChannelSettlePostedMismatch:
       'ยอด Posted ไม่ตรงกับด้านบนครับ เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ',
+    posChannelSettleGrossFromPosted:
+      'แสดงยอด Posted ที่บันทึกไว้แล้วครับ ถ้าต่างจาก POS ให้กด Load POS GROSS',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',

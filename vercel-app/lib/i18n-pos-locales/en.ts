@@ -72,6 +72,8 @@ export const I18N_POS_EN: Record<string, string> = {
       'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
     posChannelSettlePostedMismatch:
       'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
+    posChannelSettleGrossFromPosted:
+      'Showing saved Posted amounts. Tap Load POS GROSS if POS differs.',
     posChannelSettlePosted: 'Channel settlement journal created.',
     posChannelSettleAlreadyPosted: 'Already posted with the same amounts.',
     posChannelSettleNoGross: 'No POS gross receivable for this channel.',
