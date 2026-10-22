@@ -192,7 +192,7 @@ export function ReceivablePayableTab() {
   React.useEffect(() => {
     setTabUi(tab)
   }, [tab])
-  // 미수금: 전체는 본사 미수. 매장/거래처를 고르면 그 채무자 잔액(본사 청구 포함)과 그 매장이 직접 청구한 미수.
+  // 미수금: 전체는 본사 미수. 매장/거래처를 고르면 그 채무자(store_name) 잔액만.
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
   const [salesVendors, setSalesVendors] = React.useState<{ code: string; name: string }[]>([])
   const [salesOutletSearch, setSalesOutletSearch] = React.useState("")

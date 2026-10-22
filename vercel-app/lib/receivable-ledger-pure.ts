@@ -162,30 +162,17 @@ export function filterReceivableRows(
     return rows.filter((r) => isHqOwnedReceivable(r))
   }
 
-  if (!filterByVendorLink) {
-    return rows.filter((r) =>
-      matchesReceivableParty(
-        resolveReceivableAttributedStore(r, attributionMaps),
-        storeFilter,
-        vendorMaps,
-        false
-      )
+  // 고객(매출처) 필터 = 채무자(store_name)만. 매장이 타 매장에 청구한 미수(creditor 매칭)를
+  // 넣으면 선택한 고객 외 출고처(예: MBK 조회 시 Seacon)가 목록·합계에 섞인다.
+  // 매장 매니저의 「자기 매장이 청구한 미수」는 위 storeManagerScope 경로에서 처리한다.
+  return rows.filter((r) =>
+    matchesReceivableParty(
+      resolveReceivableAttributedStore(r, attributionMaps),
+      storeFilter,
+      vendorMaps,
+      filterByVendorLink
     )
-  }
-
-  // 매장/거래처를 고르면 전체에서 보이던 그 채무자의 본사 미수와, 그 매장이 직접 청구한 미수를 함께 보여 준다.
-  return rows.filter((r) => {
-    if (isHqOwnedReceivable(r)) {
-      return matchesReceivableParty(
-        resolveReceivableAttributedStore(r, attributionMaps),
-        storeFilter,
-        vendorMaps,
-        true
-      )
-    }
-    const creditor = String(r.creditor_store ?? '').trim()
-    return matchesReceivableParty(creditor, storeFilter, vendorMaps, true)
-  })
+  )
 }
 
 export function receivableRowsOnOrAfterStart(
