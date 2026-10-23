@@ -5127,9 +5127,9 @@ Only matters the employee must handle personally on a working day:
   salesByStoreRankTopHint: 'Bars show the top 15 stores. Use the table or Excel for the full list.',
   salesByStoreTableToggle: 'Store qty · amount table',
   salesStoreChannelMatrixFootnote:
-    'Completed sales for the selected period and stores (POS business day). Unpaid open tables from the daily chart are not included in period compare.',
+    'Dine-in·delivery·takeout % is of that store’s total. Total-column % is of all stores combined.',
   salesStoreDeliveryPlatformFootnote:
-    'Delivery orders only. Orders without an app code appear as “App not set”.',
+    'App % is of that store’s delivery total. Delivery-column % is of all delivery combined.',
   salesTopicPivotStoreChannel: 'Sales by channel',
   salesTopicPivotStoreChannelHint: 'Dine-in·Takeout·Delivery',
   salesTopicPivotStoreItem: 'Sales by menu',

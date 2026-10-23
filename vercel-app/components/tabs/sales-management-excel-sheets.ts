@@ -691,24 +691,39 @@ export function buildSalesExcelSheets({
     }
   } else if (selectedView === "store-category") {
     if (storeChannelCompareRows.length > 0) {
+      const grandTotal = storeChannelCompareRows.reduce((s, r) => s + r.total, 0)
+      const pctCell = (part: number, whole: number) =>
+        whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
       sheets.push({
         name: tr("salesByStoreChannelMatrix", "매장별 홀·배달·포장"),
         headers: [
           tr("salesStoreName", "매장명"),
           tr("salesAmountKindDineIn", "홀"),
+          `${tr("salesAmountKindDineIn", "홀")} %`,
           tr("salesAmountKindDelivery", "배달"),
+          `${tr("salesAmountKindDelivery", "배달")} %`,
           tr("salesAmountKindTakeout", "포장"),
+          `${tr("salesAmountKindTakeout", "포장")} %`,
           tr("salesTotalLabel", "합계"),
+          `${tr("salesTotalLabel", "합계")} %`,
         ],
         rows: storeChannelCompareRows.map((r) => [
           r.storeDisplayName,
           numCell(r.dineIn),
+          pctCell(r.dineIn, r.total),
           numCell(r.delivery),
+          pctCell(r.delivery, r.total),
           numCell(r.takeout),
+          pctCell(r.takeout, r.total),
           numCell(r.total),
+          pctCell(r.total, grandTotal),
         ]),
         colFormats: [
           salesExcelCol.text,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
           salesExcelCol.money,
           salesExcelCol.money,
           salesExcelCol.money,
@@ -726,42 +741,38 @@ export function buildSalesExcelSheets({
       const platformCodes = Array.from(platformTotals.entries())
         .sort((a, b) => b[1] - a[1])
         .map(([code]) => code)
+      const deliveryGrand = storeDeliveryPlatformRows.reduce((s, r) => s + r.deliveryTotal, 0)
+      const pctCell = (part: number, whole: number) =>
+        whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
       sheets.push({
         name: tr("salesByStoreDeliveryPlatform", "매장별 배달 플랫폼"),
         headers: [
           tr("salesStoreName", "매장명"),
-          ...platformCodes.map((code) => translateDeliveryAppCode(code, tr)),
+          ...platformCodes.flatMap((code) => {
+            const label = translateDeliveryAppCode(code, tr)
+            return [label, `${label} %`]
+          }),
           tr("salesAmountKindDelivery", "배달"),
+          `${tr("salesAmountKindDelivery", "배달")} %`,
         ],
         rows: storeDeliveryPlatformRows.map((r) => {
           const byCode = new Map(r.platforms.map((p) => [p.code, p.sales]))
           return [
             posStoreDisplayName(r.storeName),
-            ...platformCodes.map((code) => numCell(byCode.get(code) || 0)),
+            ...platformCodes.flatMap((code) => {
+              const sales = byCode.get(code) || 0
+              return [numCell(sales), pctCell(sales, r.deliveryTotal)]
+            }),
             numCell(r.deliveryTotal),
+            pctCell(r.deliveryTotal, deliveryGrand),
           ]
         }),
         colFormats: [
           salesExcelCol.text,
-          ...platformCodes.map(() => salesExcelCol.money),
+          ...platformCodes.flatMap(() => [salesExcelCol.money, salesExcelCol.money]),
+          salesExcelCol.money,
           salesExcelCol.money,
         ],
-      })
-    }
-    if (storeChartRows.length > 0) {
-      sheets.push({
-        name: tr("salesByStore", "매장별"),
-        headers: [tr("salesStoreName", "매장명"), tr("salesQuantity", "수량"), tr("salesSalesAmount", "판매 금액")],
-        rows: storeChartRows.map((r) => [r.storeDisplayName, r.count, numCell(r.total)]),
-        colFormats: [salesExcelCol.text, salesExcelCol.int, salesExcelCol.money],
-      })
-    }
-    if (channelChartRows.length > 0) {
-      sheets.push({
-        name: tr("salesByCategory", "분류별 (채널)"),
-        headers: [tr("salesCategoryName", "분류명"), tr("salesSalesAmount", "판매 금액")],
-        rows: channelChartRows.map((r) => [r.axisLabel, numCell(r.sales)]),
-        colFormats: [salesExcelCol.text, salesExcelCol.money],
       })
     }
   } else if (selectedView === "yoy-compare" && yoyCompareRows.length > 0) {

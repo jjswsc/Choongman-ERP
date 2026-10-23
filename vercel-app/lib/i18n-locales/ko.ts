@@ -5132,9 +5132,9 @@ export const I18N_BASE_KO = {
   salesByStoreRankTopHint: '상위 15개 매장만 막대로 표시합니다. 전체는 아래 표·엑셀을 이용하세요.',
   salesByStoreTableToggle: '매장별 수량·금액 표',
   salesStoreChannelMatrixFootnote:
-    '선택 기간·매장의 완료 매출(POS 영업일)입니다. 당일 차트의 미결제 테이블은 기간 비교에 포함하지 않습니다.',
+    '홀·배달·포장 %는 해당 매장 합계 대비입니다. 합계 열 %는 전체 매장 합계 대비입니다.',
   salesStoreDeliveryPlatformFootnote:
-    '배달 주문만 집계합니다. 앱 코드가 없는 건은「앱 미지정」입니다.',
+    '앱 %는 해당 매장 배달 합계 대비입니다. 배달 열 %는 전체 배달 합계 대비입니다.',
   salesTopicPivotStoreChannel: '채널별 매출 집계',
   salesTopicPivotStoreChannelHint: '매장·포장·배달',
   salesTopicPivotStoreItem: '메뉴별 집계',
