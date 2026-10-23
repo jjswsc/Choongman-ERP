@@ -41,14 +41,49 @@ function pctOf(part: number, whole: number): number {
   return (part / whole) * 100
 }
 
-function AmountWithPct({ amount, pct }: { amount: number; pct: number | null }) {
+function PctCell({ pct }: { pct: number }) {
   return (
-    <span className="tabular-nums">
+    <td className="px-2 py-1.5 text-right font-erp-numeric text-muted-foreground whitespace-nowrap">
+      {formatSalesPct(pct)}
+    </td>
+  )
+}
+
+function AmountCell({
+  amount,
+  strong,
+}: {
+  amount: number
+  strong?: boolean
+}) {
+  return (
+    <td
+      className={`px-3 py-1.5 text-right font-erp-numeric whitespace-nowrap ${strong ? "font-semibold" : ""}`}
+    >
       {formatSalesAmount(amount)}
-      {pct != null ? (
-        <span className="ml-1 text-muted-foreground">({formatSalesPct(pct)})</span>
-      ) : null}
-    </span>
+    </td>
+  )
+}
+
+function MobileMetricRow({
+  label,
+  amount,
+  pct,
+  strong,
+}: {
+  label: string
+  amount: number
+  pct: number
+  strong?: boolean
+}) {
+  return (
+    <div
+      className={`grid grid-cols-[1fr_auto_auto] items-baseline gap-x-3 gap-y-0.5 ${strong ? "border-t pt-1 font-semibold" : ""}`}
+    >
+      <span className={strong ? "" : "text-muted-foreground"}>{label}</span>
+      <span className="tabular-nums text-right">{formatSalesAmount(amount)}</span>
+      <span className="w-14 tabular-nums text-right text-muted-foreground">{formatSalesPct(pct)}</span>
+    </div>
   )
 }
 
@@ -58,6 +93,8 @@ export function SalesStoreCategoryView({
   storeDeliveryPlatformRows,
   posStoreDisplayName,
 }: SalesStoreCategoryViewProps) {
+  const pctHeader = tr("salesSharePctShort", "%")
+
   const storeChannelTotals = React.useMemo(
     () =>
       storeChannelRows.reduce(
@@ -134,131 +171,97 @@ export function SalesStoreCategoryView({
             {sortedStoreChannelRows.map((r) => (
               <div key={r.storeName} className="rounded-lg border bg-card px-3 py-2.5 text-xs">
                 <p className="mb-1.5 font-medium">{r.storeDisplayName}</p>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">{tr("salesAmountKindDineIn", "홀")}</dt>
-                    <dd>
-                      <AmountWithPct amount={r.dineIn} pct={pctOf(r.dineIn, r.total)} />
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">{tr("salesAmountKindDelivery", "배달")}</dt>
-                    <dd>
-                      <AmountWithPct amount={r.delivery} pct={pctOf(r.delivery, r.total)} />
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">{tr("salesAmountKindTakeout", "포장")}</dt>
-                    <dd>
-                      <AmountWithPct amount={r.takeout} pct={pctOf(r.takeout, r.total)} />
-                    </dd>
-                  </div>
-                  <div className="col-span-2 flex justify-between gap-2 border-t pt-1 font-semibold">
-                    <dt>{tr("salesTotalLabel", "합계")}</dt>
-                    <dd>
-                      <AmountWithPct
-                        amount={r.total}
-                        pct={pctOf(r.total, storeChannelTotals.total)}
-                      />
-                    </dd>
-                  </div>
-                </dl>
+                <div className="space-y-1">
+                  <MobileMetricRow
+                    label={tr("salesAmountKindDineIn", "홀")}
+                    amount={r.dineIn}
+                    pct={pctOf(r.dineIn, r.total)}
+                  />
+                  <MobileMetricRow
+                    label={tr("salesAmountKindDelivery", "배달")}
+                    amount={r.delivery}
+                    pct={pctOf(r.delivery, r.total)}
+                  />
+                  <MobileMetricRow
+                    label={tr("salesAmountKindTakeout", "포장")}
+                    amount={r.takeout}
+                    pct={pctOf(r.takeout, r.total)}
+                  />
+                  <MobileMetricRow
+                    label={tr("salesTotalLabel", "합계")}
+                    amount={r.total}
+                    pct={pctOf(r.total, storeChannelTotals.total)}
+                    strong
+                  />
+                </div>
               </div>
             ))}
             <div className="rounded-lg border bg-muted/40 px-3 py-2.5 text-xs font-semibold">
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
-                <div className="flex justify-between gap-2">
-                  <dt className="font-medium">{tr("salesAmountKindDineIn", "홀")}</dt>
-                  <dd>
-                    <AmountWithPct
-                      amount={storeChannelTotals.dineIn}
-                      pct={pctOf(storeChannelTotals.dineIn, storeChannelTotals.total)}
-                    />
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="font-medium">{tr("salesAmountKindDelivery", "배달")}</dt>
-                  <dd>
-                    <AmountWithPct
-                      amount={storeChannelTotals.delivery}
-                      pct={pctOf(storeChannelTotals.delivery, storeChannelTotals.total)}
-                    />
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="font-medium">{tr("salesAmountKindTakeout", "포장")}</dt>
-                  <dd>
-                    <AmountWithPct
-                      amount={storeChannelTotals.takeout}
-                      pct={pctOf(storeChannelTotals.takeout, storeChannelTotals.total)}
-                    />
-                  </dd>
-                </div>
-                <div className="col-span-2 flex justify-between gap-2 border-t pt-1">
-                  <dt>{tr("salesTotalLabel", "합계")}</dt>
-                  <dd>
-                    <AmountWithPct amount={storeChannelTotals.total} pct={100} />
-                  </dd>
-                </div>
-              </dl>
+              <div className="space-y-1">
+                <MobileMetricRow
+                  label={tr("salesAmountKindDineIn", "홀")}
+                  amount={storeChannelTotals.dineIn}
+                  pct={pctOf(storeChannelTotals.dineIn, storeChannelTotals.total)}
+                />
+                <MobileMetricRow
+                  label={tr("salesAmountKindDelivery", "배달")}
+                  amount={storeChannelTotals.delivery}
+                  pct={pctOf(storeChannelTotals.delivery, storeChannelTotals.total)}
+                />
+                <MobileMetricRow
+                  label={tr("salesAmountKindTakeout", "포장")}
+                  amount={storeChannelTotals.takeout}
+                  pct={pctOf(storeChannelTotals.takeout, storeChannelTotals.total)}
+                />
+                <MobileMetricRow
+                  label={tr("salesTotalLabel", "합계")}
+                  amount={storeChannelTotals.total}
+                  pct={100}
+                  strong
+                />
+              </div>
             </div>
           </div>
           <div className="hidden min-w-0 md:block">
             <AdminTableScroll className="rounded-lg border" hint={false}>
-              <table className="min-w-[640px] w-full text-sm">
+              <table className="min-w-[760px] w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindDineIn", "홀")}</th>
+                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
+                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindTakeout", "포장")}</th>
+                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
                     <th className="px-3 py-2 text-right">{tr("salesTotalLabel", "합계")}</th>
+                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedStoreChannelRows.map((r) => (
                     <tr key={r.storeName} className="border-t">
-                      <td className="px-3 py-1.5 font-medium">{r.storeDisplayName}</td>
-                      <td className="px-3 py-1.5 text-right font-erp-numeric">
-                        <AmountWithPct amount={r.dineIn} pct={pctOf(r.dineIn, r.total)} />
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-erp-numeric">
-                        <AmountWithPct amount={r.delivery} pct={pctOf(r.delivery, r.total)} />
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-erp-numeric">
-                        <AmountWithPct amount={r.takeout} pct={pctOf(r.takeout, r.total)} />
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-erp-numeric font-semibold">
-                        <AmountWithPct
-                          amount={r.total}
-                          pct={pctOf(r.total, storeChannelTotals.total)}
-                        />
-                      </td>
+                      <td className="px-3 py-1.5 font-medium whitespace-nowrap">{r.storeDisplayName}</td>
+                      <AmountCell amount={r.dineIn} />
+                      <PctCell pct={pctOf(r.dineIn, r.total)} />
+                      <AmountCell amount={r.delivery} />
+                      <PctCell pct={pctOf(r.delivery, r.total)} />
+                      <AmountCell amount={r.takeout} />
+                      <PctCell pct={pctOf(r.takeout, r.total)} />
+                      <AmountCell amount={r.total} strong />
+                      <PctCell pct={pctOf(r.total, storeChannelTotals.total)} />
                     </tr>
                   ))}
                   <tr className="border-t-2 bg-muted/40 font-semibold">
                     <td className="px-3 py-2">{tr("salesTotalLabel", "합계")}</td>
-                    <td className="px-3 py-2 text-right font-erp-numeric">
-                      <AmountWithPct
-                        amount={storeChannelTotals.dineIn}
-                        pct={pctOf(storeChannelTotals.dineIn, storeChannelTotals.total)}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right font-erp-numeric">
-                      <AmountWithPct
-                        amount={storeChannelTotals.delivery}
-                        pct={pctOf(storeChannelTotals.delivery, storeChannelTotals.total)}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right font-erp-numeric">
-                      <AmountWithPct
-                        amount={storeChannelTotals.takeout}
-                        pct={pctOf(storeChannelTotals.takeout, storeChannelTotals.total)}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right font-erp-numeric">
-                      <AmountWithPct amount={storeChannelTotals.total} pct={100} />
-                    </td>
+                    <AmountCell amount={storeChannelTotals.dineIn} strong />
+                    <PctCell pct={pctOf(storeChannelTotals.dineIn, storeChannelTotals.total)} />
+                    <AmountCell amount={storeChannelTotals.delivery} strong />
+                    <PctCell pct={pctOf(storeChannelTotals.delivery, storeChannelTotals.total)} />
+                    <AmountCell amount={storeChannelTotals.takeout} strong />
+                    <PctCell pct={pctOf(storeChannelTotals.takeout, storeChannelTotals.total)} />
+                    <AmountCell amount={storeChannelTotals.total} strong />
+                    <PctCell pct={100} />
                   </tr>
                 </tbody>
               </table>
@@ -282,64 +285,62 @@ export function SalesStoreCategoryView({
             {storeDeliveryMatrixRows.map((r) => (
               <div key={r.storeName} className="rounded-lg border bg-card px-3 py-2.5 text-xs">
                 <p className="mb-1.5 font-medium">{r.storeDisplayName}</p>
-                <dl className="space-y-1">
+                <div className="space-y-1">
                   {deliveryPlatformCodes.map((code) => {
                     const sales = r.byCode.get(code) || 0
                     if (sales <= 0) return null
                     return (
-                      <div key={code} className="flex justify-between gap-2">
-                        <dt className="text-muted-foreground">{translateDeliveryAppCode(code, tr)}</dt>
-                        <dd>
-                          <AmountWithPct amount={sales} pct={pctOf(sales, r.deliveryTotal)} />
-                        </dd>
-                      </div>
+                      <MobileMetricRow
+                        key={code}
+                        label={translateDeliveryAppCode(code, tr)}
+                        amount={sales}
+                        pct={pctOf(sales, r.deliveryTotal)}
+                      />
                     )
                   })}
-                  <div className="flex justify-between gap-2 border-t pt-1 font-semibold">
-                    <dt>{tr("salesAmountKindDelivery", "배달")}</dt>
-                    <dd>
-                      <AmountWithPct
-                        amount={r.deliveryTotal}
-                        pct={pctOf(r.deliveryTotal, storeDeliveryColumnTotals.deliveryTotal)}
-                      />
-                    </dd>
-                  </div>
-                </dl>
+                  <MobileMetricRow
+                    label={tr("salesAmountKindDelivery", "배달")}
+                    amount={r.deliveryTotal}
+                    pct={pctOf(r.deliveryTotal, storeDeliveryColumnTotals.deliveryTotal)}
+                    strong
+                  />
+                </div>
               </div>
             ))}
           </div>
           <div className="hidden min-w-0 md:block">
             <AdminTableScroll className="rounded-lg border" hint={false}>
-              <table className="min-w-[720px] w-full text-sm">
+              <table className="min-w-[880px] w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
                     {deliveryPlatformCodes.map((code) => (
-                      <th key={code} className="px-3 py-2 text-right">
-                        {translateDeliveryAppCode(code, tr)}
-                      </th>
+                      <React.Fragment key={code}>
+                        <th className="px-3 py-2 text-right">{translateDeliveryAppCode(code, tr)}</th>
+                        <th className="px-2 py-2 text-right text-muted-foreground font-normal">
+                          {pctHeader}
+                        </th>
+                      </React.Fragment>
                     ))}
                     <th className="px-3 py-2 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
+                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {storeDeliveryMatrixRows.map((r) => (
                     <tr key={r.storeName} className="border-t">
-                      <td className="px-3 py-1.5 font-medium">{r.storeDisplayName}</td>
+                      <td className="px-3 py-1.5 font-medium whitespace-nowrap">{r.storeDisplayName}</td>
                       {deliveryPlatformCodes.map((code) => {
                         const sales = r.byCode.get(code) || 0
                         return (
-                          <td key={code} className="px-3 py-1.5 text-right font-erp-numeric">
-                            <AmountWithPct amount={sales} pct={pctOf(sales, r.deliveryTotal)} />
-                          </td>
+                          <React.Fragment key={code}>
+                            <AmountCell amount={sales} />
+                            <PctCell pct={pctOf(sales, r.deliveryTotal)} />
+                          </React.Fragment>
                         )
                       })}
-                      <td className="px-3 py-1.5 text-right font-erp-numeric font-semibold">
-                        <AmountWithPct
-                          amount={r.deliveryTotal}
-                          pct={pctOf(r.deliveryTotal, storeDeliveryColumnTotals.deliveryTotal)}
-                        />
-                      </td>
+                      <AmountCell amount={r.deliveryTotal} strong />
+                      <PctCell pct={pctOf(r.deliveryTotal, storeDeliveryColumnTotals.deliveryTotal)} />
                     </tr>
                   ))}
                   <tr className="border-t-2 bg-muted/40 font-semibold">
@@ -347,17 +348,14 @@ export function SalesStoreCategoryView({
                     {deliveryPlatformCodes.map((code) => {
                       const sales = storeDeliveryColumnTotals.byCode.get(code) || 0
                       return (
-                        <td key={code} className="px-3 py-2 text-right font-erp-numeric">
-                          <AmountWithPct
-                            amount={sales}
-                            pct={pctOf(sales, storeDeliveryColumnTotals.deliveryTotal)}
-                          />
-                        </td>
+                        <React.Fragment key={code}>
+                          <AmountCell amount={sales} strong />
+                          <PctCell pct={pctOf(sales, storeDeliveryColumnTotals.deliveryTotal)} />
+                        </React.Fragment>
                       )
                     })}
-                    <td className="px-3 py-2 text-right font-erp-numeric">
-                      <AmountWithPct amount={storeDeliveryColumnTotals.deliveryTotal} pct={100} />
-                    </td>
+                    <AmountCell amount={storeDeliveryColumnTotals.deliveryTotal} strong />
+                    <PctCell pct={100} />
                   </tr>
                 </tbody>
               </table>

@@ -5118,6 +5118,7 @@ export const I18N_BASE_KO = {
     '선택 기간 매장별 홀·배달·포장 표 + 매장별 배달앱 표',
   salesByStoreChannelMatrix: '매장별 홀·배달·포장',
   salesByStoreDeliveryPlatform: '매장별 배달 플랫폼',
+  salesSharePctShort: '%',
   salesCompareModeAmount: '금액',
   salesCompareModeShare: '비중 %',
   salesStoreChannelShareHint:

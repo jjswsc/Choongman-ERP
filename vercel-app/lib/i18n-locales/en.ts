@@ -5113,6 +5113,7 @@ Only matters the employee must handle personally on a working day:
     'Tables: dine-in·delivery·takeout by store, plus delivery apps by store',
   salesByStoreChannelMatrix: 'By store (dine-in·delivery·takeout)',
   salesByStoreDeliveryPlatform: 'By store · delivery platform',
+  salesSharePctShort: '%',
   salesCompareModeAmount: 'Amount',
   salesCompareModeShare: 'Share %',
   salesStoreChannelShareHint:
