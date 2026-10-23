@@ -13,9 +13,10 @@ CREATE INDEX IF NOT EXISTS idx_pos_orders_tenant_id ON public.pos_orders (tenant
 CREATE INDEX IF NOT EXISTS idx_pos_orders_created_at ON public.pos_orders (created_at);
 --
 -- p_agg_mode:
---   store | store_channel | period | period_by_store | channel | payment
+--   store | store_channel | store_delivery_platform | period | period_by_store | channel | payment
 --   | delivery_platform | delivery_payment | delivery_app | menu
 --   delivery_app = channel + delivery_platform 을 한 번 스캔(bucket_key2=channel|platform)
+--   store_delivery_platform = 매장×배달앱 (bucket_key=store, bucket_key2=platform)
 -- p_period_group (period*): day | month | year | week | dow | hour
 
 CREATE OR REPLACE FUNCTION public.pos_sales_norm_store_key(p_raw text)
@@ -418,6 +419,22 @@ BEGIN
       p_start_utc, p_end_utc_exclusive, v_start, v_end,
       p_store_codes, p_order_types, p_biz_hours, p_tenant_id
     ) f
+    GROUP BY f.store_code, 2;
+
+  ELSIF v_mode = 'store_delivery_platform' THEN
+    RETURN QUERY
+    SELECT
+      f.store_code,
+      CASE WHEN btrim(f.delivery_app_code) = '' THEN '_unspecified' ELSE btrim(f.delivery_app_code) END,
+      count(*)::bigint,
+      sum(f.subtotal), sum(f.vat), sum(f.discount), sum(f.service_amt), sum(f.total),
+      0::bigint, 0::bigint, 0::numeric, 0::bigint, 0::numeric, NULL::text,
+      0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric
+    FROM public.pos_sales_analytics_base(
+      p_start_utc, p_end_utc_exclusive, v_start, v_end,
+      p_store_codes, p_order_types, p_biz_hours, p_tenant_id
+    ) f
+    WHERE f.norm_order_type = 'delivery'
     GROUP BY f.store_code, 2;
 
   ELSIF v_mode = 'period' THEN

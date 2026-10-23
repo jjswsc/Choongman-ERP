@@ -441,6 +441,32 @@ export async function getPosSalesByStoreChannel(params: {
   return data as { storeName: string; dineIn: number; takeout: number; delivery: number }[]
 }
 
+export type PosSalesStoreDeliveryPlatformRow = {
+  storeName: string
+  platforms: { code: string; sales: number }[]
+  deliveryTotal: number
+}
+
+/** 매장×배달앱 매출 (선택 기간) */
+export async function getPosSalesByStoreDeliveryPlatform(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+  fresh?: boolean
+}) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  appendPosSalesFreshParam(q, params.fresh)
+  const res = await posSalesApiFetch(`/api/pos/sales-by-store-delivery-platform?${q}`, params.fresh)
+  const data: unknown = await res.json()
+  throwIfPosSalesAggTimeout(res, data)
+  return (Array.isArray(data) ? data : []) as PosSalesStoreDeliveryPlatformRow[]
+}
+
 export async function getPosSalesByChannel(params: {
   startStr: string
   endStr: string

@@ -38,7 +38,18 @@ export function cacheKeySales(storeCode: string, dateStr: string): string {
 
 /** 매출 분석 캐시 키 (기간/매장별) */
 export function cacheKeyAnalytics(
-  type: 'posOptions' | 'period' | 'delivery' | 'channel' | 'menu' | 'promoBundle' | 'payment' | 'payment_breakdown' | 'store',
+  type:
+    | 'posOptions'
+    | 'period'
+    | 'delivery'
+    | 'channel'
+    | 'menu'
+    | 'promoBundle'
+    | 'payment'
+    | 'payment_breakdown'
+    | 'store'
+    | 'store_channel'
+    | 'store_delivery_platform',
   params: {
     startStr: string
     endStr: string

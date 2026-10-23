@@ -65,6 +65,9 @@ import {
   getPosSalesByPaymentBreakdown,
   type PosSalesPaymentBreakdown,
   getPosSalesByStore,
+  getPosSalesByStoreChannel,
+  getPosSalesByStoreDeliveryPlatform,
+  type PosSalesStoreDeliveryPlatformRow,
   type PosSalesPeriodRow,
 } from "@/lib/api-client"
 import { SalesPosBusinessDaySettings } from "@/components/tabs/sales-pos-business-day-settings"
@@ -88,7 +91,6 @@ import {
 import { rowMatchesSalesStoreSelection } from "@/lib/pos-sales-store-filter"
 import { filterPosSalesStoreOptionsForManagement } from "@/lib/pos-sales-test-office"
 import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-utils"
-import { addBangkokCalendarDays } from "@/lib/bangkok-time"
 import { addDaysYmd } from "@/lib/pos-business-day"
 import {
   buildMomDayCompareRows,
@@ -98,6 +100,8 @@ import {
   parseYearFromYmd,
   parseYearMonthFromYmd,
   prevCalendarMonth,
+  resolveForecastFetchPlan,
+  sumPeriodRowTotals,
   yearRangeYmd,
   type ForecastHorizon,
   type MomDayCompareRow,
@@ -158,6 +162,8 @@ import {
   getPosSalesByPromoWithCache,
   getPosSalesByPaymentBreakdownWithCache,
   getPosSalesByStoreWithCache,
+  getPosSalesByStoreChannelWithCache,
+  getPosSalesByStoreDeliveryPlatformWithCache,
 } from "@/lib/offline/sales-analytics-offline"
 import { SalesManagementQueryBar } from "@/components/tabs/sales-management-query-bar"
 import { SalesManagementNavPickerMobile } from "@/components/tabs/sales-management-nav-picker-mobile"
@@ -334,6 +340,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [channelReconcileSection, setChannelReconcileSection] =
     React.useState<ChannelReconcileSection>("delivery")
   const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
+  const [storeChannelData, setStoreChannelData] = React.useState<
+    { storeName: string; dineIn: number; takeout: number; delivery: number }[]
+  >([])
+  const [storeDeliveryPlatformData, setStoreDeliveryPlatformData] = React.useState<
+    PosSalesStoreDeliveryPlatformRow[]
+  >([])
   const [menuData, setMenuData] = React.useState<{ name: string; qty: number; sales: number }[]>([])
   const [promoBundleData, setPromoBundleData] = React.useState<PosSalesByPromoResult>(EMPTY_POS_SALES_BY_PROMO)
   const [paymentData, setPaymentData] = React.useState<{ paymentKey: string; sales: number; label?: string }[]>([])
@@ -369,6 +381,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [forecastHorizon, setForecastHorizon] = React.useState<ForecastHorizon>("month")
   const [forecastLookbackRows, setForecastLookbackRows] = React.useState<PosSalesPeriodRow[]>([])
   const [forecastActualRows, setForecastActualRows] = React.useState<PosSalesPeriodRow[]>([])
+  /** 연간 예상용: 해당 연 1/1~기준일 월별 합계(일별 YTD 대신) */
+  const [forecastMonthActualTotal, setForecastMonthActualTotal] = React.useState<number | null>(null)
+  /** 동일 필터로 한 번 조회한 뒤 주제만 바꿀 때 자동 재조회용 */
+  const lastFetchedDataFilterKeyRef = React.useRef("")
   const [summaryCards, setSummaryCards] = React.useState<{
     current: number
     prevRange: number
@@ -852,6 +868,36 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [channelData, tr]
   )
 
+  const storeChannelCompareRows = React.useMemo(() => {
+    const scoped = salesFetchStoresParam?.length
+      ? storeChannelData.filter((r) =>
+          salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+        )
+      : storeChannelData
+    return scoped
+      .map((r) => {
+        const dineIn = Number(r.dineIn) || 0
+        const delivery = Number(r.delivery) || 0
+        const takeout = Number(r.takeout) || 0
+        return {
+          storeName: r.storeName,
+          storeDisplayName: posStoreDisplayName(r.storeName),
+          dineIn,
+          delivery,
+          takeout,
+          total: dineIn + delivery + takeout,
+        }
+      })
+      .sort((a, b) => b.total - a.total)
+  }, [storeChannelData, salesFetchStoresParam, posStoreDisplayName])
+
+  const scopedStoreDeliveryPlatformRows = React.useMemo(() => {
+    if (!salesFetchStoresParam?.length) return storeDeliveryPlatformData
+    return storeDeliveryPlatformData.filter((r) =>
+      salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+    )
+  }, [storeDeliveryPlatformData, salesFetchStoresParam])
+
   const paymentChartRows = React.useMemo(
     () =>
       (paymentBreakdownData.summary.length > 0 ? paymentBreakdownData.summary : paymentData).map((r) => ({
@@ -998,6 +1044,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       cardReconcileData,
       cashReconcileData,
       channelData,
+      storeChannelData,
+      storeDeliveryPlatformData,
       menuData,
       promoBundleData,
       paymentData,
@@ -1034,6 +1082,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     cardReconcileData,
     cashReconcileData,
     channelData,
+    storeChannelData,
+    storeDeliveryPlatformData,
     menuData,
     promoBundleData,
     paymentData,
@@ -1220,6 +1270,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setCardReconcileData(EMPTY_POS_CARD_RECONCILE)
     setCashReconcileData(EMPTY_POS_CASH_RECONCILE)
     setChannelData([])
+    setStoreChannelData([])
+    setStoreDeliveryPlatformData([])
     setMenuData([])
     setPromoBundleData(EMPTY_POS_SALES_BY_PROMO)
     setPaymentData([])
@@ -1236,8 +1288,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastSummary(null)
     setForecastLookbackRows([])
     setForecastActualRows([])
+    setForecastMonthActualTotal(null)
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setFetchedAnalyticsKey("")
+    lastFetchedDataFilterKeyRef.current = ""
     viewCacheRestoreKeyRef.current = null
   }, [dataFilterKey, pageActiveRef])
 
@@ -1307,6 +1361,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setCardReconcileData(snap.cardReconcileData ?? EMPTY_POS_CARD_RECONCILE)
     setCashReconcileData(snap.cashReconcileData ?? EMPTY_POS_CASH_RECONCILE)
     setChannelData(snap.channelData)
+    setStoreChannelData(snap.storeChannelData ?? [])
+    setStoreDeliveryPlatformData(snap.storeDeliveryPlatformData ?? [])
     setMenuData(snap.menuData)
     setPromoBundleData(snap.promoBundleData)
     setPaymentData(snap.paymentData)
@@ -1317,8 +1373,22 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastSummary(snap.forecastSummary)
     setForecastLookbackRows(snap.forecastLookbackRows)
     setForecastActualRows(snap.forecastActualRows)
+    setForecastMonthActualTotal(
+      snap.forecastSummary?.horizon === "year" ? snap.forecastSummary.actualToDate : null
+    )
     setSummaryCards(snap.summaryCards)
     setFetchedAnalyticsKey(snap.analyticsParamKey)
+    lastFetchedDataFilterKeyRef.current = [
+      snap.startStr,
+      snap.endStr,
+      (snap.selectedStores || []).join(","),
+      snap.periodGroup,
+      snap.orderTypesKey,
+      snap.dowsKey,
+      snap.compareStores ? "1" : "0",
+      String(snap.menuSearch || "").trim(),
+      snap.menuSearchAnd ? "1" : "0",
+    ].join("|")
     viewCacheRestoreKeyRef.current = snap.analyticsParamKey
   }, [pageActive, pageActiveRef])
 
@@ -1409,7 +1479,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           paymentChartRows.length > 0
         )
       case "store-category":
-        return storeChartRows.length > 0 || channelChartRows.length > 0
+        return (
+          storeChartRows.length > 0 ||
+          channelChartRows.length > 0 ||
+          storeChannelCompareRows.length > 0 ||
+          scopedStoreDeliveryPlatformRows.length > 0
+        )
       case "yoy-compare":
         return yoyCompareRows.length > 0
       case "mom-compare":
@@ -1438,6 +1513,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     creditPaymentChannelRows.length,
     paymentChartRows.length,
     storeChartRows.length,
+    storeChannelCompareRows.length,
+    scopedStoreDeliveryPlatformRows.length,
     yoyCompareRows.length,
     momCompareRows.length,
     forecastSummary,
@@ -1464,6 +1541,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       deliveryPaymentChannelRows,
       creditPaymentChannelRows,
       storeChartRows,
+      storeChannelCompareRows,
+      storeDeliveryPlatformRows: scopedStoreDeliveryPlatformRows,
       yoyCompareRows,
       endStr,
       momCompareRows,
@@ -1493,6 +1572,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     deliveryPaymentChannelRows,
     creditPaymentChannelRows,
     storeChartRows,
+    storeChannelCompareRows,
+    scopedStoreDeliveryPlatformRows,
     yoyCompareRows,
     momCompareRows,
     forecastSummary,
@@ -1909,7 +1990,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needDelivery = selectedView === "delivery"
     const needChannelReconcile =
       selectedView === "channel-reconcile" || selectedView === "app-reconcile"
-    const needChannel = selectedView === "channel" || selectedView === "overview"
+    const needChannel =
+      selectedView === "channel" ||
+      selectedView === "overview" ||
+      selectedView === "store-category"
+    const needStoreChannel = selectedView === "store-category"
+    const needStoreDeliveryPlatform = selectedView === "store-category"
     const needMenu = selectedView === "menu"
     const needDiscountAnalytics =
       selectedView === "promo-bundle" ||
@@ -1955,6 +2041,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gCardReconcile = guarded(setCardReconcileData)
     const gCashReconcile = guarded(setCashReconcileData)
     const gChannel = guarded(setChannelData)
+    const gStoreChannel = guarded(setStoreChannelData)
+    const gStoreDeliveryPlatform = guarded(setStoreDeliveryPlatformData)
     const gPayment = guarded(setPaymentData)
     const gPaymentBreakdown = guarded(setPaymentBreakdownData)
     const gStore = guarded(setStoreData)
@@ -1965,6 +2053,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gForecast = guarded(setForecastSummary)
     const gForecastLookback = guarded(setForecastLookbackRows)
     const gForecastActual = guarded(setForecastActualRows)
+    const gForecastMonthActual = guarded(setForecastMonthActualTotal)
     const gSummary = guarded(setSummaryCards)
     if (!opts?.silent) setLoading(true)
     if (isLongRangeSalesQuery && isSalesHeavyTopicSkippedOnLongRange(selectedView)) {
@@ -2115,36 +2204,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
     if (needForecast) {
       const anchor = endStr
-      const lookbackStart = addBangkokCalendarDays(anchor, -83)
-      const yearR = yearRangeYmd(parseYearFromYmd(anchor))
+      const plan = resolveForecastFetchPlan({ horizon: forecastHorizon, anchorYmd: anchor })
+      /** 주/월: lookback 일별만. 연: lookback(요일평균) + 연초~기준 월별 합(실적). 일별 YTD 금지. */
+      const lookbackReq = periodRun({
+        startStr: plan.lookbackStart,
+        endStr: plan.lookbackEnd,
+        groupBy: "day",
+        stores: salesFetchStoresParam,
+        orderTypes: orderTypesParam,
+      })
+      const monthActualReq = periodRun({
+        startStr: plan.monthActualStart,
+        endStr: plan.monthActualEnd,
+        groupBy: "month",
+        stores: salesFetchStoresParam,
+        orderTypes: orderTypesParam,
+      })
       tasks.push(
-        Promise.all([
-          periodRun({
-            startStr: lookbackStart,
-            endStr: anchor,
-            groupBy: "day",
-            stores: salesFetchStoresParam,
-            orderTypes: orderTypesParam,
-          }),
-          periodRun({
-            startStr: yearR.startStr,
-            endStr: anchor,
-            groupBy: "day",
-            stores: salesFetchStoresParam,
-            orderTypes: orderTypesParam,
-          }),
-        ])
-          .then(([lookbackRes, actualRes]) => {
+        Promise.all([lookbackReq, monthActualReq])
+          .then(([lookbackRes, monthRes]) => {
             if (loadIdRef.current !== id) return
             const lbRows = periodRowsFromResult(lookbackRes)
-            const actRows = periodRowsFromResult(actualRes)
+            const monthTotal = sumPeriodRowTotals(periodRowsFromResult(monthRes))
             gForecastLookback(lbRows)
-            gForecastActual(actRows)
+            gForecastActual(lbRows)
+            gForecastMonthActual(monthTotal)
             const forecast = computeSalesForecast({
               horizon: forecastHorizon,
               anchorYmd: anchor,
               lookbackDailyRows: lbRows,
-              actualDailyRows: actRows,
+              actualDailyRows: lbRows,
+              actualToDateOverride: forecastHorizon === "year" ? monthTotal : undefined,
             })
             gForecast(forecast)
             gSummary({
@@ -2157,6 +2247,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             gForecast(null)
             gForecastLookback([])
             gForecastActual([])
+            gForecastMonthActual(null)
             gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
       )
@@ -2228,6 +2319,46 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         })
           .then(gChannel)
           .catch(() => gChannel([]))
+      )
+    }
+    if (needStoreChannel) {
+      tasks.push(
+        (offlineAware ? getPosSalesByStoreChannelWithCache : getPosSalesByStoreChannel)({
+          startStr,
+          endStr,
+          stores: salesFetchStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then((rows) => {
+            const scoped = salesFetchStoresParam?.length
+              ? rows.filter((r) =>
+                  salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+                )
+              : rows
+            gStoreChannel(scoped)
+          })
+          .catch(() => gStoreChannel([]))
+      )
+    }
+    if (needStoreDeliveryPlatform) {
+      tasks.push(
+        (offlineAware
+          ? getPosSalesByStoreDeliveryPlatformWithCache
+          : getPosSalesByStoreDeliveryPlatform)({
+          startStr,
+          endStr,
+          stores: salesFetchStoresParam,
+          orderTypes: orderTypesParam,
+        })
+          .then((rows) => {
+            const scoped = salesFetchStoresParam?.length
+              ? rows.filter((r) =>
+                  salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+                )
+              : rows
+            gStoreDeliveryPlatform(scoped)
+          })
+          .catch(() => gStoreDeliveryPlatform([]))
       )
     }
     if (needPayment) {
@@ -2394,9 +2525,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       if (loadIdRef.current === id) {
         setLoading(false)
         setFetchedAnalyticsKey(keySnapshot)
+        lastFetchedDataFilterKeyRef.current = dataFilterKey
       }
     })
   }, [
+    dataFilterKey,
     analyticsParamKey,
     startStr,
     endStr,
@@ -2432,14 +2565,30 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     prevOnlineRef.current = online
   }, [online, offlineAware, showSalesResults, loadAllAnalytics])
 
+  /** 필터는 같고 하위 메뉴·주제만 바꾼 경우 「조회」 없이 해당 리포트 재집계 */
+  React.useEffect(() => {
+    if (isHoursPanel) return
+    if (!lastFetchedDataFilterKeyRef.current) return
+    if (lastFetchedDataFilterKeyRef.current !== dataFilterKey) return
+    if (fetchedAnalyticsKey === analyticsParamKey) return
+    loadAllAnalytics()
+  }, [
+    isHoursPanel,
+    dataFilterKey,
+    analyticsParamKey,
+    fetchedAnalyticsKey,
+    loadAllAnalytics,
+  ])
+
   React.useEffect(() => {
     if (selectedView !== "forecast" || !showSalesResults) return
-    if (forecastLookbackRows.length === 0 && forecastActualRows.length === 0) return
+    if (forecastLookbackRows.length === 0 && forecastMonthActualTotal == null) return
     const next = computeSalesForecast({
       horizon: forecastHorizon,
       anchorYmd: endStr,
       lookbackDailyRows: forecastLookbackRows,
-      actualDailyRows: forecastActualRows,
+      actualDailyRows: forecastActualRows.length > 0 ? forecastActualRows : forecastLookbackRows,
+      actualToDateOverride: forecastHorizon === "year" ? forecastMonthActualTotal ?? undefined : undefined,
     })
     setForecastSummary(next)
     setSummaryCards((prev) => ({ ...prev, current: next.expectedTotal }))
@@ -2449,6 +2598,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     forecastHorizon,
     forecastLookbackRows,
     forecastActualRows,
+    forecastMonthActualTotal,
     endStr,
   ])
 
@@ -3005,6 +3155,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   tr={tr}
                   storeChartRows={storeChartRows}
                   channelChartRows={channelChartRows}
+                  storeChannelRows={storeChannelCompareRows}
+                  storeDeliveryPlatformRows={scopedStoreDeliveryPlatformRows}
+                  posStoreDisplayName={posStoreDisplayName}
                 />
               )
             )}

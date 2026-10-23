@@ -121,6 +121,40 @@ export function mapAnalyticsAggToStoreChannelResults(
     )
 }
 
+export type StoreDeliveryPlatformSalesRow = {
+  storeName: string
+  platforms: { code: string; sales: number }[]
+  deliveryTotal: number
+}
+
+/** store_delivery_platform RPC — 매장×배달앱 완료 매출 */
+export function mapAnalyticsAggToStoreDeliveryPlatformResults(
+  rows: import('@/lib/pos-sales-analytics-rpc-server').PosSalesAnalyticsAggRow[]
+): StoreDeliveryPlatformSalesRow[] {
+  const byStore = new Map<string, Map<string, number>>()
+
+  for (const r of rows) {
+    const rawStore = String(r.bucket_key ?? '').trim()
+    if (!rawStore) continue
+    const store = canonicalSalesStoreRowKey(rawStore)
+    const code = String(r.bucket_key2 ?? '').trim() || '_unspecified'
+    const amt = num(r.total)
+    if (!byStore.has(store)) byStore.set(store, new Map())
+    const plat = byStore.get(store)!
+    plat.set(code, (plat.get(code) || 0) + amt)
+  }
+
+  return Array.from(byStore.entries())
+    .map(([storeName, plat]) => {
+      const platforms = Array.from(plat.entries())
+        .map(([code, sales]) => ({ code, sales }))
+        .sort((a, b) => b.sales - a.sales)
+      const deliveryTotal = platforms.reduce((s, p) => s + p.sales, 0)
+      return { storeName, platforms, deliveryTotal }
+    })
+    .sort((a, b) => b.deliveryTotal - a.deliveryTotal)
+}
+
 /** period_by_store RPC 키 → canonical store key 시리즈 */
 export function canonicalizePeriodSeriesKeys(
   series: Record<string, import('@/lib/pos-sales-period-aggregate').PeriodAggRow[]>,

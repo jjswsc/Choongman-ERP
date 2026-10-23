@@ -13,7 +13,9 @@ import type {
   PosDeliveryAppReconcileResult,
   PosKbankQrReconcileResult,
   PosSalesByPromoResult,
+  PosSalesStoreDeliveryPlatformRow,
 } from "@/lib/api-client"
+import type { StoreChannelCompareRow } from "@/components/tabs/sales-management-store-category-view"
 import {
   parseYearFromYmd,
   type MomDayCompareRow,
@@ -51,6 +53,8 @@ export interface SalesExcelSheetsInput {
   deliveryPaymentChannelRows: SalesChannelChartRow[]
   creditPaymentChannelRows: SalesChannelChartRow[]
   storeChartRows: SalesStoreChartRow[]
+  storeChannelCompareRows?: StoreChannelCompareRow[]
+  storeDeliveryPlatformRows?: PosSalesStoreDeliveryPlatformRow[]
   yoyCompareRows: YoyMonthCompareRow[]
   endStr: string
   momCompareRows: MomDayCompareRow[]
@@ -77,6 +81,8 @@ export function buildSalesExcelSheets({
   deliveryPaymentChannelRows,
   creditPaymentChannelRows,
   storeChartRows,
+  storeChannelCompareRows = [],
+  storeDeliveryPlatformRows = [],
   yoyCompareRows,
   endStr,
   momCompareRows,
@@ -684,6 +690,64 @@ export function buildSalesExcelSheets({
       })
     }
   } else if (selectedView === "store-category") {
+    if (storeChannelCompareRows.length > 0) {
+      sheets.push({
+        name: tr("salesByStoreChannelMatrix", "매장별 홀·배달·포장"),
+        headers: [
+          tr("salesStoreName", "매장명"),
+          tr("salesAmountKindDineIn", "홀"),
+          tr("salesAmountKindDelivery", "배달"),
+          tr("salesAmountKindTakeout", "포장"),
+          tr("salesTotalLabel", "합계"),
+        ],
+        rows: storeChannelCompareRows.map((r) => [
+          r.storeDisplayName,
+          numCell(r.dineIn),
+          numCell(r.delivery),
+          numCell(r.takeout),
+          numCell(r.total),
+        ]),
+        colFormats: [
+          salesExcelCol.text,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+          salesExcelCol.money,
+        ],
+      })
+    }
+    if (storeDeliveryPlatformRows.length > 0) {
+      const platformTotals = new Map<string, number>()
+      for (const row of storeDeliveryPlatformRows) {
+        for (const p of row.platforms) {
+          platformTotals.set(p.code, (platformTotals.get(p.code) || 0) + p.sales)
+        }
+      }
+      const platformCodes = Array.from(platformTotals.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([code]) => code)
+      sheets.push({
+        name: tr("salesByStoreDeliveryPlatform", "매장별 배달 플랫폼"),
+        headers: [
+          tr("salesStoreName", "매장명"),
+          ...platformCodes.map((code) => translateDeliveryAppCode(code, tr)),
+          tr("salesAmountKindDelivery", "배달"),
+        ],
+        rows: storeDeliveryPlatformRows.map((r) => {
+          const byCode = new Map(r.platforms.map((p) => [p.code, p.sales]))
+          return [
+            posStoreDisplayName(r.storeName),
+            ...platformCodes.map((code) => numCell(byCode.get(code) || 0)),
+            numCell(r.deliveryTotal),
+          ]
+        }),
+        colFormats: [
+          salesExcelCol.text,
+          ...platformCodes.map(() => salesExcelCol.money),
+          salesExcelCol.money,
+        ],
+      })
+    }
     if (storeChartRows.length > 0) {
       sheets.push({
         name: tr("salesByStore", "매장별"),

@@ -39,6 +39,8 @@ export function respondPosSalesAnalyticsTimeout(headers: Headers) {
 export type PosSalesAnalyticsAggMode =
   | 'store'
   | 'store_channel'
+  /** 매장×배달앱 (bucket_key=store, bucket_key2=platform) */
+  | 'store_delivery_platform'
   | 'period'
   | 'period_by_store'
   | 'channel'

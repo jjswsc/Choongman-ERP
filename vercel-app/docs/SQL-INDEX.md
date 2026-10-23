@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **788**개 · 접두어 그룹 **97**개
+- `sql/` 최상위: **789**개 · 접두어 그룹 **98**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **72**개
 
@@ -503,7 +503,7 @@
 - [`get_pos_cancel_reason_summary.sql`](../sql/get_pos_cancel_reason_summary.sql)
 - [`get_pos_channel_settlement_gross.sql`](../sql/get_pos_channel_settlement_gross.sql)
 - [`get_pos_close_snapshot.sql`](../sql/get_pos_close_snapshot.sql)
-- [`get_pos_sales_analytics_agg.sql`](../sql/get_pos_sales_analytics_agg.sql)
+- [`get_pos_sales_analytics_agg.sql`](../sql/get_pos_sales_analytics_agg.sql) — log
 - [`get_pos_sales_filter_store_codes.sql`](../sql/get_pos_sales_filter_store_codes.sql)
 - [`get_pos_sales_period_summary_deploy.sql`](../sql/get_pos_sales_period_summary_deploy.sql)
 - [`get_pp30_channel_sales_daily_rpc.sql`](../sql/get_pp30_channel_sales_daily_rpc.sql) — rpc
@@ -1190,6 +1190,12 @@
 <details><summary><code>audit_*</code> (1)</summary>
 
 - [`audit_office_payroll_managers.sql`](../sql/audit_office_payroll_managers.sql) — diagnose
+
+</details>
+
+<details><summary><code>audited_*</code> (1)</summary>
+
+- [`audited_financial_statements_01_table.sql`](../sql/audited_financial_statements_01_table.sql) — log
 
 </details>
 

@@ -14,6 +14,7 @@ import type {
   PosKbankQrReconcileResult,
   PosCardReconcileResult,
   PosCashReconcileResult,
+  PosSalesStoreDeliveryPlatformRow,
 } from "@/lib/api-client"
 import type {
   ForecastHorizon,
@@ -95,6 +96,10 @@ export type SalesManagementViewCache = {
     salesPerGuest?: number
     salesPerOrder?: number
   }[]
+  /** 매장×홀·배달·포장 (매출 집계 매장&분류) — 구 캐시 호환 optional */
+  storeChannelData?: { storeName: string; dineIn: number; takeout: number; delivery: number }[]
+  /** 매장×배달앱 — 구 캐시 호환 optional */
+  storeDeliveryPlatformData?: PosSalesStoreDeliveryPlatformRow[]
   yoyCompareRows: YoyMonthCompareRow[]
   momCompareRows: MomDayCompareRow[]
   forecastSummary: SalesForecastSummary | null

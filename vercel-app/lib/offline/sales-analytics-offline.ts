@@ -17,8 +17,11 @@ import {
   getPosSalesByPaymentBreakdown,
   type PosSalesPaymentBreakdown,
   getPosSalesByStore,
+  getPosSalesByStoreChannel,
+  getPosSalesByStoreDeliveryPlatform,
   type PosSalesByPeriodResult,
   type PosSalesPeriodRow,
+  type PosSalesStoreDeliveryPlatformRow,
 } from '@/lib/api-client'
 
 export async function getPosSalesFilterOptionsWithCache(params: {
@@ -394,5 +397,63 @@ export async function getPosSalesByStoreWithCache(params: {
       salesPerOrder?: number
     }[]
   >('pos_sales_cache', key)
+  return cached ?? []
+}
+
+export async function getPosSalesByStoreChannelWithCache(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+}) {
+  const key = cacheKeyAnalytics('store_channel', {
+    ...params,
+    pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
+    orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
+  })
+  if (isOnline()) {
+    try {
+      const data = await getPosSalesByStoreChannel(params)
+      await setCache('pos_sales_cache', key, data)
+      return data
+    } catch {
+      const cached = await getFromCache<
+        { storeName: string; dineIn: number; takeout: number; delivery: number }[]
+      >('pos_sales_cache', key)
+      return cached ?? []
+    }
+  }
+  const cached = await getFromCache<
+    { storeName: string; dineIn: number; takeout: number; delivery: number }[]
+  >('pos_sales_cache', key)
+  return cached ?? []
+}
+
+export async function getPosSalesByStoreDeliveryPlatformWithCache(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  orderTypes?: string[]
+}): Promise<PosSalesStoreDeliveryPlatformRow[]> {
+  const key = cacheKeyAnalytics('store_delivery_platform', {
+    ...params,
+    pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
+    orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
+  })
+  if (isOnline()) {
+    try {
+      const data = await getPosSalesByStoreDeliveryPlatform(params)
+      await setCache('pos_sales_cache', key, data)
+      return data
+    } catch {
+      const cached = await getFromCache<PosSalesStoreDeliveryPlatformRow[]>('pos_sales_cache', key)
+      return cached ?? []
+    }
+  }
+  const cached = await getFromCache<PosSalesStoreDeliveryPlatformRow[]>('pos_sales_cache', key)
   return cached ?? []
 }
