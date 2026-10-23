@@ -5115,9 +5115,22 @@ export const I18N_BASE_KO = {
     '매장을 전체로 두면 이 기간에 주문이 있는 매장만 행으로 나옵니다. 위쪽「집계 기간」으로 년·월·주·일·요일·시간대를 바꿀 수 있습니다. 연·월·주·일·요일은 매장 POS 영업일 기준이며, 시간대만 방콕 벽시계 시각입니다.',
   salesTopicPivotStoreCategory: '매출 집계(매장&분류)',
   salesTopicPivotStoreCategoryHint:
-    '선택 기간 매장별 홀·배달·포장 비교 + 배달앱별 분해 · 매장/채널 차트',
+    '선택 기간 매장별 홀·배달·포장·배달앱을 누적 막대·비중%로 비교 (표는 접어서 확인)',
   salesByStoreChannelMatrix: '매장별 홀·배달·포장',
   salesByStoreDeliveryPlatform: '매장별 배달 플랫폼',
+  salesCompareModeAmount: '금액',
+  salesCompareModeShare: '비중 %',
+  salesStoreChannelShareHint:
+    '매장마다 합계를 100%로 두고 홀·배달·포장 비중을 비교합니다. 규모가 다른 매장끼리 채널 구성 비교에 유리합니다.',
+  salesStoreChannelAmountHint: '매출 금액(누적 막대)으로 매장 규모와 채널 구성을 함께 봅니다.',
+  salesStoreChannelTableToggle: '숫자 표 보기 (엑셀보내기와 동일)',
+  salesStoreDeliveryTableToggle: '배달앱 숫자 표 보기',
+  salesStoreDeliveryPlatformStackHint:
+    '상위 배달앱 {n}개 + 기타로 묶었습니다. 비중 %로 매장별 앱 의존도를 비교하세요.',
+  salesStoreDeliveryPlatformShareHint: '매장별 배달 매출 안에서 앱 비중을 비교합니다.',
+  salesByStoreRank: '매장별 매출 순위',
+  salesByStoreRankTopHint: '상위 15개 매장만 막대로 표시합니다. 전체는 아래 표·엑셀을 이용하세요.',
+  salesByStoreTableToggle: '매장별 수량·금액 표',
   salesStoreChannelMatrixFootnote:
     '선택 기간·매장의 완료 매출(POS 영업일)입니다. 당일 차트의 미결제 테이블은 기간 비교에 포함하지 않습니다.',
   salesStoreDeliveryPlatformFootnote:
