@@ -470,6 +470,16 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
     setHybridPosShell(isCmPosHybridShell())
   }, [])
 
+  /** PIN 직후 hard navigate 전에 메인 청크를 HTTP 캐시에 올려 흰 화면 확률을 줄임 */
+  useEffect(() => {
+    if (loginApp !== "pos") return
+    try {
+      router.prefetch("/pos")
+    } catch {
+      /* ignore */
+    }
+  }, [loginApp, router])
+
   useEffect(() => {
     if (typeof window === "undefined") return
     const sync = () => setBrowserOnline(isBrowserOnline())

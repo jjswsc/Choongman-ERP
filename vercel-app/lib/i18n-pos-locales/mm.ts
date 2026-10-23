@@ -1932,6 +1932,10 @@ export const I18N_POS_MM: Record<string, string> = {
     posTerminalLabelSaveFail: 'ပြသမည့်အမည် သိမ်းမရပါ။',
     posTerminalSaveDeviceLabel: 'အမည်သိမ်းပါ',
     posResetCacheReload: 'ကက်ရှ်ရှင်းပြီး ပြန်စတင်ပါ',
+    posAuthShellLoading: 'Opening POS…',
+    posAuthShellStuckHint:
+      'If this screen stays blank, clear cache and reload below. (Same as Ctrl+Shift+R)',
+    posAuthShellResetting: 'Clearing cache…',
     posResetCacheReloadTitle:
       'မီနူးပုံ သို့မဟုတ် မျက်နှာပြင် မှားနေပါက Windows တွင် ထည့်သွင်းထားသော POS တွင် သုံးပါ။ ဝင်ရောက်မှု ထိန်းသိမ်းပါသည်။ (Ctrl+Shift+R နှင့် တူ)',
     posLinkposPrioritySaving: 'ဦးစားပေးများ သိမ်းနေသည်...',

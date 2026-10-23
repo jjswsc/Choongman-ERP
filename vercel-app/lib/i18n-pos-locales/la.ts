@@ -1914,6 +1914,10 @@ export const I18N_POS_LA: Record<string, string> = {
     posTerminalLabelSaveFail: 'ບັນທຶກຊື່ສະແດງບໍ່ສຳເລັດ.',
     posTerminalSaveDeviceLabel: 'ບັນທຶກຊື່',
     posResetCacheReload: 'ລ້າງແຄຊ ແລ້ວໂຫຼດໃໝ່',
+    posAuthShellLoading: 'Opening POS…',
+    posAuthShellStuckHint:
+      'If this screen stays blank, clear cache and reload below. (Same as Ctrl+Shift+R)',
+    posAuthShellResetting: 'Clearing cache…',
     posResetCacheReloadTitle:
       'ໃຊ້ເມື່ອຮູບເມນູ ຫຼື ໜ້າຈໍຜິດປົກກະຕິໃນ POS ຕິດຕັ້ງ Windows. ຍັງເຂົ້າຢູ່. (ເທົ່າ Ctrl+Shift+R)',
     posLinkposPrioritySaving: 'ກຳລັງບັນທຶກລຳດັບຄວາມສຳຄັນ...',

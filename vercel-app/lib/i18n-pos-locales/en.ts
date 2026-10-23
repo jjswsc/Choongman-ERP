@@ -1958,6 +1958,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posResetCacheReload: 'Clear cache & reload',
     posResetCacheReloadTitle:
       'Use on Windows installed POS when menu images or the screen look wrong. Stays signed in. (Same as Ctrl+Shift+R)',
+    posAuthShellLoading: 'Opening POS…',
+    posAuthShellStuckHint:
+      'If this screen stays blank, clear cache and reload below. (Same as Ctrl+Shift+R)',
+    posAuthShellResetting: 'Clearing cache…',
     posSettings: 'Settings',
     posLogout: 'Logout',
     posSwitchUser: 'Switch user',

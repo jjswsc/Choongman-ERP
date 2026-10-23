@@ -9,8 +9,12 @@ export const CHUNK_RECOVERY_UI_WATCHDOG_MS = 5_000
  * 하이브리드 POS가 로그인 게이트 스피너만 이 시간 넘게 보이면
  * 정전으로 깨진 캐시와 같이 보고, 직원이 누르는 Reset Cache 와 같은 경로로 연다.
  * 평소 화면 전환은 이 안에 끝나게 두고, JS가 안 뜨는 경우는 셸 워치독(약 45초)이 이어서 본다.
+ * (기존 30초 → 15초: PIN 직후 흰 화면에서 직원이 오래 기다리지 않게)
  */
-export const STUCK_AUTH_SHELL_RECOVER_MS = 30_000
+export const STUCK_AUTH_SHELL_RECOVER_MS = 15_000
+
+/** 스피너만 보일 때「캐시 초기화」큰 버튼을 먼저 보여 주는 시간(자동 복구보다 짧게) */
+export const STUCK_AUTH_SHELL_OFFER_BUTTON_MS = 6_000
 
 /** 배포 직후 옛 webpack 런타임이 없는 청크 해시를 보면 `64807.undefined.js` 로 요청한다. */
 export const CHUNK_RECOVERY_SESSION_KEY = "cm-erp-chunk-recovery"
@@ -56,6 +60,16 @@ export function shouldAutoResetStuckAuthShell(opts: {
   if (!opts.showingAuthShell || !opts.isHybridShell) return false
   if (opts.recentRecovery || !opts.online) return false
   return opts.elapsedMs >= STUCK_AUTH_SHELL_RECOVER_MS
+}
+
+/** 하이브리드: 스피너가 잠깐만 지나도 직원이 터치로 Clear Cache 할 수 있게 */
+export function shouldOfferStuckAuthShellCacheReset(opts: {
+  showingAuthShell: boolean
+  isHybridShell: boolean
+  elapsedMs: number
+}): boolean {
+  if (!opts.showingAuthShell || !opts.isHybridShell) return false
+  return opts.elapsedMs >= STUCK_AUTH_SHELL_OFFER_BUTTON_MS
 }
 
 export function shouldRecoverStaleBundleEvent(payload: unknown, recentRecovery: boolean, online = true): boolean {

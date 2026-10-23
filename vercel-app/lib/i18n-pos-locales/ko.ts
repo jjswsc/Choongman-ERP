@@ -1950,6 +1950,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posResetCacheReload: '캐시 초기화 후 새로고침',
     posResetCacheReloadTitle:
       'Windows 설치형 POS에서 메뉴 사진·화면이 이상할 때 사용합니다. 로그인은 유지됩니다. (Ctrl+Shift+R과 동일)',
+    posAuthShellLoading: 'POS에 들어가는 중…',
+    posAuthShellStuckHint:
+      '이 화면이 계속되면 아래 버튼으로 캐시를 지운 뒤 다시 열어 주세요. (Ctrl+Shift+R과 동일)',
+    posAuthShellResetting: '캐시 지우는 중…',
     posSettings: '설정',
     posLogout: '로그아웃',
     posSwitchUser: '담당자 전환',

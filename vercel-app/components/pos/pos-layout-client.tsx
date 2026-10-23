@@ -9,6 +9,8 @@ import {
   hasRecentChunkRecovery,
   recoverFromChunkLoadError,
   shouldAutoResetStuckAuthShell,
+  shouldOfferStuckAuthShellCacheReset,
+  STUCK_AUTH_SHELL_OFFER_BUTTON_MS,
   STUCK_AUTH_SHELL_RECOVER_MS,
 } from "@/lib/chunk-load-recovery"
 import { PosHybridPrintDiagnosticsButton } from "@/components/pos/pos-hybrid-print-diagnostics"
@@ -186,6 +188,8 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const [topBarHidden, setTopBarHidden] = useState(false)
   const [topBarHydrated, setTopBarHydrated] = useState(false)
   const [isTouchViewport, setIsTouchViewport] = useState(false)
+  const [offerStuckCacheReset, setOfferStuckCacheReset] = useState(false)
+  const [stuckCacheResetBusy, setStuckCacheResetBusy] = useState(false)
   const saasModules = useSaasEnabledModules()
 
   useEffect(() => {
@@ -206,15 +210,31 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   const showingAuthShell = !isPosLoginPage && !isCustomerDisplayPage && (!initialized || !auth)
 
-  /** 정전 뒤 스피너만 남으면 흰 화면 복구가 안 돈다. 하이브리드만 Reset Cache 와 같이 연다. */
+  /** 정전·캐시 꼬임 뒤 스피너만 남으면 흰 화면 복구가 안 돈다. 하이브리드만 Reset Cache 와 같이 연다. */
   useEffect(() => {
-    if (!showingAuthShell) return
+    if (!showingAuthShell) {
+      setOfferStuckCacheReset(false)
+      setStuckCacheResetBusy(false)
+      return
+    }
     const started = Date.now()
-    const tid = window.setTimeout(() => {
+    const hybrid = isCmPosHybridShell()
+    const offerTid = window.setTimeout(() => {
+      if (
+        shouldOfferStuckAuthShellCacheReset({
+          showingAuthShell: true,
+          isHybridShell: hybrid,
+          elapsedMs: Date.now() - started,
+        })
+      ) {
+        setOfferStuckCacheReset(true)
+      }
+    }, STUCK_AUTH_SHELL_OFFER_BUTTON_MS)
+    const recoverTid = window.setTimeout(() => {
       if (
         !shouldAutoResetStuckAuthShell({
           showingAuthShell: true,
-          isHybridShell: isCmPosHybridShell(),
+          isHybridShell: hybrid,
           elapsedMs: Date.now() - started,
           recentRecovery: hasRecentChunkRecovery(),
           online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
@@ -224,7 +244,10 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
       }
       void recoverFromChunkLoadError()
     }, STUCK_AUTH_SHELL_RECOVER_MS)
-    return () => window.clearTimeout(tid)
+    return () => {
+      window.clearTimeout(offerTid)
+      window.clearTimeout(recoverTid)
+    }
   }, [showingAuthShell])
 
   /** 로그인 후 POS 홈부터 Second Monitor 자동 오픈 (터미널 진입 전에 열리도록) */
@@ -471,8 +494,29 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   if (!initialized || !auth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-slate-50 px-6">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+        <p className="max-w-sm text-center text-sm text-slate-600">{t("posAuthShellLoading")}</p>
+        {offerStuckCacheReset ? (
+          <div className="flex w-full max-w-sm flex-col items-center gap-2">
+            <p className="text-center text-xs leading-relaxed text-slate-500">{t("posAuthShellStuckHint")}</p>
+            <button
+              type="button"
+              disabled={stuckCacheResetBusy}
+              title={t("posResetCacheReloadTitle") || ""}
+              className="min-h-12 w-full rounded-xl bg-emerald-600 px-4 py-3 text-base font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60"
+              onClick={() => {
+                if (stuckCacheResetBusy) return
+                setStuckCacheResetBusy(true)
+                void recoverFromChunkLoadError().finally(() => {
+                  setStuckCacheResetBusy(false)
+                })
+              }}
+            >
+              {stuckCacheResetBusy ? t("posAuthShellResetting") : t("posResetCacheReload")}
+            </button>
+          </div>
+        ) : null}
       </div>
     )
   }

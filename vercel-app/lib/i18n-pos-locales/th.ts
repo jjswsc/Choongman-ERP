@@ -525,6 +525,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posResetCacheReload: 'ล้างแคชแล้วโหลดใหม่',
     posResetCacheReloadTitle:
       'ใช้บน POS แบบติดตั้ง Windows เมื่อรูปเมนูหรือหน้าจอผิดปกติ ยังล็อกอินอยู่ (เท่า Ctrl+Shift+R)',
+    posAuthShellLoading: 'กำลังเข้า POS…',
+    posAuthShellStuckHint:
+      'ถ้าหน้าจอนี้ค้าง ให้กดปุ่มด้านล่างเพื่อล้างแคชแล้วเปิดใหม่ครับ (เท่า Ctrl+Shift+R)',
+    posAuthShellResetting: 'กำลังล้างแคช…',
     posSettings: 'ตั้งค่า',
     posLogout: 'ออกจากระบบ',
     posSwitchUser: 'เปลี่ยนผู้ใช้',

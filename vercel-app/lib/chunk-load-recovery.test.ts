@@ -12,8 +12,10 @@ import {
   shouldClearBuildRelatedCache,
   shouldAutoResetStuckAuthShell,
   shouldDeferPosAutoReload,
+  shouldOfferStuckAuthShellCacheReset,
   shouldRecoverStaleBundleEvent,
   shouldWipeCachesForChunkRecovery,
+  STUCK_AUTH_SHELL_OFFER_BUTTON_MS,
   STUCK_AUTH_SHELL_RECOVER_MS,
 } from "@/lib/chunk-load-recovery"
 
@@ -87,9 +89,37 @@ describe("shouldRecoverStaleBundleEvent", () => {
   })
 })
 
+describe("shouldOfferStuckAuthShellCacheReset", () => {
+  it("offers the hybrid Clear Cache button after a short wait", () => {
+    expect(STUCK_AUTH_SHELL_OFFER_BUTTON_MS).toBe(6_000)
+    expect(
+      shouldOfferStuckAuthShellCacheReset({
+        showingAuthShell: true,
+        isHybridShell: true,
+        elapsedMs: STUCK_AUTH_SHELL_OFFER_BUTTON_MS,
+      })
+    ).toBe(true)
+    expect(
+      shouldOfferStuckAuthShellCacheReset({
+        showingAuthShell: true,
+        isHybridShell: true,
+        elapsedMs: STUCK_AUTH_SHELL_OFFER_BUTTON_MS - 1,
+      })
+    ).toBe(false)
+    expect(
+      shouldOfferStuckAuthShellCacheReset({
+        showingAuthShell: true,
+        isHybridShell: false,
+        elapsedMs: STUCK_AUTH_SHELL_OFFER_BUTTON_MS,
+      })
+    ).toBe(false)
+  })
+})
+
 describe("shouldAutoResetStuckAuthShell", () => {
   it("resets only a hybrid spinner that has been up past the wait, while online", () => {
-    expect(STUCK_AUTH_SHELL_RECOVER_MS).toBe(30_000)
+    expect(STUCK_AUTH_SHELL_RECOVER_MS).toBe(15_000)
+    expect(STUCK_AUTH_SHELL_OFFER_BUTTON_MS).toBeLessThan(STUCK_AUTH_SHELL_RECOVER_MS)
     expect(
       shouldAutoResetStuckAuthShell({
         showingAuthShell: true,
