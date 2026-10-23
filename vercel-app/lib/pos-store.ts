@@ -12,6 +12,12 @@ import {
   type PosOrder,
   type PosOrderItem,
 } from '@/lib/api-client'
+import { getPosOrders } from '@/lib/api-client/pos-orders'
+import { qrTableStaffSessionsMap } from '@/lib/api-client/qr-table'
+import {
+  collectQrCarryoverOrderIds,
+  mergePosOrdersById,
+} from '@/lib/pos-floor-qr-carryover-orders'
 import { normalizePosFloorLabels } from '@/lib/pos-table-layout-payload'
 import type { PosAppliedCouponLine } from '@/lib/pos-coupon-domain'
 import { getPosOrdersWithCache } from '@/lib/offline/receipts-offline'
@@ -798,7 +804,28 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       const ordersPromise = awaitFullNetwork
         ? ordersFetch
         : withPosSnapshotTimeout(ordersFetch, snapshotTimeoutMs, [] as PosOrder[])
-      const [layoutRes, ordersRes] = await Promise.all([layoutPromise, ordersPromise])
+      /** 활성 QR 세션에 묶인 전일·영업일 밖 미결제 홀도 점유에 포함 */
+      const qrSessionsPromise = qrTableStaffSessionsMap(primary).catch(() => null)
+      const [layoutRes, ordersRes, qrSessionsRes] = await Promise.all([
+        layoutPromise,
+        ordersPromise,
+        qrSessionsPromise,
+      ])
+      let ordersForFloor = ordersRes || []
+      const carryoverIds = collectQrCarryoverOrderIds({
+        existingOrderIds: ordersForFloor.map((o) => o.id),
+        sessions: qrSessionsRes?.success ? qrSessionsRes.sessions : [],
+      })
+      if (carryoverIds.length > 0) {
+        const extras = (
+          await Promise.all(
+            carryoverIds.map((orderId) =>
+              getPosOrders({ orderId, storeCode: primary }).catch(() => [] as PosOrder[])
+            )
+          )
+        ).flat()
+        ordersForFloor = mergePosOrdersById(ordersForFloor, extras)
+      }
       const fetchedLayout = layoutRes.layout || []
       const cachedLayout = layoutByStoreIdRef.current[storeCode] || []
       const layout = fetchedLayout.length > 0 ? fetchedLayout : cachedLayout
@@ -807,7 +834,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
           ? normalizePosFloorLabels(layoutRes.floorLabels ?? {})
           : floorLabelsByStoreIdRef.current[storeCode] ||
             normalizePosFloorLabels(layoutRes.floorLabels ?? {})
-      const activeOrders = (ordersRes || []).filter(
+      const activeOrders = ordersForFloor.filter(
         (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
       )
       const dineInOrders = activeOrders.filter(
