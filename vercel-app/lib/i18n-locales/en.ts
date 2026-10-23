@@ -5110,7 +5110,7 @@ Only matters the employee must handle personally on a working day:
     'With all stores, only branches with orders in the range appear. Use “Period granularity” above for year/month/week/day/DOW/hour. Year, month, week, day, and weekday use each store’s POS business day; hour buckets use Bangkok wall-clock time.',
   salesTopicPivotStoreCategory: 'Sales (Store & Category)',
   salesTopicPivotStoreCategoryHint:
-    'Compare stores by dine-in·delivery·takeout and delivery apps with stacked bars / share % (tables collapsed)',
+    'Tables: dine-in·delivery·takeout by store, plus delivery apps by store',
   salesByStoreChannelMatrix: 'By store (dine-in·delivery·takeout)',
   salesByStoreDeliveryPlatform: 'By store · delivery platform',
   salesCompareModeAmount: 'Amount',

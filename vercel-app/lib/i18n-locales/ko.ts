@@ -5115,7 +5115,7 @@ export const I18N_BASE_KO = {
     '매장을 전체로 두면 이 기간에 주문이 있는 매장만 행으로 나옵니다. 위쪽「집계 기간」으로 년·월·주·일·요일·시간대를 바꿀 수 있습니다. 연·월·주·일·요일은 매장 POS 영업일 기준이며, 시간대만 방콕 벽시계 시각입니다.',
   salesTopicPivotStoreCategory: '매출 집계(매장&분류)',
   salesTopicPivotStoreCategoryHint:
-    '선택 기간 매장별 홀·배달·포장·배달앱을 누적 막대·비중%로 비교 (표는 접어서 확인)',
+    '선택 기간 매장별 홀·배달·포장 표 + 매장별 배달앱 표',
   salesByStoreChannelMatrix: '매장별 홀·배달·포장',
   salesByStoreDeliveryPlatform: '매장별 배달 플랫폼',
   salesCompareModeAmount: '금액',
