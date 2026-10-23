@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **783**개 · 접두어 그룹 **97**개
+- `sql/` 최상위: **788**개 · 접두어 그룹 **97**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **72**개
 
@@ -814,6 +814,18 @@
 
 </details>
 
+<details><summary><code>the_*</code> (7)</summary>
+
+- [`the_street_customer_display_01_settings.sql`](../sql/the_street_customer_display_01_settings.sql)
+- [`the_street_customer_display_02_audit.sql`](../sql/the_street_customer_display_02_audit.sql) — diagnose
+- [`the_street_qr_carryover_floor_01_live_preview.sql`](../sql/the_street_qr_carryover_floor_01_live_preview.sql) — preview
+- [`the_street_qr_carryover_floor_02_live_bump_bizday.sql`](../sql/the_street_qr_carryover_floor_02_live_bump_bizday.sql) — log
+- [`the_street_qr_carryover_floor_02b_live_verify.sql`](../sql/the_street_qr_carryover_floor_02b_live_verify.sql) — verify
+- [`the_street_qr_carryover_floor_03_zombies_preview.sql`](../sql/the_street_qr_carryover_floor_03_zombies_preview.sql) — preview
+- [`the_street_qr_carryover_floor_04_zombies_close.sql`](../sql/the_street_qr_carryover_floor_04_zombies_close.sql) — log
+
+</details>
+
 <details><summary><code>erp_*</code> (6)</summary>
 
 - [`erp_decimal_precision_3.sql`](../sql/erp_decimal_precision_3.sql)
@@ -1160,13 +1172,6 @@
 
 - [`tenant_integrations.sql`](../sql/tenant_integrations.sql)
 - [`tenant_stage_price_overrides.sql`](../sql/tenant_stage_price_overrides.sql)
-
-</details>
-
-<details><summary><code>the_*</code> (2)</summary>
-
-- [`the_street_customer_display_01_settings.sql`](../sql/the_street_customer_display_01_settings.sql)
-- [`the_street_customer_display_02_audit.sql`](../sql/the_street_customer_display_02_audit.sql) — diagnose
 
 </details>
 

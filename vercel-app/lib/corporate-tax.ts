@@ -114,6 +114,58 @@ async function loadPlFromRpc(params: {
   }
 }
 
+/** 세무 장부(book=tax) 법인 키 전표 — store_name이 tin:… 인 감사FS·기초도 포함 */
+async function loadPlFromTaxBookEntity(params: {
+  taxEntityCode: string
+  startDate: string
+  endDate: string
+}): Promise<{ revenue: number; expense: number; entryCount: number } | null> {
+  const entity = String(params.taxEntityCode || '').trim()
+  if (!entity) return null
+  try {
+    const entries = (await supabaseSelectFilter(
+      'journal_entries',
+      [
+        `book=eq.${encodeURIComponent('tax')}`,
+        `tax_entity_code=eq.${encodeURIComponent(entity)}`,
+        `accounting_date=gte.${encodeURIComponent(params.startDate)}`,
+        `accounting_date=lte.${encodeURIComponent(params.endDate)}`,
+      ].join('&'),
+      { select: 'id', limit: 100000 }
+    )) as { id?: number }[] | null
+    const entryIds = (entries || []).map((e) => Number(e.id || 0)).filter((id) => id > 0)
+    if (!entryIds.length) return { revenue: 0, expense: 0, entryCount: 0 }
+
+    const BATCH = 200
+    let revenue = 0
+    let expense = 0
+    for (let i = 0; i < entryIds.length; i += BATCH) {
+      const idList = entryIds.slice(i, i + BATCH).join(',')
+      if (!idList) continue
+      const lines = (await supabaseSelectFilter('journal_lines', `journal_entry_id=in.(${idList})`, {
+        select: 'account_code,side,amount',
+        limit: 100000,
+      })) as JournalLineLite[] | null
+      for (const ln of lines || []) {
+        const code = String(ln.account_code || '').trim()
+        if (!code) continue
+        const amt = Math.abs(Number(ln.amount) || 0)
+        const side = String(ln.side || '').toLowerCase()
+        if (code.startsWith('4')) {
+          if (side === 'credit') revenue += amt
+          else revenue -= amt
+        } else if (code.startsWith('5')) {
+          if (side === 'debit') expense += amt
+          else expense -= amt
+        }
+      }
+    }
+    return { revenue, expense, entryCount: entryIds.length }
+  } catch {
+    return null
+  }
+}
+
 async function loadPlFromSelectFallback(params: {
   startDate: string
   endDate: string
@@ -189,12 +241,25 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
   const taxRate = Number(input.taxRate)
   const appliedTaxRate = Number.isFinite(taxRate) && taxRate >= 0 ? taxRate : 0.2
   const taxScope = await resolveTaxScopeStoreCodes(scope.storeFilter, input.tenantId)
+  const taxEntityCode = taxEntityKeyFromScope(scope.storeFilter)
 
   let revenue = 0
   let expense = 0
   let entryCount = 0
 
-  if (taxScope.storeCodes && taxScope.storeCodes.length === 0) {
+  // 법인 세무 키(tin:/store:)가 있으면 book=tax 전표 우선 — 감사FS(store_name=tin:…)가 매장코드 IN 집계에서 빠지지 않게
+  if (taxEntityCode) {
+    const fromTaxBook = await loadPlFromTaxBookEntity({
+      taxEntityCode,
+      startDate,
+      endDate,
+    })
+    if (fromTaxBook) {
+      revenue = fromTaxBook.revenue
+      expense = fromTaxBook.expense
+      entryCount = fromTaxBook.entryCount
+    }
+  } else if (taxScope.storeCodes && taxScope.storeCodes.length === 0) {
     revenue = 0
     expense = 0
     entryCount = 0
@@ -223,7 +288,6 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
 
   let accountingProfitSource: CorporateTaxComputation['accountingProfitSource'] = 'journals'
   let taxBookPartialLock = false
-  const taxEntityCode = taxEntityKeyFromScope(scope.storeFilter)
   if (taxEntityCode && period.months.length > 0) {
     const lockedMonths = []
     for (const month of period.months) {
@@ -243,7 +307,8 @@ export async function computeCorporateTaxComputation(input: IncomeScopeInput & {
       lockedMonths.push({
         closed: true,
         schemaReady: true,
-        netIncome: statement.netIncome,
+        // 법인세 출발은 당기 손익(미마감). retainedEarnings를 합치면 기초 RE가 이익으로 잡힘
+        netIncome: statement.unclosedProfit,
         entryCount: heads.heads.length,
       })
     }

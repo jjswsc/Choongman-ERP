@@ -136,6 +136,8 @@ const TAX_BOOK_HQ_STORE_TIN: Record<string, string> = {
   'CM Silom': '0105568080622',
   'CM Office': '0105566137147',
   'CM Office HQ': '0105566137147',
+  // 법인 상호 Bangna Bizzo — 영업 매장은 유니온몰 (CM Bangna 가맹과 별개)
+  'CM Union Mall': '0105563161764',
 }
 
 /**
@@ -150,6 +152,7 @@ const TAX_BOOK_STORE_ENTITY: Record<string, string> = {
   'CM Ekkamai': 'store:CM Ekkamai',
   'CM Office': 'tin:0105566137147',
   'CM Office HQ': 'tin:0105566137147',
+  'CM Union Mall': 'tin:0105563161764',
 }
 
 function tinKeyFromHqStore(storeCode: string): string | null {
