@@ -45,6 +45,8 @@ export async function getPosOrdersWithCache(params: {
   debugPosOrders?: boolean
   /** POS 단말 당일 스냅샷 — 영업일 경계 UTC 구간 */
   posBizDayScope?: boolean
+  /** created | paid | either — 영수증 이력 날짜 기준 */
+  dateBasis?: 'created' | 'paid' | 'either'
   orderBy?: 'created_at.desc' | 'id.desc' | 'updated_at.desc'
   /** 테이블·실시간 목록 — linkpos 제외 경량 select (영수증 탭은 생략) */
   pollMinimal?: boolean
@@ -60,6 +62,7 @@ export async function getPosOrdersWithCache(params: {
     status,
     debugPosOrders,
     posBizDayScope,
+    dateBasis,
     orderBy,
     pollMinimal,
     skipPollMinimalCache,
@@ -67,7 +70,10 @@ export async function getPosOrdersWithCache(params: {
     includeAdvancePending,
   } = params
   const cacheStore = storeCode || 'all'
-  const key = cacheKeyOrders(cacheStore, startStr, endStr, { posBizDay: Boolean(posBizDayScope) })
+  const key = cacheKeyOrders(cacheStore, startStr, endStr, {
+    posBizDay: Boolean(posBizDayScope),
+    dateBasis: dateBasis || 'created',
+  })
   const range = { startStr, endStr, storeCode: storeCode || undefined, status }
 
   const applyStatus = (rows: PosOrder[]) => {
@@ -88,6 +94,7 @@ export async function getPosOrdersWithCache(params: {
         debugPosOrders,
         ...(orderBy ? { orderBy } : {}),
         ...(posBizDayScope ? { posBizDayScope: true } : {}),
+        ...(dateBasis && dateBasis !== 'created' ? { dateBasis } : {}),
         ...(pollMinimal ? { pollMinimal: true } : {}),
         ...(includeAdvancePending ? { includeAdvancePending: true } : {}),
         ...(limit != null && limit > 0 ? { limit } : {}),
@@ -132,6 +139,7 @@ export async function getPosOrdersWithCache(params: {
       debugPosOrders,
       ...(orderBy ? { orderBy } : {}),
       ...(posBizDayScope ? { posBizDayScope: true } : {}),
+      ...(dateBasis && dateBasis !== 'created' ? { dateBasis } : {}),
         ...(pollMinimal ? { pollMinimal: true } : {}),
         ...(includeAdvancePending ? { includeAdvancePending: true } : {}),
         ...(limit != null && limit > 0 ? { limit } : {}),

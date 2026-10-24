@@ -113,10 +113,99 @@ export function posOrderCreatedAtInSalesBusinessDateRange(
   return biz >= loEff && biz <= hiEff
 }
 
+/**
+ * 영수증·주문 이력 날짜 기준.
+ * - created: 주문 생성(영업일) — 기존 getPosOrders 기본
+ * - paid: 결제 시각(paid_at)이 해당 영업일
+ * - either: 생성일 또는 결제일 중 하나라도 해당 영업일(전날 연 테이블·당일 결제 포함)
+ */
+export type PosOrdersDateBasis = 'created' | 'paid' | 'either'
+
+export function parsePosOrdersDateBasis(raw: string | null | undefined): PosOrdersDateBasis {
+  const v = String(raw || '')
+    .trim()
+    .toLowerCase()
+  if (v === 'paid' || v === 'paid_at') return 'paid'
+  if (v === 'either' || v === 'created_or_paid' || v === 'both') return 'either'
+  return 'created'
+}
+
+/** paid_at 이 영업일 라벨 start~end 안인지 (시각 해석은 created_at 과 동일) */
+export function posOrderPaidAtInSalesBusinessDateRange(
+  paidAt: string | null | undefined,
+  storeCode: string | null | undefined,
+  ctx: PosBusinessDaySettingsContext,
+  startYmd: string,
+  endYmd: string
+): boolean {
+  return posOrderCreatedAtInSalesBusinessDateRange(paidAt, storeCode, ctx, startYmd, endYmd)
+}
+
+export function posOrderInSalesBusinessDateRangeByBasis(
+  row: {
+    created_at?: string | null
+    paid_at?: string | null
+    store_code?: string | null
+  },
+  ctx: PosBusinessDaySettingsContext,
+  startYmd: string,
+  endYmd: string,
+  basis: PosOrdersDateBasis
+): boolean {
+  if (basis === 'paid') {
+    return posOrderPaidAtInSalesBusinessDateRange(row.paid_at, row.store_code, ctx, startYmd, endYmd)
+  }
+  const inCreated = posOrderCreatedAtInSalesBusinessDateRange(
+    row.created_at,
+    row.store_code,
+    ctx,
+    startYmd,
+    endYmd
+  )
+  if (basis === 'created') return inCreated
+  if (inCreated) return true
+  return posOrderPaidAtInSalesBusinessDateRange(row.paid_at, row.store_code, ctx, startYmd, endYmd)
+}
+
 export function filterRowsByPosSalesBusinessDateRange<
   T extends { created_at?: string | null; store_code?: string | null },
 >(rows: T[], ctx: PosBusinessDaySettingsContext, startYmd: string, endYmd: string): T[] {
   return rows.filter((r) =>
     posOrderCreatedAtInSalesBusinessDateRange(r.created_at, r.store_code, ctx, startYmd, endYmd)
   )
+}
+
+export function filterRowsByPosSalesBusinessDateRangeBasis<
+  T extends {
+    created_at?: string | null
+    paid_at?: string | null
+    store_code?: string | null
+  },
+>(
+  rows: T[],
+  ctx: PosBusinessDaySettingsContext,
+  startYmd: string,
+  endYmd: string,
+  basis: PosOrdersDateBasis
+): T[] {
+  if (basis === 'created') {
+    return filterRowsByPosSalesBusinessDateRange(rows, ctx, startYmd, endYmd)
+  }
+  return rows.filter((r) => posOrderInSalesBusinessDateRangeByBasis(r, ctx, startYmd, endYmd, basis))
+}
+
+/**
+ * either/paid 조회용 created_at UTC 봉투 — 전날 생성·당일 결제 주문을 담기 위해 시작일을 padStartDays 만큼 앞당김.
+ */
+export function posSalesBusinessDateRangeUtcEnvelopeForDateBasis(
+  ctx: PosBusinessDaySettingsContext,
+  startYmd: string,
+  endYmd: string,
+  basis: PosOrdersDateBasis,
+  padStartDays = 1
+): { startISO: string; endISOExclusive: string } {
+  const pad = basis === 'created' ? 0 : Math.max(0, Math.trunc(Number(padStartDays) || 0))
+  const lo = normalizeYmd(startYmd)
+  const fetchStart = pad > 0 ? addDaysYmd(lo, -pad) : lo
+  return posSalesBusinessDateRangeUtcEnvelope(ctx, fetchStart, endYmd)
 }

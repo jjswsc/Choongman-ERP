@@ -3083,6 +3083,12 @@ export const I18N_POS_TH: Record<string, string> = {
     posPaymentSettingsManageSuffix: 'Manual card-input item management',
     posOrderDateTime: 'เวลารับออเดอร์',
     posOrderPaidDateTime: 'เวลาชำระเงิน',
+    posReceiptDateBasis: 'เกณฑ์วันที่',
+    posReceiptDateBasisCreated: 'วันทำการ (เปิดบิล)',
+    posReceiptDateBasisPaid: 'วันชำระเงิน',
+    posReceiptDateBasisEither: 'เปิดบิล+ชำระเงิน',
+    posReceiptDateBasisHint:
+      'โต๊ะที่เปิดเมื่อวานแล้วชำระวันนี้ ให้เลือก「วันชำระเงิน」หรือ「เปิดบิล+ชำระเงิน」ครับ ค่าเริ่มต้นคือ เปิดบิล+ชำระเงิน',
     posStatusCooking: 'Cooking',
     posStatusPaid: 'Paid',
     posStatusReady: 'Ready',

@@ -289,6 +289,11 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   React.useEffect(() => {
     endStrRef.current = endStr
   }, [endStr])
+  /**
+   * 기본 either: 전날 연 테이블을 오늘 결제한 현금·카드가 「오늘」조회에 포함.
+   * created=영업일(주문일)만, paid=결제일만.
+   */
+  const [dateBasis, setDateBasis] = React.useState<'created' | 'paid' | 'either'>('either')
   const [storeFilter, setStoreFilter] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [searchTerm, setSearchTerm] = React.useState('')
@@ -655,6 +660,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
       storeCode: store || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
       posBizDayScope: true,
+      dateBasis,
       pollMinimal: true,
       orderBy: 'updated_at.desc' as const,
     }
@@ -665,6 +671,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
   }, [
     startStr,
     endStr,
+    dateBasis,
     storeFilter,
     storeCode,
     statusFilter,
@@ -1823,6 +1830,33 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
               >
                 {t('posToday') || '오늘'}
               </Button>
+              <Select
+                value={dateBasis}
+                onValueChange={(v) => {
+                  if (v === 'created' || v === 'paid' || v === 'either') setDateBasis(v)
+                }}
+              >
+                <SelectTrigger
+                  className="h-9 w-full sm:w-[168px]"
+                  title={
+                    t('posReceiptDateBasisHint') ||
+                    '전날 연 테이블을 오늘 결제하면 「결제일」또는「주문일+결제일」로 보세요.'
+                  }
+                >
+                  <SelectValue placeholder={t('posReceiptDateBasis') || '조회 기준'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="either">
+                    {t('posReceiptDateBasisEither') || '주문일+결제일'}
+                  </SelectItem>
+                  <SelectItem value="paid">
+                    {t('posReceiptDateBasisPaid') || '결제일'}
+                  </SelectItem>
+                  <SelectItem value="created">
+                    {t('posReceiptDateBasisCreated') || '영업일(주문일)'}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             {receiptStoreChoices.length > 1 && (
               <Select
                 value={

@@ -26,10 +26,12 @@ export function cacheKeyOrders(
   storeCode: string,
   startStr: string,
   endStr: string,
-  opts?: { posBizDay?: boolean }
+  opts?: { posBizDay?: boolean; dateBasis?: string }
 ): string {
   const biz = opts?.posBizDay ? ':biz' : ''
-  return `orders:${storeCode}:${startStr}:${endStr}${biz}`
+  const basis =
+    opts?.dateBasis && opts.dateBasis !== 'created' ? `:db:${opts.dateBasis}` : ''
+  return `orders:${storeCode}:${startStr}:${endStr}${biz}${basis}`
 }
 
 export function cacheKeySales(storeCode: string, dateStr: string): string {

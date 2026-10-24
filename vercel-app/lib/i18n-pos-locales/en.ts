@@ -966,6 +966,12 @@ export const I18N_POS_EN: Record<string, string> = {
     posDifferenceHint: 'Input − System',
     posOrderDateTime: 'Order date/time',
     posOrderPaidDateTime: 'Paid date/time',
+    posReceiptDateBasis: 'Date basis',
+    posReceiptDateBasisCreated: 'Business day (opened)',
+    posReceiptDateBasisPaid: 'Payment day',
+    posReceiptDateBasisEither: 'Opened + paid',
+    posReceiptDateBasisHint:
+      'Tables opened yesterday and paid today appear under Payment day or Opened + paid. Default is Opened + paid.',
     posStatusPaid: 'Paid',
     posStatusCooking: 'Cooking',
     posStatusReady: 'Ready',

@@ -941,6 +941,12 @@ export const I18N_POS_KO: Record<string, string> = {
     posDifferenceHint: '입력합계 − 시스템매출',
     posOrderDateTime: '주문일시',
     posOrderPaidDateTime: '결제일시',
+    posReceiptDateBasis: '조회 기준',
+    posReceiptDateBasisCreated: '영업일(주문일)',
+    posReceiptDateBasisPaid: '결제일',
+    posReceiptDateBasisEither: '주문일+결제일',
+    posReceiptDateBasisHint:
+      '전날 연 테이블을 오늘 결제하면 「결제일」또는「주문일+결제일」로 보세요. 기본은 주문일+결제일입니다.',
     posStatusPaid: '결제완료',
     posStatusCooking: '조리중',
     posStatusReady: '준비완료',

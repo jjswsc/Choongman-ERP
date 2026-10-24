@@ -260,6 +260,11 @@ export async function getPosOrders(params?: {
   endStr?: string
   /** 단일 영업일(YYYY-MM-DD) 조회 시 POS 영업일 경계(설정된 시작 시각~익일 동시각)로 UTC 구간 적용 */
   posBizDayScope?: boolean
+  /**
+   * 날짜 필터 기준.
+   * created(기본)=주문 생성 영업일, paid=결제일, either=생성일 또는 결제일(전날 테이블·당일 결제 포함).
+   */
+  dateBasis?: 'created' | 'paid' | 'either'
   storeCode?: string
   status?: string
   strictStore?: boolean
@@ -285,6 +290,7 @@ export async function getPosOrders(params?: {
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
   if (params?.posBizDayScope) q.set('posBizDayScope', '1')
+  if (params?.dateBasis && params.dateBasis !== 'created') q.set('dateBasis', params.dateBasis)
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.status) q.set('status', params.status)
   if (params?.strictStore) q.set('strictStore', '1')

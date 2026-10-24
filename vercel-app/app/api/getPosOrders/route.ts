@@ -7,9 +7,13 @@ import {
   type PosBusinessDaySettingsContext,
 } from '@/lib/pos-business-day-server'
 import {
-  filterRowsByPosSalesBusinessDateRange,
+  filterRowsByPosSalesBusinessDateRangeBasis,
+  parsePosOrdersDateBasis,
   posSalesBusinessDateRangeUtcEnvelope,
+  posSalesBusinessDateRangeUtcEnvelopeForDateBasis,
+  type PosOrdersDateBasis,
 } from '@/lib/pos-sales-business-day-range'
+import { addDaysYmd } from '@/lib/pos-business-day'
 import { coercePosOrderTypeForDb, inferPosOrderTypeFromRow } from '@/lib/pos-sales-order-type-filter'
 import { verifyToken } from '@/lib/jwt-auth'
 import { verifyBearerWithSaasGate } from '@/lib/saas/bearer-saas-gate'
@@ -269,6 +273,9 @@ export async function GET(request: NextRequest) {
           : POS_ORDER_SELECT
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
+  const dateBasis: PosOrdersDateBasis = parsePosOrdersDateBasis(
+    searchParams.get('dateBasis') || searchParams.get('dateField')
+  )
   const requestedStore = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
   const posBizDayScopeParam =
     searchParams.get('posBizDayScope') === '1' || searchParams.get('posBizDayScope') === 'true'
@@ -401,6 +408,8 @@ export async function GET(request: NextRequest) {
     const endDate = endStr ? endStr.slice(0, 10) : ''
     const posBizDayScope = posBizDayScopeParam
     let bizDayUtcRange: { startISO: string; endISOExclusive: string } | null = null
+    /** DB created_at 조회용 — either/paid 는 전날 생성·당일 결제 담으려 시작을 하루 앞당김 */
+    let listUtcRange: { startISO: string; endISOExclusive: string } | null = null
     let posBizDayFilterCtx: PosBusinessDaySettingsContext | null = null
     if (posBizDayScope && startDate && endDate) {
       posBizDayFilterCtx = await loadPosBusinessDaySettingsContext(tenantScope.tenantId)
@@ -408,6 +417,22 @@ export async function GET(request: NextRequest) {
         startDate === endDate
           ? posBusinessDayUtcEnvelopeBangkokYmd(startDate, posBizDayFilterCtx)
           : posSalesBusinessDateRangeUtcEnvelope(posBizDayFilterCtx, startDate, endDate)
+      /** either 만 created_at 조회 창을 하루 앞당김. paid 는 paid_at 정확 창, created 는 기존과 동일 */
+      listUtcRange =
+        dateBasis === 'either'
+          ? posSalesBusinessDateRangeUtcEnvelopeForDateBasis(
+              posBizDayFilterCtx,
+              startDate,
+              endDate,
+              'either',
+              1
+            )
+          : bizDayUtcRange
+    } else if (startDate && endDate) {
+      const cal = bangkokDateRangeToUtc(startDate, endDate)
+      bizDayUtcRange = cal
+      listUtcRange =
+        dateBasis === 'either' ? bangkokDateRangeToUtc(addDaysYmd(startDate, -1), endDate) : cal
     }
 
     /** 단건 id 조회: Realtime UPDATE 후 풀 행 보강용 */
@@ -444,9 +469,20 @@ export async function GET(request: NextRequest) {
         const parts: string[] = []
         if (startDate && endDate) {
           const { startISO, endISOExclusive } =
-            bizDayUtcRange ?? bangkokDateRangeToUtc(startDate, endDate)
-          parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
-          parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+            listUtcRange ?? bizDayUtcRange ?? bangkokDateRangeToUtc(startDate, endDate)
+          if (dateBasis === 'paid') {
+            /** 결제 시각만 — statusPaidLike 의 or= 와 충돌하지 않도록 paid_at 단독 필터 */
+            parts.push(`paid_at=gte.${encodeURIComponent(startISO)}`)
+            parts.push(`paid_at=lt.${encodeURIComponent(endISOExclusive)}`)
+          } else {
+            /**
+             * created / either: created_at 로 조회.
+             * either 는 listUtcRange 가 하루 앞당겨져 전날 오픈·당일 결제 행을 담은 뒤
+             * 아래에서 basis 후필터.
+             */
+            parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+            parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+          }
         }
         const stores = Array.isArray(storeForFilter)
           ? storeForFilter.map((s) => String(s || '').trim()).filter((s) => s && s !== 'All')
@@ -578,6 +614,7 @@ export async function GET(request: NextRequest) {
         rowCount: (rows || []).length,
         startDate,
         endDate,
+        dateBasis,
         requestedStore: requestedStore || '(none)',
         effectiveStore: effectiveStoreCode || '(all)',
         primaryStoreFilter: primaryStoreFilter || '(all)',
@@ -591,7 +628,26 @@ export async function GET(request: NextRequest) {
     }
 
     if (posBizDayFilterCtx && posBizDayScope && startDate && endDate) {
-      rows = filterRowsByPosSalesBusinessDateRange(rows || [], posBizDayFilterCtx, startDate, endDate)
+      rows = filterRowsByPosSalesBusinessDateRangeBasis(
+        rows || [],
+        posBizDayFilterCtx,
+        startDate,
+        endDate,
+        dateBasis
+      )
+    } else if (startDate && endDate && dateBasis !== 'created') {
+      /** 달력일 조회 + paid/either: paid_at 방콕 달력일로 후필터 */
+      const lo = startDate <= endDate ? startDate : endDate
+      const hi = startDate <= endDate ? endDate : startDate
+      rows = (rows || []).filter((r) => {
+        if (dateBasis === 'paid') {
+          const d = toDateStrBangkok(r.paid_at)
+          return Boolean(d && d >= lo && d <= hi)
+        }
+        const created = toDateStrBangkok(r.created_at)
+        const paid = toDateStrBangkok(r.paid_at)
+        return Boolean((created && created >= lo && created <= hi) || (paid && paid >= lo && paid <= hi))
+      })
     }
 
     let serviceById = new Map<number, PosOrderServiceColumnsRow>()
