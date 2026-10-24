@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       {
         limit: 1,
         select:
-          'id,store_code,total,subtotal,vat,status,created_at,memo,table_name,order_no,order_type,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel',
+          'id,store_code,total,subtotal,vat,status,created_at,paid_at,memo,table_name,order_no,order_type,delivery_app_code,discount_amt,coupon_discount_amt,collab_discount_amt,tier_discount_amt,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel',
       },
       'correctPosOrderPayment'
     )) as {
@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
       vat?: number
       status?: string
       created_at?: string
+      paid_at?: string | null
       memo?: string
       table_name?: string
       order_no?: string
@@ -155,13 +156,20 @@ export async function POST(req: NextRequest) {
      */
     const businessHours = await loadPosBusinessHoursForServer(storeCode)
     const createdAt = row.created_at ? new Date(row.created_at) : null
+    const paidAt = row.paid_at ? new Date(row.paid_at) : null
     const createdBd =
       createdAt && !Number.isNaN(createdAt.getTime())
         ? getPosBusinessDateStrFromConfig(createdAt, businessHours)
         : ''
+    const paidBd =
+      paidAt && !Number.isNaN(paidAt.getTime())
+        ? getPosBusinessDateStrFromConfig(paidAt, businessHours)
+        : ''
+    /** 결산 동기화·정정 허용 창: 결제 영업일 우선(없으면 주문 영업일) — EDC/결산 paid_at 기준과 맞춤 */
+    const settleBd = paidBd || createdBd
     const todayBd = getPosBusinessDateStrFromConfig(new Date(), businessHours)
     const yesterdayBd = todayBd ? addDaysYmd(todayBd, -1) : ''
-    if (!createdBd || (createdBd !== todayBd && createdBd !== yesterdayBd)) {
+    if (!settleBd || (settleBd !== todayBd && settleBd !== yesterdayBd)) {
       return NextResponse.json({ success: false, message: 'today_only' }, { status: 400, headers })
     }
     const prevTotal = Number(row.total ?? 0)
@@ -290,7 +298,7 @@ export async function POST(req: NextRequest) {
     try {
       settlementSync = await syncPosSettlementAfterPayCorrect({
         storeCode,
-        settleDateYmd: createdBd,
+        settleDateYmd: settleBd,
         who,
         reason,
         before: beforePay,

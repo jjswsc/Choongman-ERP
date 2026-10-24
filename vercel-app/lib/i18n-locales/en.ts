@@ -4717,9 +4717,9 @@ Only matters the employee must handle personally on a working day:
   helpHow_admin_petty_cash:
     '① Choose a store and period, then search. A single store shows current balance at the top.\n② List and Monthly both include a running-balance column. Use Monthly to set account subjects and to edit/delete. The account chosen here is the debit on the tax book.\n③ HQ, accounting, and office-based staff can pick any store; store accounts see their store (plus extra stores if allowed).',
   helpSum_admin_pos_settlement:
-    'Daily POS settlement and channel clearing (card/delivery fees). Bank: Sales collection; fees: channel settlement journal.',
+    'Daily POS settlement and channel clearing (card/delivery fees). Order totals use payment time (business day) to align with EDC. Bank: Sales collection; fees: channel settlement journal.',
   helpHow_admin_pos_settlement:
-    'After settlement entry, use Channel settlement for GROSS/NET/fee journals. Do not use revenue_* bank categories. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
+    'System sales and tender totals use payment time (paid_at) on the store business day (tables opened yesterday and paid today count today). After settlement entry, use Channel settlement for GROSS/NET/fee journals. Do not use revenue_* bank categories. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
   helpSum_admin_expense_management:
     'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use PV (with VAT) or PP (no VAT).',
   helpHow_admin_expense_management:

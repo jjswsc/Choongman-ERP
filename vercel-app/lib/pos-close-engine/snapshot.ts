@@ -7,6 +7,11 @@ import {
   type SaasTenantScope,
   LEGACY_SAAS_TENANT_SCOPE,
 } from '@/lib/saas-tenant-scope'
+import {
+  buildPosSettlementOrdersDateFilters,
+  mergeSettlementOrderRowsById,
+} from '@/lib/pos-settlement-order-window'
+import { shouldExcludeAdvanceFromSalesAggregate } from '@/lib/pos-deposit-domain'
 
 export type PosCloseSnapshot = {
   storeCode: string
@@ -18,7 +23,7 @@ export type PosCloseSnapshot = {
   closeStatus: 'locked' | 'draft'
 }
 
-/** 결산 화면·getPosSettlement과 동일 — 영업일 UTC 구간 기준 */
+/** 결산 화면·getPosSettlement과 동일 — 결제 시각(paid_at) 영업일 UTC 구간 */
 export async function computePosCloseSnapshot(params: {
   storeCode: string
   businessDate: string
@@ -30,22 +35,44 @@ export async function computePosCloseSnapshot(params: {
   const hours = await loadPosBusinessHoursForServer(storeCode)
   const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(businessDate, hours)
 
-  const orderFilter = appendSaasTenantFilter(
-    `created_at=gte.${encodeURIComponent(startISO)}` +
-      `&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
-      `&store_code=ilike.${encodeURIComponent(storeCode)}`,
+  const { paidAtFilter, nullPaidCreatedFallbackFilter } = buildPosSettlementOrdersDateFilters(
+    startISO,
+    endISOExclusive,
+    storeCode
+  )
+  const paidFilter = appendSaasTenantFilter(paidAtFilter, tenantScope, 'pos_orders')
+  const nullPaidFilter = appendSaasTenantFilter(
+    nullPaidCreatedFallbackFilter,
     tenantScope,
     'pos_orders'
   )
 
-  const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
+  const paidAtOrders = (await supabaseSelectFilter('pos_orders', paidFilter, {
     limit: 20000,
-    select: 'total,status',
-  })) as { total?: number; status?: string }[] | null
+    select: 'id,total,status,is_advance,scheduled_at',
+  })) as {
+    id?: number
+    total?: number
+    status?: string
+    is_advance?: boolean | null
+    scheduled_at?: string | null
+  }[] | null
+  const nullPaidOrders = (await supabaseSelectFilter('pos_orders', nullPaidFilter, {
+    limit: 20000,
+    select: 'id,total,status,is_advance,scheduled_at',
+  })) as {
+    id?: number
+    total?: number
+    status?: string
+    is_advance?: boolean | null
+    scheduled_at?: string | null
+  }[] | null
+  const orders = mergeSettlementOrderRowsById(paidAtOrders, nullPaidOrders)
 
   let systemTotal = 0
-  for (const o of orders || []) {
+  for (const o of orders) {
     if (!isPosPaidLikeStatus(String(o.status ?? ''))) continue
+    if (shouldExcludeAdvanceFromSalesAggregate(o)) continue
     systemTotal += Number(o.total) || 0
   }
 

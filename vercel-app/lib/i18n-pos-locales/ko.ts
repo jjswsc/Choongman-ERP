@@ -907,7 +907,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posSettleBusinessDayLabel: '영업일',
     posSettleBusinessDayRange: '집계 구간 (방콕)',
     posSettleBusinessDayRangeHint:
-      '영업 시작·종료 시각과 동일합니다. 결산·POS 매출·일마감이 이 구간으로 묶입니다.',
+      '영업 시작·종료 시각과 동일합니다. 시스템 매출·카드·현금 등 주문 합계는 결제 시각(paid_at) 기준이며, EDC 정산일과 맞춥니다. 전날 열어 둔 테이블을 다음날 결제해도 결제한 영업일에 잡힙니다.',
     posSettleBusinessHoursSettingsLink: '영업시간 설정',
     posSettleCurrentBusinessDay: '현재 영업일',
     posSystemTotal: '시스템 매출',

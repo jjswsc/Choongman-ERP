@@ -2890,7 +2890,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posLinkposQrDisplayOk: 'QR shown on EDC terminal',
     posSettleBusinessDayLabel: 'Business day',
     posSettleBusinessDayRange: 'Aggregation window (Bangkok)',
-    posSettleBusinessDayRangeHint: 'Matches your business start/end times. Settlement, POS sales, and day close all use this window.',
+    posSettleBusinessDayRangeHint:
+      'Matches your business start/end times. System sales and payment totals use payment time (paid_at) to align with the EDC settlement day.',
     posSettleBusinessHoursSettingsLink: 'Business hours settings',
     posSettleCurrentBusinessDay: 'Current business day',
     posDeviceRoleLockedApi: 'Device role (main/order) can only be changed in POS settings → Terminal (HQ or store manager).',

@@ -18,8 +18,9 @@ import { addPosStoreCodeVariants } from '@/lib/pos-store-code-variants'
 /** 영업 시작 저장 직후 POS 터미널 게이트가 캐시·상태를 다시 읽도록 알림 */
 export const POS_BUSINESS_OPEN_UPDATED_EVENT = 'cm-pos-business-open-updated'
 
+/** v2: 주문 집계를 paid_at(결제 영업일) 기준으로 바꾼 뒤 구캐시와 섞이지 않게 */
 function cacheKeySettlement(storeCode: string, settleDate: string): string {
-  return `settlement:${storeCode}:${settleDate}`
+  return `settlement:v2:${storeCode}:${settleDate}`
 }
 
 function normalizeSettlementSingle(

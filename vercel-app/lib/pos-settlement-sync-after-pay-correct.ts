@@ -1,7 +1,12 @@
 import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
 import { loadPosBusinessDayStartForServer } from '@/lib/pos-business-day-server'
+import { shouldExcludeAdvanceFromSalesAggregate } from '@/lib/pos-deposit-domain'
 import { isPosPaidLikeStatus } from '@/lib/pos-order-policy'
+import {
+  buildPosSettlementOrdersDateFilters,
+  mergeSettlementOrderRowsById,
+} from '@/lib/pos-settlement-order-window'
 import { appendPosInternalMemoStamp } from '@/lib/pos-tax-invoice'
 import {
   supabaseSelectFilterStrippingUnknownColumns,
@@ -149,23 +154,42 @@ export async function computeLiveSettlementCashAmt(
 
   const bizStart = await loadPosBusinessDayStartForServer(store)
   const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(ymd, bizStart)
-  const orderFilter =
-    `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
-    `&store_code=ilike.${encodeURIComponent(store)}`
+  const { paidAtFilter, nullPaidCreatedFallbackFilter } = buildPosSettlementOrdersDateFilters(
+    startISO,
+    endISOExclusive,
+    store
+  )
 
-  const orders = (await supabaseSelectFilterStrippingUnknownColumns(
+  const paidAtOrders = (await supabaseSelectFilterStrippingUnknownColumns(
     'pos_orders',
-    orderFilter,
-    {
-      limit: 20000,
-      select: 'status,payment_cash',
-    },
-    'syncPosSettlementCash'
-  )) as { status?: string; payment_cash?: number }[] | null
+    paidAtFilter,
+    { limit: 20000, select: 'id,status,payment_cash,is_advance,scheduled_at' },
+    'syncPosSettlementCashPaidAt'
+  )) as {
+    id?: number
+    status?: string
+    payment_cash?: number
+    is_advance?: boolean | null
+    scheduled_at?: string | null
+  }[] | null
+  const nullPaidOrders = (await supabaseSelectFilterStrippingUnknownColumns(
+    'pos_orders',
+    nullPaidCreatedFallbackFilter,
+    { limit: 20000, select: 'id,status,payment_cash,is_advance,scheduled_at' },
+    'syncPosSettlementCashPaidAtNull'
+  )) as {
+    id?: number
+    status?: string
+    payment_cash?: number
+    is_advance?: boolean | null
+    scheduled_at?: string | null
+  }[] | null
+  const orders = mergeSettlementOrderRowsById(paidAtOrders, nullPaidOrders)
 
   let cash = 0
-  for (const o of orders || []) {
+  for (const o of orders) {
     if (!isPosPaidLikeStatus(String(o.status ?? ''))) continue
+    if (shouldExcludeAdvanceFromSalesAggregate(o)) continue
     cash += Number(o.payment_cash) || 0
   }
   return round2(cash)

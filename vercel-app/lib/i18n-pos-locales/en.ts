@@ -932,7 +932,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posSettleBusinessDayLabel: 'Business day',
     posSettleBusinessDayRange: 'Aggregation window (Bangkok)',
     posSettleBusinessDayRangeHint:
-      'Matches your business start/end times. Settlement, POS sales, and day close all use this window.',
+      'Matches your business start/end times. System sales and payment totals (card/cash/etc.) use payment time (paid_at) so they align with the EDC settlement day. Tables opened yesterday and paid today count on today.',
     posSettleBusinessHoursSettingsLink: 'Business hours settings',
     posSettleCurrentBusinessDay: 'Current business day',
     posSystemTotal: 'System Total',

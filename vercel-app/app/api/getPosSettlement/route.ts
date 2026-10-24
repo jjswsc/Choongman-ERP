@@ -24,6 +24,10 @@ import {
   reconcilePosSettlementCashAmtToLive,
 } from '@/lib/pos-settlement-sync-after-pay-correct'
 import { shouldAutoAlignSettlementCashToLive } from '@/lib/pos-settlement-cash-ops-hints'
+import {
+  buildPosSettlementOrdersDateFilters,
+  mergeSettlementOrderRowsById,
+} from '@/lib/pos-settlement-order-window'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -189,11 +193,15 @@ export async function GET(request: NextRequest) {
       console.error('getPosSettlement linkpos rule fetch:', ruleErr)
     }
 
-    const orderFilter =
-      `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
-      `&store_code=ilike.${encodeURIComponent(storeCode)}`
+    /** 결제 시각(paid_at) 영업일 — EDC·돈통과 동일. paid_at 없으면 created_at 폴백 */
+    const { paidAtFilter, nullPaidCreatedFallbackFilter } = buildPosSettlementOrdersDateFilters(
+      startISO,
+      endISOExclusive,
+      storeCode
+    )
 
     type PosOrderSettlementRow = {
+      id?: number
       subtotal?: number
       vat?: number
       total?: number
@@ -217,19 +225,25 @@ export async function GET(request: NextRequest) {
       scheduled_at?: string | null
     }
 
+    const orderSelect =
+      'id,subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount,is_advance,scheduled_at'
+
     /** Omni 등 pos_orders 컬럼 미배포 시에도 시재(cash_actual)는 반환 — 영업 시작 게이트가 막히지 않게 */
     let orders: PosOrderSettlementRow[] | null = null
     try {
-      orders = (await supabaseSelectFilterStrippingUnknownColumns(
+      const paidAtOrders = (await supabaseSelectFilterStrippingUnknownColumns(
         'pos_orders',
-        orderFilter,
-        {
-          limit: 20000,
-          select:
-            'subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount',
-        },
-        'getPosSettlementOrders'
+        paidAtFilter,
+        { limit: 20000, select: orderSelect },
+        'getPosSettlementOrdersPaidAt'
       )) as PosOrderSettlementRow[] | null
+      const nullPaidOrders = (await supabaseSelectFilterStrippingUnknownColumns(
+        'pos_orders',
+        nullPaidCreatedFallbackFilter,
+        { limit: 20000, select: orderSelect },
+        'getPosSettlementOrdersPaidAtNull'
+      )) as PosOrderSettlementRow[] | null
+      orders = mergeSettlementOrderRowsById(paidAtOrders, nullPaidOrders)
     } catch (orderErr) {
       console.warn('getPosSettlement pos_orders (settlement-only fallback):', orderErr)
       orders = []

@@ -3445,7 +3445,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posLinkposQrDisplayOk: 'QR shown on EDC terminal',
     posSettleBusinessDayLabel: 'Business day',
     posSettleBusinessDayRange: 'Aggregation window (Bangkok)',
-    posSettleBusinessDayRangeHint: 'Matches your business start/end times. Settlement, POS sales, and day close all use this window.',
+    posSettleBusinessDayRangeHint:
+      'ตรงกับเวลาเปิด–ปิดร้านครับ ยอดระบบ/บัตร/เงินสด นับตามเวลาชำระ (paid_at) ให้ตรงกับวัน Settlement ของ EDC โต๊ะที่เปิดเมื่อวานแต่จ่ายวันนี้ จะนับในวันชำระครับ',
     posSettleBusinessHoursSettingsLink: 'Business hours settings',
     posSettleCurrentBusinessDay: 'Current business day',
     posDeliveryOpsLoadedStore: 'Loaded: {{store}}',
