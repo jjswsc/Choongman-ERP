@@ -930,6 +930,11 @@ export const I18N_POS_KO: Record<string, string> = {
     posTillDayNetMovement: '당일 입출금 순액',
     posTillDayNetMovementHint:
       '이 날 등록된 입금·출금 합입니다. 마감의 전일 시제와 무관하게 쌓이는 「원장 누적」과 다른 개념일 수 있습니다.',
+    salesCashDrillClickHint: '클릭하면 주문 목록',
+    posCashTillVsSalesTitle: '시재 순액과 현금 매출이 다릅니다',
+    posCashTillVsSalesLine: '현금 매출 {cash} · 시재 순액 {till} · 차이 {diff}',
+    posCashTillVsSalesHint:
+      '출금은 오른쪽「하루 현금 매출」에 맞추세요. 왼쪽은 시재 입·출금 합계이며 같은 숫자가 아닙니다.',
     posCash: '현금',
     posCard: '카드',
     posQr: 'QR/모바일',

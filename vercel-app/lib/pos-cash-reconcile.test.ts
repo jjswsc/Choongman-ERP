@@ -8,6 +8,7 @@ import {
   aggregateCashReconcileRows,
   applyCashBankDepositsToRows,
   buildCashReconcileResult,
+  listCashReconcileOrders,
 } from '@/lib/pos-cash-reconcile'
 
 describe('aggregateCashReconcileRows', () => {
@@ -69,6 +70,91 @@ describe('aggregateCashReconcileRows', () => {
       { date: '2026-08-12', orderCount: 1, cashSales: 10, bankDepositAmt: null },
       { date: '2026-08-13', orderCount: 1, cashSales: 20, bankDepositAmt: null },
     ])
+  })
+})
+
+describe('listCashReconcileOrders', () => {
+  const sample = [
+    {
+      id: 1,
+      order_no: 'A-1',
+      store_code: 'CT001',
+      status: 'paid',
+      payment_cash: 100,
+      total: 100,
+      order_type: 'dine_in',
+      created_at: '2026-08-13T10:00:00+07:00',
+      paid_at: '2026-08-13T10:00:00+07:00',
+    },
+    {
+      id: 2,
+      order_no: 'A-2',
+      store_code: 'CT001',
+      status: 'completed',
+      payment_cash: 50.5,
+      total: 80,
+      order_type: 'takeout',
+      created_at: '2026-08-13T11:00:00+07:00',
+      paid_at: '2026-08-13T11:00:00+07:00',
+    },
+    {
+      id: 3,
+      order_no: 'SKIP',
+      store_code: 'CT001',
+      status: 'pending',
+      payment_cash: 999,
+      total: 999,
+      created_at: '2026-08-13T12:00:00+07:00',
+    },
+    {
+      id: 4,
+      order_no: 'ZERO',
+      store_code: 'CT001',
+      status: 'paid',
+      payment_cash: 0,
+      total: 50,
+      created_at: '2026-08-13T13:00:00+07:00',
+    },
+  ]
+
+  it('matches aggregateCashReconcileRows orderCount and cashSales', () => {
+    const aggregated = aggregateCashReconcileRows(sample)
+    const listed = listCashReconcileOrders(sample)
+    expect(listed.orderCount).toBe(aggregated[0]?.orderCount)
+    expect(listed.cashSales).toBe(aggregated[0]?.cashSales)
+    expect(listed.orders).toHaveLength(2)
+    expect(listed.orders.map((o) => o.orderNo).sort()).toEqual(['A-1', 'A-2'])
+  })
+
+  it('filters by business date', () => {
+    const listed = listCashReconcileOrders(
+      [
+        {
+          id: 1,
+          order_no: 'D1',
+          store_code: 'A',
+          status: 'paid',
+          payment_cash: 10,
+          created_at: 'x',
+        },
+        {
+          id: 2,
+          order_no: 'D2',
+          store_code: 'A',
+          status: 'paid',
+          payment_cash: 20,
+          created_at: 'y',
+        },
+      ],
+      {
+        businessDateForRow: (row) =>
+          String(row.created_at) === 'x' ? '2026-08-12' : '2026-08-13',
+        date: '2026-08-12',
+      }
+    )
+    expect(listed.orderCount).toBe(1)
+    expect(listed.cashSales).toBe(10)
+    expect(listed.orders[0]?.orderNo).toBe('D1')
   })
 })
 

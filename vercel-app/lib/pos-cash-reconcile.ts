@@ -16,6 +16,27 @@ export type CashReconcileOrderRow = {
   payment_cash?: number | null
 }
 
+/** 현금 드릴다운용 — 집계와 동일 필터 + 주문 식별 필드 */
+export type CashReconcileDrillOrderInput = CashReconcileOrderRow & {
+  id?: number | string | null
+  order_no?: string | null
+  order_type?: string | null
+  total?: number | null
+  paid_at?: string | null
+}
+
+export type CashReconcileDrillOrder = {
+  orderId: number
+  orderNo: string
+  storeCode: string
+  businessDate: string
+  paidAt: string
+  createdAt: string
+  paymentCash: number
+  totalAmount: number
+  orderType: string
+}
+
 export type CashReconcileDayRow = {
   date: string
   orderCount: number
@@ -56,6 +77,104 @@ function isCompletedStatus(status: string | null | undefined): boolean {
   return (POS_SALES_COMPLETED_STATUSES as readonly string[]).includes(s)
 }
 
+/** 채널 현금 집계·드릴다운 공통: 완료 + payment_cash > EPS */
+export function resolveCashReconcileCountable(
+  row: CashReconcileOrderRow
+): { store: string; cash: number } | null {
+  if (!isCompletedStatus(row.status)) return null
+  const cash = Math.max(0, Number(row.payment_cash) || 0)
+  if (cash <= EPS) return null
+  const store = canonicalSalesStoreRowKey(String(row.store_code ?? '').trim())
+  if (!store) return null
+  return { store, cash }
+}
+
+export function resolveCashReconcileBusinessDate(
+  row: CashReconcileOrderRow,
+  businessDateForRow?: (row: CashReconcileOrderRow) => string
+): string {
+  const dateRaw = businessDateForRow?.(row) || String(row.created_at ?? '').slice(0, 10)
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : String(dateRaw).slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : ''
+}
+
+/**
+ * 현금 주문 목록 (집계와 동일 필터).
+ * orderCount·cashSales는 한도 전 전체 합; orders는 limit까지.
+ */
+export function listCashReconcileOrders(
+  orders: CashReconcileDrillOrderInput[],
+  options?: {
+    businessDateForRow?: (row: CashReconcileOrderRow) => string
+    storeCode?: string
+    date?: string
+    limit?: number
+  }
+): {
+  orders: CashReconcileDrillOrder[]
+  truncated: boolean
+  orderCount: number
+  cashSales: number
+} {
+  const limitRaw = options?.limit
+  const limit =
+    limitRaw != null && Number.isFinite(limitRaw)
+      ? Math.max(1, Math.min(500, Math.trunc(limitRaw)))
+      : 200
+  const storeFilter = String(options?.storeCode ?? '').trim()
+  const dateFilter = String(options?.date ?? '').trim()
+  const wantStore = storeFilter ? canonicalSalesStoreRowKey(storeFilter) : ''
+
+  const matched: CashReconcileDrillOrder[] = []
+  let orderCount = 0
+  let cashSales = 0
+
+  for (const row of orders) {
+    const counted = resolveCashReconcileCountable(row)
+    if (!counted) continue
+    const date = resolveCashReconcileBusinessDate(row, options?.businessDateForRow)
+    if (!date) continue
+    if (
+      storeFilter &&
+      counted.store !== wantStore &&
+      !rowMatchesSalesStoreSelection(counted.store, storeFilter)
+    ) {
+      continue
+    }
+    if (dateFilter && date !== dateFilter) continue
+
+    orderCount += 1
+    cashSales = roundSettlementMoney(cashSales + counted.cash)
+
+    const idNum = Number(row.id)
+    const orderId = Number.isFinite(idNum) && idNum > 0 ? Math.trunc(idNum) : 0
+    const orderNo =
+      String(row.order_no ?? '').trim() || (orderId > 0 ? `#${orderId}` : '')
+    matched.push({
+      orderId,
+      orderNo: orderNo || '—',
+      storeCode: counted.store,
+      businessDate: date,
+      paidAt: String(row.paid_at ?? '').trim(),
+      createdAt: String(row.created_at ?? '').trim(),
+      paymentCash: roundSettlementMoney(counted.cash),
+      totalAmount: roundSettlementMoney(Math.max(0, Number(row.total) || 0)),
+      orderType: String(row.order_type ?? '').trim(),
+    })
+  }
+
+  matched.sort((a, b) =>
+    String(b.paidAt || b.createdAt).localeCompare(String(a.paidAt || a.createdAt))
+  )
+  const sliced = matched.slice(0, limit)
+  return {
+    orders: sliced,
+    truncated: matched.length > sliced.length,
+    orderCount,
+    cashSales,
+  }
+}
+
 export function aggregateCashReconcileRows(
   orders: CashReconcileOrderRow[],
   options?: { businessDateForRow?: (row: CashReconcileOrderRow) => string }
@@ -68,14 +187,11 @@ export function aggregateCashReconcileRows(
   const byStore = new Map<string, Acc>()
 
   for (const row of orders) {
-    if (!isCompletedStatus(row.status)) continue
-    const cash = Math.max(0, Number(row.payment_cash) || 0)
-    if (cash <= EPS) continue
-    const store = canonicalSalesStoreRowKey(String(row.store_code ?? '').trim())
-    if (!store) continue
-    const dateRaw = options?.businessDateForRow?.(row) || String(row.created_at ?? '').slice(0, 10)
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : String(dateRaw).slice(0, 10)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+    const counted = resolveCashReconcileCountable(row)
+    if (!counted) continue
+    const { store, cash } = counted
+    const date = resolveCashReconcileBusinessDate(row, options?.businessDateForRow)
+    if (!date) continue
 
     let acc = byStore.get(store)
     if (!acc) {

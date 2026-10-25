@@ -13,6 +13,7 @@ import { SalesDeliveryAppReconcilePanel } from "@/components/tabs/sales-delivery
 import { SalesKbankQrReconcilePanel } from "@/components/tabs/sales-kbank-qr-reconcile-panel"
 import { SalesCardReconcilePanel } from "@/components/tabs/sales-card-reconcile-panel"
 import { SalesCashReconcilePanel } from "@/components/tabs/sales-cash-reconcile-panel"
+import type { SalesCashOrderDrillTarget } from "@/components/tabs/sales-cash-order-drill-sheet"
 
 export type ChannelReconcileSection = "delivery" | "kbank-qr" | "card" | "cash"
 
@@ -27,6 +28,7 @@ export function SalesChannelReconcilePanel(props: {
   tr: (key: string, fallback: string) => string
   formatAmount: (n: number) => string
   storeDisplayName: (code: string) => string
+  onCashDrill?: (target: SalesCashOrderDrillTarget) => void
 }) {
   const {
     section,
@@ -39,6 +41,7 @@ export function SalesChannelReconcilePanel(props: {
     tr,
     formatAmount,
     storeDisplayName,
+    onCashDrill,
   } = props
 
   return (
@@ -125,6 +128,7 @@ export function SalesChannelReconcilePanel(props: {
           tr={tr}
           formatAmount={formatAmount}
           storeDisplayName={storeDisplayName}
+          onCashDrill={onCashDrill}
         />
       )}
     </div>

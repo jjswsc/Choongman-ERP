@@ -78,6 +78,7 @@ import {
   SalesPromoBundleDiscountPanel,
 } from "@/components/tabs/sales-discount-analytics-panel"
 import { useSalesDiscountDrillSheet } from "@/components/tabs/sales-discount-drill-sheet"
+import { useSalesCashOrderDrillSheet } from "@/components/tabs/sales-cash-order-drill-sheet"
 import { ADMIN_BTN_XS_CN, ADMIN_PANEL_WARNING_CN, ERP_NUMERIC_CHART_TICK } from "@/lib/admin-ui-standards"
 import {
   mergePeriodSeriesToAggregated,
@@ -979,6 +980,19 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   )
   const { openDrill: openDiscountDrill, sheet: discountDrillSheet } = useSalesDiscountDrillSheet(
     discountDrillContext,
+    tr
+  )
+
+  const cashDrillContext = React.useMemo(
+    () => ({
+      startStr,
+      endStr,
+      storeCodes: selectedStoresParam,
+    }),
+    [startStr, endStr, selectedStoresParam]
+  )
+  const { openDrill: openCashDrill, sheet: cashDrillSheet } = useSalesCashOrderDrillSheet(
+    cashDrillContext,
     tr
   )
 
@@ -3009,6 +3023,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 tr={tr}
                 formatAmount={formatSalesAmount}
                 storeDisplayName={posStoreDisplayName}
+                onCashDrill={openCashDrill}
               />
             )}
 
@@ -3124,6 +3139,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </SalesDiscountAnalyticsShell>
               ))}
             {discountDrillSheet}
+            {cashDrillSheet}
 
             {selectedView === "store" && (
               salesAnalyticsPlaceholder ? (

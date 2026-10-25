@@ -43,6 +43,9 @@ export const POS_SALES_DELIVERY_ROW_SELECT =
 export const POS_SALES_PAYMENT_ROW_SELECT =
   `${POS_SALES_ORDER_ROW_SELECT},id,linkpos_response_code,paid_at,payment_cash,payment_card,payment_qr,payment_other,payment_other_breakdown,payment_delivery_app,payment_crypto,delivery_payment_channel,delivery_app_code,items_json`
 
+/** 현금 채널 주문 드릴다운 — payment 행 + 주문번호 */
+export const POS_SALES_CASH_DRILL_ROW_SELECT = `${POS_SALES_PAYMENT_ROW_SELECT},order_no`
+
 /** 단일 select 상한(레거시). 실제 조회는 페이지 반복으로 수집 */
 export const POS_SALES_BY_STORE_FETCH_LIMIT = 50_000
 

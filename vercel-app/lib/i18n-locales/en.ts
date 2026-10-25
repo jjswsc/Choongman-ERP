@@ -4987,6 +4987,25 @@ Only matters the employee must handle personally on a working day:
   salesCashColPos: 'POS cash',
   salesCashColBank: 'Bank cash deposit',
   salesCashColDiff: 'Diff',
+  salesCashDrillTitle: 'Cash payment orders',
+  salesCashDrillHint:
+    'Completed orders with payment_cash > 0. Tap an order number to open Receipts management.',
+  salesCashDrillLoading: 'Loading orders…',
+  salesCashDrillEmpty: 'No cash payment orders match this filter.',
+  salesCashDrillLoadFail: 'Could not load orders.',
+  salesCashDrillTruncated: 'Showing a limited slice of orders. Narrow the date range.',
+  salesCashDrillColOrderNo: 'Order',
+  salesCashDrillColOrderType: 'Type',
+  salesCashDrillColCash: 'Cash',
+  salesCashDrillFootnote: 'Click an order number to open it in Receipts management.',
+  salesCashDrillClickHint: 'Click for order list',
+  salesCashDrillMatchOk: 'Order list totals match the on-screen figures.',
+  salesCashDrillMatchWarn:
+    'Order list totals differ from the on-screen figures. Narrow the range or query again.',
+  posCashTillVsSalesTitle: 'Till net and cash sales differ',
+  posCashTillVsSalesLine: 'Cash sales {cash} · Till net {till} · Gap {diff}',
+  posCashTillVsSalesHint:
+    'Withdraw against the right-hand “Daily cash sales”. The left card is till in/out net—not the same number.',
   salesAppReconcileIntro:
     'Grab, LINE MAN, and Shopee use the same layout. Combined = delivery + in-store app pay (dine). Dine is not counted as delivery orders. Cash/card dine-in is excluded. Estimated payout uses the configured fee %. Bank deposit is that store’s bank account subjects 4111 Grab, 4112 LINE MAN, 4113 Shopee. Expand a row to match Bangkok calendar date to bank recognition date (usually next-day payout) and find mismatches.',
   salesAppReconcileKpiNet: 'App net sales',
@@ -7923,7 +7942,7 @@ orderItemQty: 'Qty',
   helpSum_admin_sales_management:
     'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check matches delivery apps, QR, and card on Bangkok calendar dates (QR uses bank deposit date; delivery/card use recognition date for next-day payout) so you can find mismatched days.',
   helpHow_admin_sales_management:
-    '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ Store compare → Sales by store & category: compare stores by dine-in·delivery·takeout for the selected period, plus delivery-app breakdown (same layout as the daily chart, without unpaid open tables).\n④ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n⑤ Reuse filters via URL or Save preset.\n⑥ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑦ Business hours tab adjusts POS business-day boundaries.\n⑧ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑨ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑩ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑪ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑫ Channel check → Cash: match POS cash to the drawer vs store account subject 4140 on POS business day and bank recognition date.\n⑬ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑭ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
+    '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ Store compare → Sales by store & category: compare stores by dine-in·delivery·takeout for the selected period, plus delivery-app breakdown (same layout as the daily chart, without unpaid open tables).\n④ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n⑤ Reuse filters via URL or Save preset.\n⑥ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑦ Business hours tab adjusts POS business-day boundaries.\n⑧ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑨ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑩ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑪ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑫ Channel check → Cash: match POS cash to the drawer vs store account subject 4140 on POS business day and bank recognition date. Click cash count or POS cash amount to open the matching order list.\n⑬ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑭ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
   salesSubnavAria: 'Sales menu',
   salesTopicHintLabel: 'This report',
   salesOverviewIntro:

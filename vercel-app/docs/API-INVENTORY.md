@@ -3,7 +3,7 @@
 > 이 파일은 `npm run api:inventory`로 생성합니다. 직접 수정하지 마세요.
 > 신규 라우트 규칙: [`.cursor/rules/api-route-conventions.mdc`](../../.cursor/rules/api-route-conventions.mdc) · 검사: `npm run api:check`
 
-- 라우트 수: **906**
+- 라우트 수: **909**
 - 도메인 그룹 수: **177** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
 - 외부 호출(웹훅·크론): **22** — 경로 변경 금지
 
@@ -36,7 +36,7 @@
 
 ## 도메인별
 
-- [pos](#pos) (133)
+- [pos](#pos) (135)
 - [member-portal](#member-portal) (56)
 - [interior](#interior) (41)
 - [store](#store) (26)
@@ -46,9 +46,9 @@
 - [members](#members) (17)
 - [crm](#crm) (16)
 - [grab](#grab) (16)
+- [accounting](#accounting) (15)
 - [lineOa](#lineoa) (15)
 - [saas](#saas) (15)
-- [accounting](#accounting) (14)
 - [attendance](#attendance) (13)
 - [expense](#expense) (13)
 - [ai](#ai) (12)
@@ -272,6 +272,7 @@
 | `/api/importPosChannelSettlements` | POST |  |
 | `/api/importPosMenus` | POST |  |
 | `/api/markPosOrderItemServed` | POST |  |
+| `/api/pos/cash-order-drill-down` | GET |  |
 | `/api/pos/kbank/cancel-qr` | OPTIONS, POST |  |
 | `/api/pos/kbank/check-status` | OPTIONS, POST |  |
 | `/api/pos/kbank/finalize-counter-order` | OPTIONS, POST |  |
@@ -286,6 +287,7 @@
 | `/api/pos/queue-public/[token]/line-link` | GET |  |
 | `/api/pos/queue-tickets` | GET, POST |  |
 | `/api/pos/queue-tickets/[id]` | POST |  |
+| `/api/pos/sales-by-store-delivery-platform` | GET |  |
 | `/api/posAdvanceCheckIn` | POST |  |
 | `/api/posBusinessDaySettings` | GET, POST |  |
 | `/api/posCancelReasonSummary` | GET |  |
@@ -638,6 +640,26 @@
 | `/api/grab/updateMenuNotification` | POST |  |
 | `/api/grab/updateMenuRecord` | PUT |  |
 
+### accounting
+
+| 경로 | 메서드 | 비고 |
+|---|---|---|
+| `/api/accounting/audited-financial-statements` | GET |  |
+| `/api/accounting/backfill` | POST |  |
+| `/api/exportAccountingComplianceAuditCsv` | GET |  |
+| `/api/getAccountingComplianceAuditLogs` | GET |  |
+| `/api/getAccountingComplianceAuditTrend` | GET |  |
+| `/api/getAccountingFilingPreferences` | GET |  |
+| `/api/getAccountingPeriodCloseStatus` | GET |  |
+| `/api/getAccountingPeriods` | GET |  |
+| `/api/getAccountingReconcile` | GET |  |
+| `/api/getAccountingReconciliation` | GET |  |
+| `/api/getAccountingWorkflowReminders` | GET |  |
+| `/api/getAccountingWorkflowStatus` | GET |  |
+| `/api/saveAccountingFilingPreferences` | POST |  |
+| `/api/saveAccountingWorkflowStatus` | POST |  |
+| `/api/setAccountingPeriodClosed` | POST |  |
+
 ### lineOa
 
 | 경로 | 메서드 | 비고 |
@@ -677,25 +699,6 @@
 | `/api/saasAdminTenantExport` | GET |  |
 | `/api/saasBootstrapTenantLogin` | POST |  |
 | `/api/saveSaasTenantSettings` | POST |  |
-
-### accounting
-
-| 경로 | 메서드 | 비고 |
-|---|---|---|
-| `/api/accounting/backfill` | POST |  |
-| `/api/exportAccountingComplianceAuditCsv` | GET |  |
-| `/api/getAccountingComplianceAuditLogs` | GET |  |
-| `/api/getAccountingComplianceAuditTrend` | GET |  |
-| `/api/getAccountingFilingPreferences` | GET |  |
-| `/api/getAccountingPeriodCloseStatus` | GET |  |
-| `/api/getAccountingPeriods` | GET |  |
-| `/api/getAccountingReconcile` | GET |  |
-| `/api/getAccountingReconciliation` | GET |  |
-| `/api/getAccountingWorkflowReminders` | GET |  |
-| `/api/getAccountingWorkflowStatus` | GET |  |
-| `/api/saveAccountingFilingPreferences` | POST |  |
-| `/api/saveAccountingWorkflowStatus` | POST |  |
-| `/api/setAccountingPeriodClosed` | POST |  |
 
 ### attendance
 

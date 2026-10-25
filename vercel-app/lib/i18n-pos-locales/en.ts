@@ -955,6 +955,11 @@ export const I18N_POS_EN: Record<string, string> = {
     posTillDayNetMovement: 'Net till movement today',
     posTillDayNetMovementHint:
       "Sum for entries dated today—not the cumulative ledger from older history, nor the drawer count from POS close.",
+    salesCashDrillClickHint: 'Click for order list',
+    posCashTillVsSalesTitle: 'Till net and cash sales differ',
+    posCashTillVsSalesLine: 'Cash sales {cash} · Till net {till} · Gap {diff}',
+    posCashTillVsSalesHint:
+      'Withdraw against the right-hand “Daily cash sales”. The left card is till in/out net—not the same number.',
     posCash: 'Cash',
     posCard: 'Card',
     posQr: 'QR/Mobile',

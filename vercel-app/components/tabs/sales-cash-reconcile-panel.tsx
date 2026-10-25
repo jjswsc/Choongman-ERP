@@ -8,6 +8,7 @@ import {
   channelReconcileMismatchDates,
   isChannelReconcileDayMismatch,
 } from "@/lib/pos-channel-reconcile-match"
+import type { SalesCashOrderDrillTarget } from "@/components/tabs/sales-cash-order-drill-sheet"
 
 export const EMPTY_POS_CASH_RECONCILE: PosCashReconcileResult = {
   rows: [],
@@ -42,17 +43,60 @@ function cashMismatchDates(days: PosCashReconcileResult["rows"][number]["days"])
   )
 }
 
-function KpiCard(props: { title: string; hint?: string; children: React.ReactNode }) {
+function KpiCard(props: {
+  title: string
+  hint?: string
+  children: React.ReactNode
+  onClick?: () => void
+  clickHint?: string
+}) {
+  const clickable = typeof props.onClick === "function"
   return (
-    <Card>
+    <Card
+      className={clickable ? "cursor-pointer transition-colors hover:bg-muted/40" : undefined}
+      onClick={props.onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                props.onClick?.()
+              }
+            }
+          : undefined
+      }
+    >
       <CardContent className="p-4">
         <p className="text-xs font-medium text-muted-foreground">{props.title}</p>
         {props.children}
         {props.hint ? (
           <p className="mt-0.5 text-[11px] text-muted-foreground">{props.hint}</p>
         ) : null}
+        {clickable && props.clickHint ? (
+          <p className="mt-1 text-[11px] text-primary">{props.clickHint}</p>
+        ) : null}
       </CardContent>
     </Card>
+  )
+}
+
+function DrillLink(props: {
+  children: React.ReactNode
+  onClick: (e: React.MouseEvent) => void
+  className?: string
+  title?: string
+}) {
+  return (
+    <button
+      type="button"
+      className={`text-primary underline-offset-2 hover:underline ${props.className ?? ""}`}
+      title={props.title}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
   )
 }
 
@@ -62,8 +106,9 @@ export function SalesCashReconcilePanel(props: {
   tr: (key: string, fallback: string) => string
   formatAmount: (n: number) => string
   storeDisplayName: (code: string) => string
+  onCashDrill?: (target: SalesCashOrderDrillTarget) => void
 }) {
-  const { data, placeholder, tr, formatAmount, storeDisplayName } = props
+  const { data, placeholder, tr, formatAmount, storeDisplayName, onCashDrill } = props
   const [expanded, setExpanded] = React.useState<string | null>(null)
   const [mismatchOnly, setMismatchOnly] = React.useState(true)
 
@@ -75,6 +120,15 @@ export function SalesCashReconcilePanel(props: {
   const hasBank = data.rows.some((r) => r.bankDepositAmt != null)
   const kpiDiff = hasBank ? Math.round((kpi.bankDepositAmt - kpi.cashSales) * 100) / 100 : null
   const mismatchDayCount = data.rows.reduce((n, r) => n + cashMismatchDates(r.days).length, 0)
+  const clickHint = tr("salesCashDrillClickHint", "클릭하면 주문 목록")
+
+  const openKpiDrill = () => {
+    onCashDrill?.({
+      expectedCount: kpi.orderCount,
+      expectedCash: kpi.cashSales,
+      label: tr("salesCashDrillTitle", "현금 결제 주문"),
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -89,12 +143,16 @@ export function SalesCashReconcilePanel(props: {
         <KpiCard
           title={tr("salesCashKpiSales", "POS 현금 합계")}
           hint={tr("salesCashKpiSalesHint", "완료 주문의 payment_cash (영업일)")}
+          onClick={onCashDrill && kpi.orderCount > 0 ? openKpiDrill : undefined}
+          clickHint={clickHint}
         >
           <p className="mt-1 text-2xl font-semibold tabular-nums">{formatAmount(kpi.cashSales)}</p>
         </KpiCard>
         <KpiCard
           title={tr("salesCashKpiCount", "현금 결제 건수")}
           hint={tr("salesCashKpiCountHint", "payment_cash > 0 인 완료 주문")}
+          onClick={onCashDrill && kpi.orderCount > 0 ? openKpiDrill : undefined}
+          clickHint={clickHint}
         >
           <p className="mt-1 text-2xl font-semibold tabular-nums">{kpi.orderCount.toLocaleString()}</p>
         </KpiCard>
@@ -176,6 +234,7 @@ export function SalesCashReconcilePanel(props: {
                 const visibleDays = mismatchOnly
                   ? r.days.filter((d) => isChannelReconcileDayMismatch(d.cashSales, d.bankDepositAmt))
                   : r.days
+                const storeLabel = storeDisplayName(r.storeCode) || r.storeCode
                 return (
                   <React.Fragment key={r.storeCode}>
                     <tr
@@ -184,15 +243,54 @@ export function SalesCashReconcilePanel(props: {
                     >
                       <td className="py-2 text-left">
                         <span className="mr-1 text-muted-foreground">{open ? "▾" : "▸"}</span>
-                        {storeDisplayName(r.storeCode) || r.storeCode}
+                        {storeLabel}
                         {dates.length > 0 ? (
                           <span className="ml-1 text-[11px] font-normal text-destructive">
                             {tr("salesChannelReconcileMismatchDays", "틀린 날")} {dates.length}
                           </span>
                         ) : null}
                       </td>
-                      <td className="py-2 text-right tabular-nums">{r.orderCount.toLocaleString()}</td>
-                      <td className="py-2 text-right font-erp-numeric">{formatAmount(r.cashSales)}</td>
+                      <td className="py-2 text-right tabular-nums">
+                        {onCashDrill && r.orderCount > 0 ? (
+                          <DrillLink
+                            title={clickHint}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onCashDrill({
+                                storeCode: r.storeCode,
+                                expectedCount: r.orderCount,
+                                expectedCash: r.cashSales,
+                                label: `${storeLabel} · ${tr("salesCashDrillTitle", "현금 결제 주문")}`,
+                              })
+                            }}
+                          >
+                            {r.orderCount.toLocaleString()}
+                          </DrillLink>
+                        ) : (
+                          r.orderCount.toLocaleString()
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-erp-numeric">
+                        {onCashDrill && r.orderCount > 0 ? (
+                          <DrillLink
+                            title={clickHint}
+                            className="font-erp-numeric"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onCashDrill({
+                                storeCode: r.storeCode,
+                                expectedCount: r.orderCount,
+                                expectedCash: r.cashSales,
+                                label: `${storeLabel} · ${tr("salesCashDrillTitle", "현금 결제 주문")}`,
+                              })
+                            }}
+                          >
+                            {formatAmount(r.cashSales)}
+                          </DrillLink>
+                        ) : (
+                          formatAmount(r.cashSales)
+                        )}
+                      </td>
                       <td className="py-2 text-right font-erp-numeric">
                         {r.bankDepositAmt == null ? "—" : formatAmount(r.bankDepositAmt)}
                       </td>
@@ -213,8 +311,49 @@ export function SalesCashReconcilePanel(props: {
                               }
                             >
                               <td className="py-1.5 pl-8 text-left font-erp-numeric">{d.date}</td>
-                              <td className="py-1.5 text-right tabular-nums">{d.orderCount.toLocaleString()}</td>
-                              <td className="py-1.5 text-right font-erp-numeric">{formatAmount(d.cashSales)}</td>
+                              <td className="py-1.5 text-right tabular-nums">
+                                {onCashDrill && d.orderCount > 0 ? (
+                                  <DrillLink
+                                    title={clickHint}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onCashDrill({
+                                        storeCode: r.storeCode,
+                                        date: d.date,
+                                        expectedCount: d.orderCount,
+                                        expectedCash: d.cashSales,
+                                        label: `${storeLabel} · ${d.date}`,
+                                      })
+                                    }}
+                                  >
+                                    {d.orderCount.toLocaleString()}
+                                  </DrillLink>
+                                ) : (
+                                  d.orderCount.toLocaleString()
+                                )}
+                              </td>
+                              <td className="py-1.5 text-right font-erp-numeric">
+                                {onCashDrill && d.orderCount > 0 ? (
+                                  <DrillLink
+                                    title={clickHint}
+                                    className="font-erp-numeric"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onCashDrill({
+                                        storeCode: r.storeCode,
+                                        date: d.date,
+                                        expectedCount: d.orderCount,
+                                        expectedCash: d.cashSales,
+                                        label: `${storeLabel} · ${d.date}`,
+                                      })
+                                    }}
+                                  >
+                                    {formatAmount(d.cashSales)}
+                                  </DrillLink>
+                                ) : (
+                                  formatAmount(d.cashSales)
+                                )}
+                              </td>
                               <td className="py-1.5 text-right font-erp-numeric">
                                 {d.bankDepositAmt == null ? "—" : formatAmount(d.bankDepositAmt)}
                               </td>

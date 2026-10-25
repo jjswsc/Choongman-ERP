@@ -1231,6 +1231,11 @@ export const I18N_POS_TH: Record<string, string> = {
     posTillDayNetMovement: 'ยอดรับ–จ่ายลิ้นชักของวันนี้',
     posTillDayNetMovementHint:
       'ยอดตามที่บันทึกในวันที่เลือก ไม่ใช่สดในลิ้นชักจากการปิดยอด และอาจไม่เท่ากับยอดสะสมตั้งแต่ต้นของเมนูนี้',
+    salesCashDrillClickHint: 'คลิกเพื่อดูรายการออเดอร์',
+    posCashTillVsSalesTitle: 'ยอดรับ-จ่ายลิ้นชักกับยอดขายเงินสดไม่ตรงกันครับ',
+    posCashTillVsSalesLine: 'ยอดขายเงินสด {cash} · ยอดรับ-จ่ายลิ้นชัก {till} · ส่วนต่าง {diff}',
+    posCashTillVsSalesHint:
+      'ถอนเงินให้ตรงกับ「ยอดขายเงินสดรายวัน」ทางขวาครับ การ์ดซ้ายคือผลรวมนำเข้า/ถอนลิ้นชัก ไม่ใช่ตัวเลขเดียวกันครับ',
     posDrawerCashDiff: 'ส่วนต่างลิ้นชัก (จริง-คาดการณ์)',
     posDifference: 'ผลต่าง',
     posDifferenceHint: 'ยอดกรอก - ยอดระบบ',

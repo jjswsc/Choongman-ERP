@@ -24,7 +24,7 @@ import { getPettyCashOptionsWithCache } from '@/lib/offline/cash-offline'
 import { getTillListWithCache } from '@/lib/offline/till-offline'
 import { addTillTransactionWithOffline, deleteTillTransactionWithOffline } from '@/lib/offline/till-offline'
 import { useLang } from '@/lib/lang-context'
-import { useT } from '@/lib/i18n'
+import { tOr, useT } from '@/lib/i18n'
 import { useOnlineStatus } from '@/lib/offline'
 import { isOfficeRole } from '@/lib/permissions'
 import { translateApiMessage } from '@/lib/translate-api-message'
@@ -47,6 +47,11 @@ import {
 } from '@/lib/pos-cash-drawer'
 import { usePosCashDrawerOpen } from '@/components/pos/pos-drawer-pin-provider'
 import { isPosDemoFromQuery } from '@/lib/pos-tour/pos-demo-mode'
+import { useSalesCashOrderDrillSheet } from '@/components/tabs/sales-cash-order-drill-sheet'
+import {
+  cashSalesVsTillNetGap,
+  shouldWarnCashSalesVsTill,
+} from '@/lib/pos-settlement-cash-ops-hints'
 
 const tillTypeKeys: Record<string, string> = {
   deposit: 'posCashDeposit',
@@ -468,6 +473,20 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
 
   const fmt = (n: number) => (n ?? 0).toLocaleString()
 
+  const tr = React.useCallback((key: string, fallback: string) => tOr(t, key, fallback), [t])
+  const cashDrillContext = React.useMemo(
+    () => ({
+      startStr,
+      endStr,
+      storeCodes: effectiveStore ? [effectiveStore] : undefined,
+    }),
+    [startStr, endStr, effectiveStore]
+  )
+  const { openDrill: openCashDrill, sheet: cashDrillSheet } = useSalesCashOrderDrillSheet(
+    cashDrillContext,
+    tr
+  )
+
   const singleDayRange = startStr === endStr
   const ledgerEndBalance = listData.length > 0 ? listData[0].balance_after : null
   const todayTillNetMovement = listData.reduce((s, r) => s + (Number(r.amount) || 0), 0)
@@ -479,6 +498,24 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
     } else {
       balanceCardAmount = ledgerEndBalance != null ? ledgerEndBalance : 0
     }
+  }
+
+  const showTillVsCashBanner =
+    singleDayRange &&
+    completedCash != null &&
+    !listLoading &&
+    shouldWarnCashSalesVsTill(completedCash, todayTillNetMovement)
+  const tillVsCashGap =
+    completedCash != null ? cashSalesVsTillNetGap(completedCash, todayTillNetMovement) : 0
+
+  const openCompletedCashDrill = () => {
+    if (completedCash == null || completedCash <= 0) return
+    openCashDrill({
+      storeCode: effectiveStore || undefined,
+      date: singleDayRange ? startStr : undefined,
+      expectedCash: completedCash,
+      label: t('pettyTodayCashSales') || '하루 현금 매출',
+    })
   }
 
   return (
@@ -493,36 +530,74 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
       />
 
       {(balanceCardAmount != null || completedCash != null) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-tour="pos-tour-cash-balance-cards">
-          {balanceCardAmount != null && (
-            <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-6 py-4 text-center">
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                {singleDayRange
-                  ? t('posTillDayNetMovement') || 'Net till movement (this day)'
-                  : t('pettyCurrentBalance') || '현재 잔액'}
+        <div className="space-y-3" data-tour="pos-tour-cash-balance-cards">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {balanceCardAmount != null && (
+              <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-6 py-4 text-center">
+                <div className="text-sm font-medium text-muted-foreground mb-1">
+                  {singleDayRange
+                    ? t('posTillDayNetMovement') || 'Net till movement (this day)'
+                    : t('pettyCurrentBalance') || '현재 잔액'}
+                </div>
+                <div className={cn('text-2xl font-bold text-primary', ADMIN_NUMERIC_CN)}>
+                  ฿{(balanceCardAmount ?? 0).toLocaleString()}
+                </div>
+                {singleDayRange && (
+                  <p className="mt-2 text-[11px] leading-snug text-muted-foreground px-1">
+                    {t('posTillDayNetMovementHint') ||
+                      'Shows today’s ledger entry sum; not drawer cash from settlement.'}
+                  </p>
+                )}
               </div>
-              <div className={cn('text-2xl font-bold text-primary', ADMIN_NUMERIC_CN)}>
-                ฿{(balanceCardAmount ?? 0).toLocaleString()}
-              </div>
-              {singleDayRange && (
-                <p className="mt-2 text-[11px] leading-snug text-muted-foreground px-1">
-                  {t('posTillDayNetMovementHint') || 'Shows today’s ledger entry sum; not drawer cash from settlement.'}
-                </p>
-              )}
+            )}
+            {completedCash != null && (
+              <button
+                type="button"
+                disabled={completedCash <= 0}
+                onClick={openCompletedCashDrill}
+                className={cn(
+                  'rounded-xl border-2 border-muted bg-muted/30 px-6 py-4 text-center transition-colors',
+                  completedCash > 0 &&
+                    'cursor-pointer hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+              >
+                <div className="text-sm font-medium text-muted-foreground mb-1">
+                  {t('pettyTodayCashSales') || '하루 현금 매출'}
+                </div>
+                <div className={cn('text-2xl font-bold', ADMIN_NUMERIC_CN)}>
+                  ฿{(completedCash ?? 0).toLocaleString()}
+                </div>
+                {completedCash > 0 ? (
+                  <p className="mt-2 text-[11px] leading-snug text-primary px-1">
+                    {t('salesCashDrillClickHint') || '클릭하면 주문 목록'}
+                  </p>
+                ) : null}
+              </button>
+            )}
+          </div>
+          {showTillVsCashBanner ? (
+            <div
+              className="rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100"
+              data-tour="pos-tour-cash-till-vs-sales-banner"
+            >
+              <p className="font-medium">
+                {t('posCashTillVsSalesTitle') || '시재 순액과 현금 매출이 다릅니다'}
+              </p>
+              <p className="mt-1 tabular-nums leading-relaxed">
+                {(t('posCashTillVsSalesLine') || '현금 매출 {cash} · 시재 순액 {till} · 차이 {diff}')
+                  .replace('{cash}', `฿${fmt(completedCash ?? 0)}`)
+                  .replace('{till}', `฿${fmt(todayTillNetMovement)}`)
+                  .replace('{diff}', `฿${fmt(tillVsCashGap)}`)}
+              </p>
+              <p className="mt-1 leading-snug text-muted-foreground dark:text-amber-100/80">
+                {t('posCashTillVsSalesHint') ||
+                  '출금은 오른쪽「하루 현금 매출」에 맞추세요. 왼쪽은 시재 입·출금 합계이며 같은 숫자가 아닙니다.'}
+              </p>
             </div>
-          )}
-          {completedCash != null && (
-            <div className="rounded-xl border-2 border-muted bg-muted/30 px-6 py-4 text-center">
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                {t('pettyTodayCashSales') || '하루 현금 매출'}
-              </div>
-              <div className={cn('text-2xl font-bold', ADMIN_NUMERIC_CN)}>
-                ฿{(completedCash ?? 0).toLocaleString()}
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
       )}
+      {cashDrillSheet}
 
       <Card>
         <CardContent className="pt-4">

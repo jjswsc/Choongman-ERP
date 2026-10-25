@@ -368,6 +368,59 @@ export async function getPosCashReconcile(params: {
   return json
 }
 
+export type PosCashOrderDrillOrderRow = {
+  orderId: number
+  orderNo: string
+  storeCode: string
+  businessDate: string
+  paidAt: string
+  createdAt: string
+  paymentCash: number
+  totalAmount: number
+  orderType: string
+}
+
+export type PosCashOrderDrillDownResult = {
+  success: boolean
+  orders: PosCashOrderDrillOrderRow[]
+  orderCount: number
+  cashSales: number
+  truncated?: boolean
+  store?: string | null
+  date?: string | null
+  message?: string
+}
+
+export async function getPosCashOrderDrillDown(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+  stores?: string[]
+  store?: string
+  date?: string
+  limit?: number
+}): Promise<PosCashOrderDrillDownResult> {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
+  if (params.store) q.set('store', params.store)
+  if (params.date) q.set('date', params.date)
+  if (params.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetchWithOffline(`/api/pos/cash-order-drill-down?${q}`)
+  const truncated = res.headers.get('X-Sales-Truncated') === '1'
+  const json = (await res.json()) as Partial<PosCashOrderDrillDownResult>
+  return {
+    success: json.success === true,
+    orders: Array.isArray(json.orders) ? json.orders : [],
+    orderCount: Number(json.orderCount) || 0,
+    cashSales: Number(json.cashSales) || 0,
+    truncated: truncated || json.truncated === true,
+    store: json.store ?? null,
+    date: json.date ?? null,
+    message: json.message,
+  }
+}
+
 export type PosCardReconcileDayRow = {
   date: string
   orderCount: number
