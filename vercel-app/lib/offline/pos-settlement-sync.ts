@@ -6,7 +6,21 @@
 import { savePosSettlement } from '@/lib/api-client'
 import { addToQueue } from './queue'
 
-export type SavePosSettlementResult = { success: boolean; message?: string }
+export type SavePosSettlementResult = {
+  success: boolean
+  message?: string
+  code?: string
+  unpaidHallCount?: number
+  unpaidHallTotalAmt?: number
+  unpaidHallOrders?: {
+    id: number
+    orderNo: string
+    tableName: string
+    total: number
+    status: string
+    createdAt: string
+  }[]
+}
 
 function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError && e.message?.toLowerCase().includes('fetch')) return true

@@ -34,8 +34,19 @@ describe('resolvePosOrderPaidAt', () => {
     ).toBe('2026-06-01T05:40:00.000Z')
   })
 
-  it('uses updated_at for paid dine-in when later than created_at', () => {
-    expect(resolvePosOrderPaidAt(base)).toBe('2026-06-01T05:38:00.000Z')
+  it('falls back to created_at when paid_at missing (not updated_at)', () => {
+    expect(resolvePosOrderPaidAt(base)).toBe('2026-06-01T05:03:02.000Z')
+  })
+
+  it('does not treat next-day updated_at as payment time', () => {
+    expect(
+      resolvePosOrderPaidAt({
+        ...base,
+        createdAt: '2026-10-25T11:33:43.000Z',
+        updatedAt: '2026-10-26T11:18:13.000Z',
+        paidAt: undefined,
+      })
+    ).toBe('2026-10-25T11:33:43.000Z')
   })
 
   it('prefers linkpos_responded_at for card payments', () => {
@@ -60,7 +71,7 @@ describe('resolvePosOrderPaidAt', () => {
     ).toBe('')
   })
 
-  it('uses updated_at when status is ready but fully paid', () => {
+  it('uses created_at when status is ready but fully paid and paid_at missing', () => {
     expect(
       resolvePosOrderPaidAt({
         ...base,
@@ -68,7 +79,7 @@ describe('resolvePosOrderPaidAt', () => {
         paymentQr: 238,
         updatedAt: '2026-06-01T05:38:00.000Z',
       })
-    ).toBe('2026-06-01T05:38:00.000Z')
+    ).toBe('2026-06-01T05:03:02.000Z')
   })
 
   it('returns empty for ready with only partial QR (entry prepay)', () => {
@@ -79,15 +90,6 @@ describe('resolvePosOrderPaidAt', () => {
         total: 438,
         paymentQr: 199,
         updatedAt: '2026-06-01T05:38:00.000Z',
-      })
-    ).toBe('')
-  })
-
-  it('does not use created_at as paid time when updated_at equals created_at', () => {
-    expect(
-      resolvePosOrderPaidAt({
-        ...base,
-        updatedAt: '2026-06-01T05:03:02.000Z',
       })
     ).toBe('')
   })

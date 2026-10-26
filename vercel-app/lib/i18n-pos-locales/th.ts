@@ -774,6 +774,26 @@ export const I18N_POS_TH: Record<string, string> = {
       'ยอดแบรนด์ EDC ({brand}) ไม่เท่ากับยอดบัตร POS ({pos}) ต่าง {diff} ฿ ก่อนปิดร้านให้เช็คสลิป EDC กับการชำระในออเดอร์ครับ',
     posSettlementCardEdcDiffConfirm:
       'ยอดแบรนด์บัตรไม่ตรงกับยอดบัตรในออเดอร์ POS ครับ\nแบรนด์ (EDC): {brand} ฿\nออเดอร์ POS: {pos} ฿\nส่วนต่าง: {diff} ฿\nจะปิดยอดด้วยตัวเลขนี้ไหมครับ',
+    posSettlementUnpaidHallTitle: 'โต๊ะค้างชำระ — ปิดยอดไม่ได้',
+    posSettlementUnpaidHallBody:
+      'มีบิลโต๊ะค้างชำระ {count} รายการ (รวม {total} ฿) ครับ\nให้ชำระหรือยกเลิกก่อน หรือปิดยอดด้วยข้อยกเว้นผู้จัดการ (เหตุผล+PIN) เท่านั้นครับ',
+    posSettlementUnpaidHallBlock:
+      'ยังมีโต๊ะค้างชำระ ปิดยอดไม่ได้ครับ ให้ชำระก่อน หรือใส่เหตุผลข้อยกเว้นและ PIN ครับ',
+    posSettlementUnpaidHallReason: 'เหตุผลข้อยกเว้น (จำเป็น)',
+    posSettlementUnpaidHallReasonPlaceholder: 'เช่น ลูกค้าค้างชำระ — ผู้จัดการยืนยันแล้ว',
+    posSettlementUnpaidHallReasonMin: 'กรุณาใส่เหตุผลอย่างน้อย {min} ตัวอักษรครับ',
+    posSettlementUnpaidHallPin: 'PIN ผู้จัดการ/ลิ้นชัก (ถ้าตั้งไว้)',
+    posSettlementUnpaidHallPinHint: 'ถ้ายังไม่ตั้ง PIN ใช้ได้เฉพาะบัญชีผู้จัดการ/สำนักงานใหญ่ครับ',
+    posSettlementUnpaidHallOverrideSave: 'บันทึกปิดยอดแบบข้อยกเว้น',
+    posSettlementUnpaidHallCheckFailedConfirm:
+      'ตรวจโต๊ะค้างชำระไม่สำเร็จ จะปิดยอดต่อไหมครับ (ตรวจเน็ต)',
+    unpaid_hall_override_reason_required: 'กรุณาใส่เหตุผลข้อยกเว้นโต๊ะค้างชำระครับ',
+    unpaid_hall_override_pin_required: 'กรุณาใส่ PIN ลิ้นชัก/ผู้จัดการครับ',
+    unpaid_hall_override_pin_wrong: 'PIN ไม่ถูกต้องครับ',
+    unpaid_hall_override_role_denied:
+      'ไม่มีสิทธิ์ปิดยอดแบบข้อยกเว้นโต๊ะค้างชำระครับ ใช้บัญชีผู้จัดการหรือสำนักงานใหญ่ครับ',
+    posOvernightPaymentConfirm:
+      'บิลนีเปิดวันทำการ {openDay} แต่วันนี้คือ {payDay} ครับ\nการชำระโต๊ะข้ามวันอาจทำบัญชี/เงินสดเพี้ยนได้\nจะดำเนินการต่อไหมครับ',
     posSettlementCashFromPosReadOnly:
       'ยอดเงินสดจากออเดอร์ที่เสร็จแล้ว มัดจำอยู่บรรทัดแยก ไม่รวมในตัวเลขนี้ครับ',
     posSettlementCashReconciledBanner:

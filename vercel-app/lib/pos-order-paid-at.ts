@@ -92,13 +92,13 @@ export function resolvePosOrderPaidAt(order: PosOrderPaidAtSource): string {
 
   if (linkposAt) return linkposAt
 
-  const updatedAt = parseValidIso(order.updatedAt)
-  if (updatedAt) {
-    if (!createdAt) return updatedAt
-    const u = new Date(updatedAt).getTime()
-    const c = new Date(createdAt).getTime()
-    if (u > c) return updatedAt
-  }
+  /**
+   * paid_at 없는 레거시: updated_at 을 결제 시각으로 쓰지 않는다.
+   * 완료 전환·메모·오프라인 동기화·정정 등으로 updated_at 만 다음날로 바뀌면
+   * 영수증 목록에 “다음날 결제”가 대량으로 보이는 오판이 난다(Future Park 025→026).
+   * 같은 방문 결제가 일반적이므로 접수 시각을 보수적으로 쓴다.
+   */
+  if (createdAt) return createdAt
 
   return ''
 }

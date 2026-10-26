@@ -83,6 +83,7 @@ import {
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { kitchenSlipPrintI18n, resolveKitchenSlipOrderTypeLabel } from '@/lib/pos-kitchen-slip-print-i18n'
 import { addDaysYmd, getPosBusinessDateStr, setPosBusinessHoursClient } from '@/lib/pos-business-day'
+import { isOvernightBusinessPayment } from '@/lib/pos-unpaid-hall-guard'
 import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 import { getPosDeliveryPlatformName } from '@/lib/pos-delivery-platform'
 import {
@@ -1631,6 +1632,19 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         `${t('posReceiptPayCorrectLinkposWarn')}\n\n${t('posReceiptPayCorrectConfirm')}`
       )
       if (!ok) return
+    }
+    {
+      const createdBiz = getPosBusinessDateStr(new Date(payCorrectOrder.createdAt))
+      const payBiz = getPosBusinessDateStr()
+      if (isOvernightBusinessPayment(createdBiz, payBiz) && sum > 0.005) {
+        const ok = await appConfirm(
+          i18nTr(t, 'posOvernightPaymentConfirm', {
+            openDay: createdBiz,
+            payDay: payBiz,
+          })
+        )
+        if (!ok) return
+      }
     }
     setPayCorrectSaving(true)
     const savedOrder = payCorrectOrder

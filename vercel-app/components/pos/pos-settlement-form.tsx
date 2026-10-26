@@ -22,6 +22,7 @@ import {
   getPosPaymentSettings,
   getPosPrinterSettings,
   getPosBusinessDaySettings,
+  getPosUnpaidHallOrders,
   validatePosClose,
   finalizePosClose,
   reconcilePosSettlementCash,
@@ -29,7 +30,21 @@ import {
   type PosDeliveryApp,
   type PosCloseRun,
   type PosSettlement,
+  type UnpaidHallOrderSummaryClient,
 } from '@/lib/api-client'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  isValidUnpaidHallOverrideReason,
+  UNPAID_HALL_OVERRIDE_REASON_MIN,
+} from '@/lib/pos-unpaid-hall-guard'
 import {
   parseBahtAmount,
   formatBahtInputDisplay,
@@ -313,6 +328,11 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [closeRunning, setCloseRunning] = React.useState(false)
+  const [unpaidHallDialogOpen, setUnpaidHallDialogOpen] = React.useState(false)
+  const [unpaidHallOrders, setUnpaidHallOrders] = React.useState<UnpaidHallOrderSummaryClient[]>([])
+  const [unpaidHallReason, setUnpaidHallReason] = React.useState('')
+  const [unpaidHallPin, setUnpaidHallPin] = React.useState('')
+  const unpaidHallOverrideRef = React.useRef<{ reason: string; pin: string } | null>(null)
   const [systemSubtotal, setSystemSubtotal] = React.useState(0)
   const [systemVat, setSystemVat] = React.useState(0)
   const [linkposSummary, setLinkposSummary] = React.useState<{
@@ -1200,6 +1220,27 @@ ${footerStamp}
       if (!ok) return
     }
 
+    /** 마감 시 미결제 홀 — 목록 확인 후 예외(사유+PIN) 없으면 차단 */
+    if (!openMode && closed && !unpaidHallOverrideRef.current) {
+      try {
+        const unpaidRes = await getPosUnpaidHallOrders({ storeCode: effectiveStore })
+        const orders = Array.isArray(unpaidRes.orders) ? unpaidRes.orders : []
+        if (unpaidRes.success !== false && orders.length > 0) {
+          setUnpaidHallOrders(orders)
+          setUnpaidHallReason('')
+          setUnpaidHallPin('')
+          setUnpaidHallDialogOpen(true)
+          return
+        }
+      } catch {
+        const ok = await appConfirm(
+          t('posSettlementUnpaidHallCheckFailedConfirm') ||
+            '미결제 홀을 확인하지 못했습니다. 그래도 마감할까요? (네트워크 확인)'
+        )
+        if (!ok) return
+      }
+    }
+
     /**
      * Chromium: 저장 API·알림 뒤엔 사용자 제스처가 사라져 iframe print 무시되는 경우 있음
      * → 클릭 직후 보조 창 확보(웹만). 영업 시작 저장 / 마감 체크 후 결산 저장 시 자동 인쇄에 사용.
@@ -1242,6 +1283,7 @@ ${footerStamp}
         }
       }
 
+      const unpaidOverride = unpaidHallOverrideRef.current
       const res = await savePosSettlementWithOffline({
         storeCode: effectiveStore,
         settleDate: openMode ? openBusinessDate : settleDate,
@@ -1261,6 +1303,12 @@ ${footerStamp}
           PLATFORM_DELIVERY_KEYS.map((k) => [k, parseBahtAmount(deliveryAppBreakdown[k])])
         ) as Record<string, number>,
         dineInDeliveryAmt: dineInNum,
+        ...(unpaidOverride
+          ? {
+              unpaidHallOverrideReason: unpaidOverride.reason,
+              unpaidHallOverridePin: unpaidOverride.pin,
+            }
+          : {}),
         dineInDeliveryBreakdown: Object.fromEntries(
           displayDineInKeyList.map((k) => [k, parseBahtAmount(dineInDeliveryBreakdown[k])])
         ) as Record<string, number>,
@@ -1282,6 +1330,8 @@ ${footerStamp}
         }
       }
       if (res.success) {
+        unpaidHallOverrideRef.current = null
+        setUnpaidHallDialogOpen(false)
         dispatchPosBusinessOpenUpdated({
           storeCode: effectiveStore,
           settleDate: openMode ? openBusinessDate : settleDate,
@@ -1344,9 +1394,24 @@ ${footerStamp}
       } else {
         closePrintPopup(webKioskPrintPopup)
         webKioskPrintPopup = null
-        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
+        unpaidHallOverrideRef.current = null
+        const unpaidCode = String(res.code || res.message || '')
+        if (
+          unpaidCode.includes('unpaid_hall') &&
+          Array.isArray(res.unpaidHallOrders) &&
+          res.unpaidHallOrders.length > 0
+        ) {
+          setUnpaidHallOrders(res.unpaidHallOrders)
+          setUnpaidHallDialogOpen(true)
+          await appAlert(
+            localizeApiMessage(res.message, t, t('posSettlementUnpaidHallBlock') || unpaidCode, lang)
+          )
+        } else {
+          await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
+        }
       }
     } catch (e) {
+      unpaidHallOverrideRef.current = null
       if (typeof window !== 'undefined' && webKioskPrintPopup && !webKioskPrintPopup.closed) {
         try {
           webKioskPrintPopup.close()
@@ -1358,6 +1423,23 @@ ${footerStamp}
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleUnpaidHallOverrideConfirm = () => {
+    if (!isValidUnpaidHallOverrideReason(unpaidHallReason)) {
+      void appAlert(
+        i18nTr(t, 'posSettlementUnpaidHallReasonMin', {
+          min: String(UNPAID_HALL_OVERRIDE_REASON_MIN),
+        })
+      )
+      return
+    }
+    unpaidHallOverrideRef.current = {
+      reason: unpaidHallReason.trim(),
+      pin: unpaidHallPin.trim(),
+    }
+    setUnpaidHallDialogOpen(false)
+    void handleSave()
   }
 
   const handleValidateClose = async () => {
@@ -1410,8 +1492,76 @@ ${footerStamp}
   const paddingClass = 'px-4 py-6 sm:px-6 lg:px-8'
   const maxWClass = compact ? '' : 'max-w-2xl mx-auto'
 
+  const unpaidHallTotalAmt = unpaidHallOrders.reduce((s, o) => s + (Number(o.total) || 0), 0)
+
   return (
     <div className={cn('w-full min-w-0 shrink-0', maxWClass)} data-tour="pos-tour-settlement-shell">
+      <Dialog
+        open={unpaidHallDialogOpen}
+        onOpenChange={(open) => {
+          setUnpaidHallDialogOpen(open)
+          if (!open) unpaidHallOverrideRef.current = null
+        }}
+      >
+        <DialogContent className="max-w-md max-h-[min(90dvh,36rem)] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {t('posSettlementUnpaidHallTitle') || '미결제 홀 — 마감 불가'}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+            {i18nTr(t, 'posSettlementUnpaidHallBody', {
+              count: String(unpaidHallOrders.length),
+              total: formatBahtNum(unpaidHallTotalAmt),
+            })}
+          </p>
+          <ul className="max-h-40 overflow-y-auto rounded border px-3 py-2 text-sm space-y-1">
+            {unpaidHallOrders.slice(0, 20).map((o) => (
+              <li key={o.id}>
+                {o.tableName || '-'} · {o.orderNo || `#${o.id}`} · {formatBahtNum(o.total)} ฿
+              </li>
+            ))}
+            {unpaidHallOrders.length > 20 ? (
+              <li className="text-muted-foreground">… +{unpaidHallOrders.length - 20}</li>
+            ) : null}
+          </ul>
+          <div className="space-y-2">
+            <Label htmlFor="unpaid-hall-reason">
+              {t('posSettlementUnpaidHallReason') || '예외 사유 (필수)'}
+            </Label>
+            <Textarea
+              id="unpaid-hall-reason"
+              value={unpaidHallReason}
+              onChange={(e) => setUnpaidHallReason(e.target.value)}
+              rows={3}
+              placeholder={
+                t('posSettlementUnpaidHallReasonPlaceholder') ||
+                '예: 손님 미결제 잔류 — 매니저 확인'
+              }
+            />
+            <Label htmlFor="unpaid-hall-pin">
+              {t('posSettlementUnpaidHallPin') || '매니저/서랍 PIN (설정된 매장)'}
+            </Label>
+            <Input
+              id="unpaid-hall-pin"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={unpaidHallPin}
+              onChange={(e) => setUnpaidHallPin(e.target.value)}
+              placeholder={t('posSettlementUnpaidHallPinHint') || 'PIN 없으면 매니저 계정만 예외 가능'}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setUnpaidHallDialogOpen(false)}>
+              {t('cancel') || '취소'}
+            </Button>
+            <Button type="button" onClick={handleUnpaidHallOverrideConfirm}>
+              {t('posSettlementUnpaidHallOverrideSave') || '예외 마감 저장'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className={paddingClass}>
         <OfflineBanner
           offlineOnly={offlineAware}

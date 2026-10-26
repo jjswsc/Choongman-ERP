@@ -4723,7 +4723,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_pos_settlement:
     'Daily POS settlement and channel clearing (card/delivery fees). Order totals use payment time (business day) to align with EDC. Bank: Sales collection; fees: channel settlement journal.',
   helpHow_admin_pos_settlement:
-    'System sales and cash use the open/sale business day (overnight pay still counts on the open day). Payment time is for receipts only. Before close, check unpaid hall tables. After settlement entry, use Channel settlement for GROSS/NET/fee journals. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
+    'System sales and cash use the open/sale business day (overnight pay still counts on the open day). Payment time is for receipts only. Closing with unpaid hall tables is blocked unless a manager override (reason + drawer PIN, or manager/HQ role) is provided. Paying a prior-day open bill today also asks for confirmation. After settlement entry, use Channel settlement for GROSS/NET/fee journals. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
   helpSum_admin_expense_management:
     'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use PV (with VAT) or PP (no VAT).',
   helpHow_admin_expense_management:

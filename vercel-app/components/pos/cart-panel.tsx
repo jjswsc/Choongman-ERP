@@ -1,5 +1,7 @@
 'use client'
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { isOvernightBusinessPayment } from '@/lib/pos-unpaid-hall-guard'
 
 import {
   Fragment,
@@ -589,6 +591,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const isCartControlled = cartItemsProp !== undefined && setCartItemsProp !== undefined
   /** 터미널: 배달/포장 상세 패널 → 카트 전환 시 `pendingOrderId` prop 한 틱 늦음·effect 미실행 대비 */
   const checkoutExistingPosOrderIdRef = useRef<number | null>(null)
+  /** 기존 주문 오픈 시각 — overnight 결제 확인용 */
+  const checkoutOrderCreatedAtRef = useRef<string | null>(null)
   /** 기존 pos_orders 행에 매장 결제 등 → 전체 결제 UI(현금/카드). 신규 배달(플랫폼 결제)만 단순 안내 다이얼로그 */
   const [isExistingOrderCheckout, setIsExistingOrderCheckout] = useState(false)
   const [internalCartItems, setInternalCartItems] = useState<CartItem[]>(() => {
@@ -3701,6 +3705,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
   const openPaymentModal = () => {
     checkoutExistingPosOrderIdRef.current = null
+    checkoutOrderCreatedAtRef.current = null
     setIsExistingOrderCheckout(false)
     setCheckoutDepositAmt(0)
     setCheckoutPrepaidQrAmt(0)
@@ -3836,6 +3841,32 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       scrollToPaymentMethods()
       return
     }
+
+    /** 전날(이전 영업일) 오픈 빌을 오늘 결제 — 회계 overnight 방지 확인 */
+    if (finalPaySum > 0.005) {
+      const rawCreated =
+        checkoutOrderCreatedAtRef.current ||
+        (selectedTable?.order?.createdAt
+          ? selectedTable.order.createdAt instanceof Date
+            ? selectedTable.order.createdAt.toISOString()
+            : String(selectedTable.order.createdAt)
+          : '')
+      const createdIso = String(rawCreated || '').trim()
+      if (createdIso) {
+        const createdBiz = getPosBusinessDateStr(new Date(createdIso))
+        const payBiz = getPosBusinessDateStr()
+        if (isOvernightBusinessPayment(createdBiz, payBiz)) {
+          const ok = await appConfirm(
+            i18nTr(t, 'posOvernightPaymentConfirm', {
+              openDay: createdBiz,
+              payDay: payBiz,
+            })
+          )
+          if (!ok) return
+        }
+      }
+    }
+
     const payDel = resolvedPayment.paymentDeliveryApp ?? 0
     const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
       payDel > 0
@@ -4594,6 +4625,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     tableName: string
     orderNo?: string
     existingOrderId?: number | null
+    /** 오픈(접수) 시각 ISO — overnight 결제 경고 */
+    createdAt?: string | null
     items: {
       id: string
       name: string
@@ -4614,6 +4647,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
+    checkoutOrderCreatedAtRef.current = String(payload.createdAt ?? '').trim() || null
     setIsExistingOrderCheckout(existingId != null)
     setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
     setCheckoutPrepaidQrAmt(existingId != null ? Math.max(0, Number(payload.prepaidQrAmt) || 0) : 0)
@@ -4694,6 +4728,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       promoItems?: CartItem['promoItems']
     }[]
     existingOrderId?: number | null
+    createdAt?: string | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
@@ -4701,6 +4736,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
+    checkoutOrderCreatedAtRef.current = String(payload.createdAt ?? '').trim() || null
     setIsExistingOrderCheckout(existingId != null)
     setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
     setCheckoutPrepaidQrAmt(0)
@@ -4779,6 +4815,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       promoItems?: CartItem['promoItems']
     }[]
     existingOrderId?: number | null
+    createdAt?: string | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
@@ -4786,6 +4823,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }) => {
     const existingId = normalizeExistingPosOrderId(payload.existingOrderId)
     checkoutExistingPosOrderIdRef.current = existingId
+    checkoutOrderCreatedAtRef.current = String(payload.createdAt ?? '').trim() || null
     setIsExistingOrderCheckout(existingId != null)
     setCheckoutDepositAmt(Math.max(0, Number(payload.depositAmt) || 0))
     setCheckoutPrepaidQrAmt(0)
@@ -4928,6 +4966,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setSplitMemberIdByPerson([])
     setSplitCollabJoinByPerson([])
     checkoutExistingPosOrderIdRef.current = null
+    checkoutOrderCreatedAtRef.current = null
     setIsExistingOrderCheckout(false)
   }
 

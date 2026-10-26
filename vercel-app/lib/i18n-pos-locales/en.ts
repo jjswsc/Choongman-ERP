@@ -2221,6 +2221,26 @@ export const I18N_POS_EN: Record<string, string> = {
       'EDC brand total ({brand}) differs from POS card orders ({pos}) by {diff} ฿. Check the EDC report and order payments before close.',
     posSettlementCardEdcDiffConfirm:
       'Card brand total does not match POS card orders.\nBrands (EDC): {brand} ฿\nPOS orders: {pos} ฿\nDifference: {diff} ฿\nClose with this amount?',
+    posSettlementUnpaidHallTitle: 'Unpaid hall tables — cannot close',
+    posSettlementUnpaidHallBody:
+      '{count} unpaid hall bill(s) (total {total} ฿).\nPay or cancel them, or close only with a manager override (reason + PIN).',
+    posSettlementUnpaidHallBlock:
+      'Cannot close while unpaid hall tables remain. Pay first, or enter override reason and PIN.',
+    posSettlementUnpaidHallReason: 'Override reason (required)',
+    posSettlementUnpaidHallReasonPlaceholder: 'e.g. Guest left unpaid — manager confirmed',
+    posSettlementUnpaidHallReasonMin: 'Enter an override reason of at least {min} characters.',
+    posSettlementUnpaidHallPin: 'Manager / drawer PIN (if configured)',
+    posSettlementUnpaidHallPinHint: 'If no PIN is set, only manager/HQ accounts can override',
+    posSettlementUnpaidHallOverrideSave: 'Save close with override',
+    posSettlementUnpaidHallCheckFailedConfirm:
+      'Could not check unpaid hall tables. Close anyway? (Check network.)',
+    unpaid_hall_override_reason_required: 'Enter an unpaid-hall override reason.',
+    unpaid_hall_override_pin_required: 'Enter the drawer/manager PIN.',
+    unpaid_hall_override_pin_wrong: 'PIN is incorrect.',
+    unpaid_hall_override_role_denied:
+      'No permission to override unpaid-hall close. Use a manager or HQ account.',
+    posOvernightPaymentConfirm:
+      'This order was opened on business day {openDay}; today is {payDay}.\nPaying a prior-day table today can skew accounting and cash.\nContinue?',
     posSettlementCashFromPosReadOnly:
       'Total cash from completed orders. Reservation deposits are a separate line and are not included here.',
     posSettlementCashReconciledBanner:

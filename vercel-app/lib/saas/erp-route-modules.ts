@@ -123,6 +123,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/collabDiscountUsage", module: "pos_base" },
   { prefix: "/api/qr-table", module: "pos_base" },
   { prefix: "/api/savePosSettlement", module: "pos_base" },
+  { prefix: "/api/getPosUnpaidHallOrders", module: "pos_base" },
   { prefix: "/api/getPosPrinter", module: "pos_base" },
   { prefix: "/api/savePosPrinter", module: "pos_base" },
   { prefix: "/api/getPosCoupons", module: "pos_base" },

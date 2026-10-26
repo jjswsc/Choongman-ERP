@@ -2213,6 +2213,25 @@ export const I18N_POS_KO: Record<string, string> = {
       'EDC 브랜드 합({brand})과 POS 주문 카드({pos})가 다릅니다. 차액 {diff} ฿. 마감 전 EDC 전표와 주문 결제를 확인하세요.',
     posSettlementCardEdcDiffConfirm:
       '카드 브랜드 합이 POS 주문 카드와 다릅니다.\n브랜드(EDC): {brand} ฿\nPOS 주문: {pos} ฿\n차액: {diff} ฿\n이 금액으로 마감할까요?',
+    posSettlementUnpaidHallTitle: '미결제 홀 — 마감 불가',
+    posSettlementUnpaidHallBody:
+      '미결제 홀 {count}건(합계 {total} ฿)이 있습니다.\n결제·취소 후 마감하거나, 매니저 예외(사유+PIN)로만 마감할 수 있습니다.',
+    posSettlementUnpaidHallBlock:
+      '미결제 홀이 있어 마감할 수 없습니다. 결제 후 다시 저장하거나 예외 사유·PIN을 입력하세요.',
+    posSettlementUnpaidHallReason: '예외 사유 (필수)',
+    posSettlementUnpaidHallReasonPlaceholder: '예: 손님 미결제 잔류 — 매니저 확인',
+    posSettlementUnpaidHallReasonMin: '예외 사유를 {min}자 이상 입력하세요.',
+    posSettlementUnpaidHallPin: '매니저/서랍 PIN (설정된 매장)',
+    posSettlementUnpaidHallPinHint: 'PIN 미설정 매장은 매니저·본사 계정만 예외 가능',
+    posSettlementUnpaidHallOverrideSave: '예외 마감 저장',
+    posSettlementUnpaidHallCheckFailedConfirm:
+      '미결제 홀을 확인하지 못했습니다. 그래도 마감할까요? (네트워크 확인)',
+    unpaid_hall_override_reason_required: '미결제 홀 예외 사유를 입력하세요.',
+    unpaid_hall_override_pin_required: '서랍/매니저 PIN을 입력하세요.',
+    unpaid_hall_override_pin_wrong: 'PIN이 올바르지 않습니다.',
+    unpaid_hall_override_role_denied: '미결제 홀 예외 마감 권한이 없습니다. 매니저·본사 계정을 사용하세요.',
+    posOvernightPaymentConfirm:
+      '이 주문은 영업일 {openDay}에 열렸고, 오늘은 {payDay}입니다.\n전날 테이블을 오늘 결제하면 회계·시재가 어긋날 수 있습니다.\n계속할까요?',
     posSettlementCashFromPosReadOnly:
       '완료 주문의 현금 결제 합계입니다. 예약금(มัดจำ)은 별도 줄이며 여기 포함되지 않습니다.',
     posSettlementCashReconciledBanner:

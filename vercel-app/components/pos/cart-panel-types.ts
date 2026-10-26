@@ -115,6 +115,8 @@ export interface CartPanelHandle {
     tableName: string
     orderNo?: string
     existingOrderId?: number | null
+    /** 오픈(접수) 시각 — overnight 결제 확인 */
+    createdAt?: string | null
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
@@ -127,6 +129,7 @@ export interface CartPanelHandle {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     existingOrderId?: number | null
+    createdAt?: string | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string
@@ -136,6 +139,7 @@ export interface CartPanelHandle {
     orderLabel: string
     items: { id: string; name: string; price: number; quantity: number; note?: string; menuId?: string; menuId1?: string }[]
     existingOrderId?: number | null
+    createdAt?: string | null
     orderDiscount?: PosExistingOrderCheckoutDiscount
     orderMember?: PosExistingOrderCheckoutMember
     orderMemo?: string

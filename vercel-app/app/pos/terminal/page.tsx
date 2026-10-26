@@ -460,6 +460,8 @@ type PendingPayRequest = {
   orderNo?: string
   /** 기존 pos_orders 행 id (결제 updatePosOrder용) */
   existingOrderId?: number | null
+  /** 오픈(접수) 시각 — overnight 결제 확인 */
+  createdAt?: string | null
   /** DB·플랫폼 할인·합계 — 결제 모달에서 0으로 초기화하지 않음 */
   orderDiscount?: PosExistingOrderCheckoutDiscount
   /** 기존 주문에 연결된 회원 — 결제 시 포인트 적립용 */
@@ -2205,6 +2207,7 @@ export default function PosTerminalPage() {
     cartRef.current.openDineInPaymentFromOrder({
       ...pendingPayRequest,
       existingOrderId: pendingDineInOrderId,
+      createdAt: pendingPayRequest.createdAt,
       orderMember: pendingPayRequest.orderMember,
       orderMemo: pendingPayRequest.orderMemo,
       depositAmt: pendingPayRequest.depositAmt,
@@ -12736,6 +12739,11 @@ export default function PosTerminalPage() {
                 setPendingPayRequest({
                   tableName: servingTable.name,
                   existingOrderId: Number(servingTable.order.id),
+                  createdAt: servingTable.order.createdAt
+                    ? servingTable.order.createdAt instanceof Date
+                      ? servingTable.order.createdAt.toISOString()
+                      : String(servingTable.order.createdAt)
+                    : null,
                   items: servingTable.order.items.map((item) => {
                     const menuId = String(item.menuId ?? item.menuId1 ?? '').trim()
                     return {

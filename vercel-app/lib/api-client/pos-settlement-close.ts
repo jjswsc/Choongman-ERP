@@ -339,6 +339,30 @@ export async function importPosChannelSettlements(params: {
   }>
 }
 
+export type UnpaidHallOrderSummaryClient = {
+  id: number
+  orderNo: string
+  tableName: string
+  total: number
+  status: string
+  createdAt: string
+}
+
+export async function getPosUnpaidHallOrders(params: { storeCode: string }) {
+  const res = await apiFetchWithOffline('/api/getPosUnpaidHallOrders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeCode: params.storeCode }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    count?: number
+    totalAmt?: number
+    orders?: UnpaidHallOrderSummaryClient[]
+  }>
+}
+
 export async function savePosSettlement(params: {
   storeCode?: string
   settleDate: string
@@ -358,13 +382,22 @@ export async function savePosSettlement(params: {
   cryptoAmt?: number
   memo?: string
   closed?: boolean
+  unpaidHallOverrideReason?: string
+  unpaidHallOverridePin?: string
 }) {
   const res = await apiFetchWithOffline('/api/savePosSettlement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    unpaidHallCount?: number
+    unpaidHallTotalAmt?: number
+    unpaidHallOrders?: UnpaidHallOrderSummaryClient[]
+  }>
 }
 
 export async function validatePosClose(params: {

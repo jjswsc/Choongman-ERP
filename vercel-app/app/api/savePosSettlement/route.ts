@@ -8,6 +8,11 @@ import {
   saasTenantStoreConflictTarget,
   stampSaasTenantIdForUniqueKey,
 } from '@/lib/saas-tenant-scope'
+import { formatUnpaidHallOverrideMemoSuffix } from '@/lib/pos-unpaid-hall-guard'
+import {
+  assertUnpaidHallCloseOverrideAllowed,
+  listUnpaidHallOrdersForStore,
+} from '@/lib/pos-unpaid-hall-guard-server'
 
 const CASH_ACTUAL_DENOM_KEYS = ['1000', '500', '100', '50', '20', '10', '5', '2', '1'] as const
 
@@ -84,9 +89,11 @@ export async function POST(req: NextRequest) {
     const otherAmt = numOrZero(body.otherAmt)
     const otherBreakdown = body.otherBreakdown && typeof body.otherBreakdown === 'object' ? body.otherBreakdown : {}
     const cryptoAmt = numOrZero(body.cryptoAmt)
-    const memo = String(body.memo ?? '').trim()
+    let memo = String(body.memo ?? '').trim()
     const closed = !!body.closed
     const cashActualDenoms = normalizeCashActualDenoms(body.cashActualDenoms)
+    const unpaidHallOverrideReason = String(body.unpaidHallOverrideReason ?? '').trim()
+    const unpaidHallOverridePin = String(body.unpaidHallOverridePin ?? '').trim()
 
     if (!settleDate) {
       return NextResponse.json({ success: false, message: '결산일을 입력하세요.' }, { headers })
@@ -105,6 +112,39 @@ export async function POST(req: NextRequest) {
         { success: false, message: '이미 마감 완료된 결산입니다. 재저장할 수 없습니다.' },
         { headers }
       )
+    }
+
+    /** 마감(closed) 시에만 — 미결제 홀이 있으면 사유+PIN(또는 매니저 역할) 예외 필요 */
+    if (closed) {
+      const unpaidHalls = await listUnpaidHallOrdersForStore({ storeCode, tenantScope })
+      if (unpaidHalls.length > 0) {
+        const override = await assertUnpaidHallCloseOverrideAllowed({
+          storeCode,
+          role: String(auth?.role || ''),
+          reason: unpaidHallOverrideReason,
+          pin: unpaidHallOverridePin,
+        })
+        if (!override.ok) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: override.code,
+              code: override.code,
+              unpaidHallCount: unpaidHalls.length,
+              unpaidHallTotalAmt: unpaidHalls.reduce((s, o) => s + o.total, 0),
+              unpaidHallOrders: unpaidHalls.slice(0, 30),
+              retryAfterQueue: false,
+            },
+            { status: 409, headers }
+          )
+        }
+        const suffix = formatUnpaidHallOverrideMemoSuffix({
+          reason: unpaidHallOverrideReason,
+          actorName: auth?.name || auth?.employeeCode || null,
+          orderCount: unpaidHalls.length,
+        })
+        memo = memo ? `${memo}\n${suffix}` : suffix
+      }
     }
 
     const row = stampSaasTenantIdForUniqueKey(
