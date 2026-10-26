@@ -116,7 +116,11 @@ export async function POST(req: NextRequest) {
 
     /** 마감(closed) 시에만 — 미결제 홀이 있으면 사유+PIN(또는 매니저 역할) 예외 필요 */
     if (closed) {
-      const unpaidHalls = await listUnpaidHallOrdersForStore({ storeCode, tenantScope })
+      const unpaidHalls = await listUnpaidHallOrdersForStore({
+        storeCode,
+        settleDate,
+        tenantScope,
+      })
       if (unpaidHalls.length > 0) {
         const override = await assertUnpaidHallCloseOverrideAllowed({
           storeCode,

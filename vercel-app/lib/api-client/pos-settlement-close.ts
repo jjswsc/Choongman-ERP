@@ -348,11 +348,11 @@ export type UnpaidHallOrderSummaryClient = {
   createdAt: string
 }
 
-export async function getPosUnpaidHallOrders(params: { storeCode: string }) {
+export async function getPosUnpaidHallOrders(params: { storeCode: string; settleDate: string }) {
   const res = await apiFetchWithOffline('/api/getPosUnpaidHallOrders', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ storeCode: params.storeCode }),
+    body: JSON.stringify({ storeCode: params.storeCode, settleDate: params.settleDate }),
   })
   return res.json() as Promise<{
     success: boolean

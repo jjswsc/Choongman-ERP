@@ -17,6 +17,11 @@ import {
   isOfficeRole,
   isSupervisorRole,
 } from '@/lib/permissions'
+import { posBusinessDateYmdToUtcRange } from '@/lib/pos-business-day'
+import {
+  loadPosBusinessDaySettingsContext,
+  resolvePosBusinessHoursFromContext,
+} from '@/lib/pos-business-day-server'
 
 /** 미결제 홀 — is_advance 등 선주문 컬럼은 레거시 DB에 없을 수 있어 열지 않음 (open-table totals 와 동일) */
 const UNPAID_HALL_SELECT = `id,order_no,${POS_OPEN_TABLE_ROW_SELECT}`
@@ -37,20 +42,36 @@ export function canOverrideUnpaidHallSettlementClose(role: string): boolean {
   )
 }
 
-/** 매장 전체 — 영업일 무관. 어제 열어 둔 미결제 홀도 마감 차단 대상 */
+/**
+ * 결산일(영업일)에 오픈된 미결제 홀만.
+ * 과거 고아 미결제 빌이 오늘 마감을 막지 않도록 created_at 을 해당 영업일 창으로 제한.
+ */
 export async function listUnpaidHallOrdersForStore(params: {
   storeCode: string
+  /** 결산일 YYYY-MM-DD (POS 영업일) */
+  settleDate: string
   tenantScope?: SaasTenantScope
   limit?: number
 }): Promise<UnpaidHallOrderSummary[]> {
   const storeCode = String(params.storeCode || '').trim()
-  if (!storeCode) return []
+  const settleDate = String(params.settleDate || '').trim().slice(0, 10)
+  if (!storeCode || !/^\d{4}-\d{2}-\d{2}$/.test(settleDate)) return []
   const tenantScope = params.tenantScope || LEGACY_SAAS_TENANT_SCOPE
   const limit = Math.min(300, Math.max(1, Math.floor(Number(params.limit) || 200)))
+
+  const bizCtx = await loadPosBusinessDaySettingsContext({
+    tenantId: tenantScope.tenantId,
+    storeCode,
+  })
+  const hours = resolvePosBusinessHoursFromContext(bizCtx, storeCode)
+  const { startISO, endISOExclusive } = posBusinessDateYmdToUtcRange(settleDate, hours)
+
   const statusIn = POS_OPEN_TABLE_STATUSES.join(',')
   const base =
     `store_code=ilike.${encodeURIComponent(storeCode)}` +
     `&status=in.(${statusIn})` +
+    `&created_at=gte.${encodeURIComponent(startISO)}` +
+    `&created_at=lt.${encodeURIComponent(endISOExclusive)}` +
     `&order=created_at.asc`
   const filter = appendSaasTenantFilter(base, tenantScope, 'pos_orders')
   let rows: DbUnpaidRow[] | null = null

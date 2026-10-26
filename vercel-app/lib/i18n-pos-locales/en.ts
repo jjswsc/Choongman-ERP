@@ -2227,7 +2227,7 @@ export const I18N_POS_EN: Record<string, string> = {
       'Card brand total does not match POS card orders.\nBrands (EDC): {brand} ฿\nPOS orders: {pos} ฿\nDifference: {diff} ฿\nClose with this amount?',
     posSettlementUnpaidHallTitle: 'Unpaid hall tables — cannot close',
     posSettlementUnpaidHallBody:
-      '{count} unpaid hall bill(s) (total {total} ฿).\nPay or cancel them, or close only with a manager override (reason + PIN).',
+      '{count} unpaid hall bill(s) opened on this business day (total {total} ฿).\nPay or cancel them, or close only with a manager override (reason + PIN).',
     posSettlementUnpaidHallBlock:
       'Cannot close while unpaid hall tables remain. Pay first, or enter override reason and PIN.',
     posSettlementUnpaidHallReason: 'Override reason (required)',

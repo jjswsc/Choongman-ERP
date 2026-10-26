@@ -2219,7 +2219,7 @@ export const I18N_POS_KO: Record<string, string> = {
       '카드 브랜드 합이 POS 주문 카드와 다릅니다.\n브랜드(EDC): {brand} ฿\nPOS 주문: {pos} ฿\n차액: {diff} ฿\n이 금액으로 마감할까요?',
     posSettlementUnpaidHallTitle: '미결제 홀 — 마감 불가',
     posSettlementUnpaidHallBody:
-      '미결제 홀 {count}건(합계 {total} ฿)이 있습니다.\n결제·취소 후 마감하거나, 매니저 예외(사유+PIN)로만 마감할 수 있습니다.',
+      '이 영업일에 열린 미결제 홀 {count}건(합계 {total} ฿)이 있습니다.\n결제·취소 후 마감하거나, 매니저 예외(사유+PIN)로만 마감할 수 있습니다.',
     posSettlementUnpaidHallBlock:
       '미결제 홀이 있어 마감할 수 없습니다. 결제 후 다시 저장하거나 예외 사유·PIN을 입력하세요.',
     posSettlementUnpaidHallReason: '예외 사유 (필수)',

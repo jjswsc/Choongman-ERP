@@ -5,7 +5,7 @@ import { listUnpaidHallOrdersForStore } from '@/lib/pos-unpaid-hall-guard-server
 
 export const dynamic = 'force-dynamic'
 
-/** 결산 마감 전 미결제 홀 목록 (영업일 무관 — overnight 잔여 포함) */
+/** 결산 마감 전 미결제 홀 목록 — 해당 결산(영업)일에 오픈된 건만 */
 export async function POST(req: NextRequest) {
   const headers = posApiCorsHeaders()
   try {
@@ -16,6 +16,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Invalid JSON body' }, { headers })
     }
     const storeCode = String(body.storeCode ?? '').trim()
+    const settleDate = String(body.settleDate ?? body.businessDate ?? '').trim().slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(settleDate)) {
+      return NextResponse.json({ success: false, message: 'settleDate_required' }, { headers })
+    }
     const authGate = await requirePosStoreWriteAuth(req, storeCode, headers)
     if (!authGate.ok) return authGate.response
     const tenantScope = await resolveSaasTenantScope({
@@ -24,7 +28,7 @@ export async function POST(req: NextRequest) {
         : null,
       storeCode,
     })
-    const orders = await listUnpaidHallOrdersForStore({ storeCode, tenantScope })
+    const orders = await listUnpaidHallOrdersForStore({ storeCode, settleDate, tenantScope })
     return NextResponse.json(
       {
         success: true,

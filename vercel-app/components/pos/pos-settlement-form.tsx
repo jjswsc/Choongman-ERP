@@ -1223,7 +1223,10 @@ ${footerStamp}
     /** 마감 시 미결제 홀 — 목록 확인 후 예외(사유+PIN) 없으면 차단 */
     if (!openMode && closed && !unpaidHallOverrideRef.current) {
       try {
-        const unpaidRes = await getPosUnpaidHallOrders({ storeCode: effectiveStore })
+        const unpaidRes = await getPosUnpaidHallOrders({
+          storeCode: effectiveStore,
+          settleDate,
+        })
         const orders = Array.isArray(unpaidRes.orders) ? unpaidRes.orders : []
         if (unpaidRes.success !== false && orders.length > 0) {
           setUnpaidHallOrders(orders)
