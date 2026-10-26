@@ -385,6 +385,8 @@ export type PosCashOrderDrillDownResult = {
   orders: PosCashOrderDrillOrderRow[]
   orderCount: number
   cashSales: number
+  overnightOrderCount?: number
+  overnightCashSales?: number
   truncated?: boolean
   store?: string | null
   date?: string | null
@@ -414,6 +416,8 @@ export async function getPosCashOrderDrillDown(params: {
     orders: Array.isArray(json.orders) ? json.orders : [],
     orderCount: Number(json.orderCount) || 0,
     cashSales: Number(json.cashSales) || 0,
+    overnightOrderCount: Number(json.overnightOrderCount) || 0,
+    overnightCashSales: Number(json.overnightCashSales) || 0,
     truncated: truncated || json.truncated === true,
     store: json.store ?? null,
     date: json.date ?? null,

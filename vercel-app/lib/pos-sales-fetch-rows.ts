@@ -8,8 +8,12 @@ import {
 import { filterRowsByChannelReconcileCalendarRange } from '@/lib/pos-channel-reconcile-match'
 import {
   filterRowsByPosSalesBusinessDateRange,
+  filterRowsByPosSalesBusinessDateRangeBasis,
+  parsePosOrdersDateBasis,
   posSalesBangkokCalendarRangeUtcEnvelope,
   posSalesBusinessDateRangeUtcEnvelope,
+  posSalesBusinessDateRangeUtcEnvelopeForDateBasis,
+  type PosOrdersDateBasis,
 } from '@/lib/pos-sales-business-day-range'
 import type { PeriodOrderRow } from '@/lib/pos-sales-period-aggregate'
 import {
@@ -85,6 +89,12 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
    * calendar: 방콕 달력일(paid_at 우선). 채널 확인 QR·카드·배달앱.
    */
   dateBucket?: 'business' | 'calendar'
+  /**
+   * business 버킷일 때 영업일 기준.
+   * paid/either: created_at 조회 창을 앞당겨 전날 오픈·당일 결제 포함 후 basis 필터.
+   * (채널 현금·시재 현금 = paid)
+   */
+  ordersDateBasis?: PosOrdersDateBasis | string
   /** 지정 시 PostgREST status=in.(...) — 미결제 테이블 등 경량 조회 */
   statusIn?: string[]
 }): Promise<PosSalesFetchedRows> {
@@ -117,10 +127,24 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
     storeCode: params.storeCodes?.[0] ?? null,
   })
   const dateBucket = params.dateBucket === 'calendar' ? 'calendar' : 'business'
+  const ordersDateBasis: PosOrdersDateBasis =
+    dateBucket === 'business'
+      ? parsePosOrdersDateBasis(
+          typeof params.ordersDateBasis === 'string' ? params.ordersDateBasis : undefined
+        )
+      : 'created'
   const { startISO, endISOExclusive } =
     dateBucket === 'calendar'
       ? posSalesBangkokCalendarRangeUtcEnvelope(params.startStr, params.endStr, 1)
-      : posSalesBusinessDateRangeUtcEnvelope(bizCtx, params.startStr, params.endStr)
+      : ordersDateBasis === 'created'
+        ? posSalesBusinessDateRangeUtcEnvelope(bizCtx, params.startStr, params.endStr)
+        : posSalesBusinessDateRangeUtcEnvelopeForDateBasis(
+            bizCtx,
+            params.startStr,
+            params.endStr,
+            ordersDateBasis,
+            1
+          )
   const expanded =
     params.storeCodes && params.storeCodes.length > 0
       ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
@@ -173,7 +197,15 @@ export async function fetchPosSalesOrdersForBusinessRange(params: {
   let rows =
     dateBucket === 'calendar'
       ? filterRowsByChannelReconcileCalendarRange(rowsRaw, params.startStr, params.endStr)
-      : filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, params.startStr, params.endStr)
+      : ordersDateBasis === 'created'
+        ? filterRowsByPosSalesBusinessDateRange(rowsRaw, bizCtx, params.startStr, params.endStr)
+        : filterRowsByPosSalesBusinessDateRangeBasis(
+            rowsRaw,
+            bizCtx,
+            params.startStr,
+            params.endStr,
+            ordersDateBasis
+          )
 
   if (params.storeCodes && params.storeCodes.length > 0) {
     rows = rows.filter((r) =>

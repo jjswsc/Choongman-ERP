@@ -802,6 +802,9 @@ export function receiptModalDataFromPosOrderForPayment(
     receiptAutoPrintContext: 'payment',
     suppressReceiptModalAutoPrint: false,
     receiptPrintedAt: resolvePosOrderPaidAt(order),
+    ...(String(order.createdAt ?? '').trim()
+      ? { orderOpenedAt: String(order.createdAt).trim() }
+      : {}),
     ...(Number(order.id) > 0 ? { serverOrderId: Number(order.id) } : {}),
     ...memberReceiptFieldsFromPosOrder(order),
     ...(posOrderDepositAppliedForReceipt(order) > 0.005
@@ -1091,6 +1094,8 @@ export function buildCheckoutPaymentReceiptModalData(params: {
   suppressReceiptModalAutoPrint?: boolean
   serverOrderId?: number
   depositAppliedAmt?: number
+  /** 주문 오픈 시각 — overnight 영수증 오픈일 병기 */
+  orderOpenedAt?: string
 }): ReceiptModalData {
   const receiptItems = checkoutPosItemsToReceiptLines(params.items)
   const subtotal =
@@ -1171,6 +1176,9 @@ export function buildCheckoutPaymentReceiptModalData(params: {
       : {}),
     ...(params.serverOrderId != null && params.serverOrderId > 0
       ? { serverOrderId: params.serverOrderId }
+      : {}),
+    ...(String(params.orderOpenedAt ?? '').trim()
+      ? { orderOpenedAt: String(params.orderOpenedAt).trim() }
       : {}),
     ...(Math.max(0, Number(params.depositAppliedAmt ?? params.paymentFields?.depositAppliedAmt) || 0) > 0.005
       ? {

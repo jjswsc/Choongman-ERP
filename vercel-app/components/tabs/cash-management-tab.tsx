@@ -97,6 +97,10 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
   const [listData, setListData] = React.useState<TillItem[]>([])
   const [listLoading, setListLoading] = React.useState(false)
   const [completedCash, setCompletedCash] = React.useState<number | null>(null)
+  const [overnightCash, setOvernightCash] = React.useState<{
+    orderCount: number
+    cashSales: number
+  } | null>(null)
 
   type SubTab = 'till' | 'sales_withdrawal_list'
   const [subTab, setSubTab] = React.useState<SubTab>('till')
@@ -182,11 +186,23 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
         storeCode: effectiveStore,
         startStr,
         endStr,
+        /** 시재 출금·마감 = 결제 영업일(overnight 포함) */
+        dateBasis: 'paid',
       })
-        .then((r) => setCompletedCash(r.completedCash ?? 0))
-        .catch(() => setCompletedCash(null))
+        .then((r) => {
+          setCompletedCash(r.completedCash ?? 0)
+          setOvernightCash({
+            orderCount: Number(r.overnightOrderCount) || 0,
+            cashSales: Number(r.overnightCashSales) || 0,
+          })
+        })
+        .catch(() => {
+          setCompletedCash(null)
+          setOvernightCash(null)
+        })
     } else {
       setCompletedCash(null)
+      setOvernightCash(null)
     }
   }, [startStr, endStr, effectiveStore, storeCode, canSearchAll, auth?.store, auth?.role, offlineAware, online])
 
@@ -335,6 +351,7 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
       storeCode: effectiveStore,
       startStr: salesDateForWithdrawal,
       endStr: salesDateForWithdrawal,
+      dateBasis: 'paid',
     })
       .then((r) => setSalesWithdrawalCash(r.completedCash ?? 0))
       .catch(() => setSalesWithdrawalCash(null))
@@ -575,6 +592,38 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
               </button>
             )}
           </div>
+          {singleDayRange && overnightCash && overnightCash.orderCount > 0 ? (
+            <button
+              type="button"
+              onClick={() =>
+                openCashDrill({
+                  storeCode: effectiveStore || undefined,
+                  date: startStr,
+                  expectedCash: overnightCash.cashSales,
+                  expectedCount: overnightCash.orderCount,
+                  label:
+                    t('posCashOvernightTitle') || '어제 오픈 · 오늘 결제 현금',
+                })
+              }
+              className="w-full rounded-md border border-sky-300/80 bg-sky-50 px-3 py-2.5 text-left text-xs text-sky-950 transition-colors hover:bg-sky-100/80 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 dark:hover:bg-sky-950/60"
+              data-tour="pos-tour-cash-overnight-banner"
+            >
+              <p className="font-medium">
+                {t('posCashOvernightTitle') || '어제 오픈 · 오늘 결제 현금'}
+              </p>
+              <p className="mt-1 tabular-nums leading-relaxed">
+                {(
+                  t('posCashOvernightLine') ||
+                  '{count}건 · ฿{amount} (하루 현금 매출에 포함 · 결제 영업일 기준)'
+                )
+                  .replace('{count}', String(overnightCash.orderCount))
+                  .replace('{amount}', fmt(overnightCash.cashSales))}
+              </p>
+              <p className="mt-1 text-primary">
+                {t('salesCashDrillClickHint') || '클릭하면 주문 목록'}
+              </p>
+            </button>
+          ) : null}
           {showTillVsCashBanner ? (
             <div
               className="rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100"

@@ -11,15 +11,15 @@ import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_PAYMENT_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
-import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
-import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 import {
   aggregateCashReconcileRows,
   applyCashBankDepositsToRows,
   buildCashReconcileResult,
+  filterCashReconcileRowsByBusinessDateRange,
   type CashReconcileOrderRow,
 } from '@/lib/pos-cash-reconcile'
+import { makeCashReconcileBusinessDateForRow } from '@/lib/pos-cash-reconcile-business-date'
 import {
   aggregateCashBankDeposits,
   cashBankDepositQueryTransDateWindow,
@@ -110,6 +110,8 @@ export async function GET(request: NextRequest) {
         storeCodes: stores.length > 0 ? stores : undefined,
         select: POS_SALES_PAYMENT_ROW_SELECT,
         queryLabel: 'posCashReconcile',
+        /** 전날 오픈·당일 결제 포함 → 아래에서 결제 영업일로 재필터 */
+        ordersDateBasis: 'either',
       }),
       withTimeoutFallback(
         fetchCashBankDeposits({
@@ -126,18 +128,14 @@ export async function GET(request: NextRequest) {
     if (truncated) headers.set('X-Sales-Truncated', '1')
     headers.set('X-Pos-Sales-Source', 'fetch')
 
-    const aggregated = aggregateCashReconcileRows(rows as CashReconcileOrderRow[], {
-      businessDateForRow: (row) => {
-        const raw = String(row.created_at ?? '').trim()
-        if (!raw) return ''
-        const d = new Date(
-          raw.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw.replace(' ', 'T')
-        )
-        if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10)
-        const hours = resolvePosBusinessHoursFromContext(bizCtx, String(row.store_code ?? '').trim())
-        return getPosBusinessDateStrFromConfig(d, hours)
-      },
-    })
+    const businessDateForRow = makeCashReconcileBusinessDateForRow(bizCtx)
+    const cashRows = filterCashReconcileRowsByBusinessDateRange(
+      rows as CashReconcileOrderRow[],
+      startStr,
+      endStr,
+      businessDateForRow
+    )
+    const aggregated = aggregateCashReconcileRows(cashRows, { businessDateForRow })
 
     const withBank = applyCashBankDepositsToRows(aggregated, bankAgg)
     const result = buildCashReconcileResult(withBank)

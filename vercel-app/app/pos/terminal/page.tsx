@@ -4408,6 +4408,7 @@ export default function PosTerminalPage() {
               items: rebuilt.items,
               orderNo: String(data.orderNo || rebuilt.orderNo || ''),
               receiptPrintedAt: data.receiptPrintedAt || rebuilt.receiptPrintedAt,
+              orderOpenedAt: data.orderOpenedAt || rebuilt.orderOpenedAt,
               serverOrderId: data.serverOrderId ?? rebuilt.serverOrderId ?? orderId,
             }
             logPosPrintDebug('payment_receipt_items_refetched_before_print', {
@@ -11026,6 +11027,11 @@ export default function PosTerminalPage() {
                   await tryOpenDrawerOnOrderComplete(payload.payment, {
                     skipAutoOpen: Boolean(payload.splitReceipts?.length),
                   })
+                  const dineOpenAt = String(
+                    servingTable?.order?.createdAt ??
+                      selectedTable?.order?.createdAt ??
+                      ''
+                  ).trim()
                   const receiptPayload = buildCheckoutPaymentReceiptModalData({
                     orderNo,
                     storeCode: currentStoreId,
@@ -11052,6 +11058,7 @@ export default function PosTerminalPage() {
                     depositAppliedAmt: payload.depositAmt,
                     suppressReceiptModalAutoPrint: !isMainPosDevice,
                     serverOrderId: orderIdToComplete ?? undefined,
+                    ...(dineOpenAt ? { orderOpenedAt: dineOpenAt } : {}),
                   })
                   const splitBatch = makeSplitPaymentReceiptBatch(
                     {

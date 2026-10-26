@@ -21,8 +21,16 @@ import {
   groupPosTodaySalesByStoreCodes,
   sumPosTodaySalesSummaries,
 } from '@/lib/pos-today-sales-aggregate'
+import { parsePosOrdersDateBasis } from '@/lib/pos-sales-business-day-range'
+import { makeCashReconcileBusinessDateForRow } from '@/lib/pos-cash-reconcile-business-date'
+import {
+  filterCashReconcileRowsByBusinessDateRange,
+  summarizeCashOvernightPaidOnDate,
+  type CashReconcileDrillOrderInput,
+  type CashReconcileOrderRow,
+} from '@/lib/pos-cash-reconcile'
 
-const TODAY_SALES_SELECT = `${POS_SALES_ORDER_ROW_SELECT},payment_cash`
+const TODAY_SALES_SELECT = `${POS_SALES_ORDER_ROW_SELECT},payment_cash,paid_at`
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -42,6 +50,10 @@ export async function GET(request: NextRequest) {
   const endStrParam = String(searchParams.get('endStr') || '').trim()
   const forceFetch =
     searchParams.get('forceFetch') === '1' || searchParams.get('forceFetch') === 'true'
+  /** paid: 시재 현금 등 — 결제 영업일(overnight 포함). 기본 created = 기존 POS 헤더 */
+  const ordersDateBasis = parsePosOrdersDateBasis(
+    searchParams.get('dateBasis') || searchParams.get('ordersDateBasis')
+  )
 
   try {
     const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode })
@@ -50,7 +62,9 @@ export async function GET(request: NextRequest) {
     const startStr = startStrParam || todayYmd
     const endStr = endStrParam || startStr
 
+    /** RPC 는 created_at 봉투 — paid/either 는 fetch 경로만 */
     if (
+      ordersDateBasis === 'created' &&
       !forceFetch &&
       storeCodes.length === 1 &&
       canUsePosSalesPeriodSummaryRpc({ startStr, endStr, storeCode })
@@ -79,7 +93,12 @@ export async function GET(request: NextRequest) {
     }
 
     /** 전체·복수 매장: 주문 전량 fetch 대신 매장별 RPC 병렬 집계 (검색 체감) */
-    if (!forceFetch && storeCodes.length > 1 && startStr === endStr) {
+    if (
+      ordersDateBasis === 'created' &&
+      !forceFetch &&
+      storeCodes.length > 1 &&
+      startStr === endStr
+    ) {
       const byStoreRpc = await tryFetchPosSalesPeriodSummaryByStores({
         bizCtx,
         businessYmd: startStr,
@@ -99,7 +118,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+    const { rows: rowsRaw, truncated } = await fetchPosSalesOrdersForBusinessRange({
       request,
       startStr,
       endStr,
@@ -107,7 +126,31 @@ export async function GET(request: NextRequest) {
       queryLabel: 'getPosTodaySales',
       select: TODAY_SALES_SELECT,
       excludeTestOfficePos: false,
+      ordersDateBasis: ordersDateBasis === 'created' ? 'created' : 'either',
     })
+
+    let rows = rowsRaw
+    let overnightOrderCount = 0
+    let overnightCashSales = 0
+    if (ordersDateBasis === 'paid' || ordersDateBasis === 'either') {
+      const businessDateForRow = makeCashReconcileBusinessDateForRow(bizCtx)
+      if (ordersDateBasis === 'paid') {
+        rows = filterCashReconcileRowsByBusinessDateRange(
+          rowsRaw as CashReconcileOrderRow[],
+          startStr,
+          endStr,
+          businessDateForRow
+        ) as typeof rowsRaw
+      }
+      if (startStr === endStr) {
+        const overnight = summarizeCashOvernightPaidOnDate(rows as CashReconcileDrillOrderInput[], {
+          businessDateForRow,
+          paidBusinessDate: startStr,
+        })
+        overnightOrderCount = overnight.orderCount
+        overnightCashSales = overnight.cashSales
+      }
+    }
 
     const byStore =
       storeCodes.length > 0
@@ -122,8 +165,11 @@ export async function GET(request: NextRequest) {
       {
         ...totals,
         byStore,
+        overnightOrderCount,
+        overnightCashSales,
         source: 'posSalesFetchRows' as const,
         truncated,
+        dateBasis: ordersDateBasis,
       },
       { headers }
     )

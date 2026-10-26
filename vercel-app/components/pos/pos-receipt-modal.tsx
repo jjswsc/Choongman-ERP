@@ -127,6 +127,8 @@ export type ReceiptModalData = {
   voidReceiptMode?: boolean
   /** 결제 영수증 Date 행 — 미지정 시 인쇄 시각 */
   receiptPrintedAt?: string
+  /** 주문 오픈(created_at) — overnight 시 영수증에 오픈일 병기 */
+  orderOpenedAt?: string
   /** DB pos_orders.id — 결제 영수증 자동 인쇄 dedupe */
   serverOrderId?: number
   /** 회원 결제 영수증 하단 블록 */

@@ -11,9 +11,52 @@ import {
 
 export type CashReconcileOrderRow = {
   created_at?: string | null
+  /** 결제 완료 시각 — 현금 집계·드릴은 paid_at 우선(없으면 created_at) */
+  paid_at?: string | null
   store_code?: string | null
   status?: string | null
   payment_cash?: number | null
+}
+
+/**
+ * 현금 채널 집계 시각: 결제일 우선(overnight = 오픈≠결제).
+ * paid_at 없으면 created_at 폴백(구 데이터).
+ */
+export function cashReconcileEventTimestamp(row: {
+  paid_at?: string | null
+  created_at?: string | null
+}): string {
+  const paid = String(row.paid_at ?? '').trim()
+  if (paid) return paid
+  return String(row.created_at ?? '').trim()
+}
+
+/** ISO/DB 시각 → Date (파싱 실패 시 null) */
+export function parseCashReconcileEventDate(raw: string): Date | null {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  const d = new Date(s.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s.replace(' ', 'T'))
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * 조회 기간 안(결제 영업일)인 현금 행만 — either fetch 후 집계 전 필수.
+ */
+export function filterCashReconcileRowsByBusinessDateRange(
+  rows: CashReconcileOrderRow[],
+  startYmd: string,
+  endYmd: string,
+  businessDateForRow?: (row: CashReconcileOrderRow) => string
+): CashReconcileOrderRow[] {
+  const lo = startYmd.slice(0, 10)
+  const hi = endYmd.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lo) || !/^\d{4}-\d{2}-\d{2}$/.test(hi)) return []
+  const a = lo <= hi ? lo : hi
+  const b = lo <= hi ? hi : lo
+  return rows.filter((row) => {
+    const d = resolveCashReconcileBusinessDate(row, businessDateForRow)
+    return d >= a && d <= b
+  })
 }
 
 /** 현금 드릴다운용 — 집계와 동일 필터 + 주문 식별 필드 */
@@ -93,9 +136,52 @@ export function resolveCashReconcileBusinessDate(
   row: CashReconcileOrderRow,
   businessDateForRow?: (row: CashReconcileOrderRow) => string
 ): string {
-  const dateRaw = businessDateForRow?.(row) || String(row.created_at ?? '').slice(0, 10)
+  const dateRaw =
+    businessDateForRow?.(row) || cashReconcileEventTimestamp(row).slice(0, 10)
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : String(dateRaw).slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : ''
+}
+
+/** 전날 오픈·당일 결제(달력일 기준) — 시재 overnight 안내용 */
+export function isCashReconcileOvernightCalendar(
+  row: { paid_at?: string | null; created_at?: string | null },
+  bangkokYmdOf = (iso: string) => {
+    const d = new Date(
+      iso.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso.replace(' ', 'T')
+    )
+    if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+  }
+): boolean {
+  const created = String(row.created_at ?? '').trim()
+  const paid = String(row.paid_at ?? '').trim()
+  if (!created || !paid) return false
+  const c = bangkokYmdOf(created)
+  const p = bangkokYmdOf(paid)
+  return /^\d{4}-\d{2}-\d{2}$/.test(c) && /^\d{4}-\d{2}-\d{2}$/.test(p) && c < p
+}
+
+export function summarizeCashOvernightPaidOnDate(
+  orders: CashReconcileDrillOrderInput[],
+  options: {
+    businessDateForRow?: (row: CashReconcileOrderRow) => string
+    /** 결제 영업일 (= 조회일) */
+    paidBusinessDate: string
+  }
+): { orderCount: number; cashSales: number } {
+  let orderCount = 0
+  let cashSales = 0
+  const want = options.paidBusinessDate
+  for (const row of orders) {
+    const counted = resolveCashReconcileCountable(row)
+    if (!counted) continue
+    if (!isCashReconcileOvernightCalendar(row)) continue
+    const date = resolveCashReconcileBusinessDate(row, options.businessDateForRow)
+    if (date !== want) continue
+    orderCount += 1
+    cashSales = roundSettlementMoney(cashSales + counted.cash)
+  }
+  return { orderCount, cashSales }
 }
 
 /**

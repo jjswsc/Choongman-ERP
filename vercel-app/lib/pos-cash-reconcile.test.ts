@@ -8,7 +8,9 @@ import {
   aggregateCashReconcileRows,
   applyCashBankDepositsToRows,
   buildCashReconcileResult,
+  filterCashReconcileRowsByBusinessDateRange,
   listCashReconcileOrders,
+  summarizeCashOvernightPaidOnDate,
 } from '@/lib/pos-cash-reconcile'
 
 describe('aggregateCashReconcileRows', () => {
@@ -155,6 +157,81 @@ describe('listCashReconcileOrders', () => {
     expect(listed.orderCount).toBe(1)
     expect(listed.cashSales).toBe(10)
     expect(listed.orders[0]?.orderNo).toBe('D1')
+  })
+})
+
+describe('overnight cash on paid business day', () => {
+  /** Future …-033 유형: 23 오픈 · 24 결제 528 */
+  const overnight = {
+    id: 153669,
+    order_no: 'CMFUTUREPARK-20261023-033',
+    store_code: 'CM Future Park',
+    status: 'completed' as const,
+    payment_cash: 528,
+    total: 528,
+    created_at: '2026-10-23T07:58:29.479Z',
+    paid_at: '2026-10-24T04:40:45.379Z',
+  }
+  const sameDay = {
+    id: 1,
+    order_no: 'SAME',
+    store_code: 'CM Future Park',
+    status: 'completed' as const,
+    payment_cash: 100,
+    total: 100,
+    created_at: '2026-10-24T05:00:00.000Z',
+    paid_at: '2026-10-24T05:10:00.000Z',
+  }
+
+  it('buckets overnight cash on paid_at day not created_at day', () => {
+    const businessDateForRow = (row: {
+      paid_at?: string | null
+      created_at?: string | null
+    }) => {
+      const paid = String(row.paid_at ?? '').trim()
+      if (paid.startsWith('2026-10-24')) return '2026-10-24'
+      if (paid.startsWith('2026-10-23')) return '2026-10-23'
+      const created = String(row.created_at ?? '').trim()
+      if (created.startsWith('2026-10-23')) return '2026-10-23'
+      if (created.startsWith('2026-10-24')) return '2026-10-24'
+      return created.slice(0, 10)
+    }
+
+    const on23 = filterCashReconcileRowsByBusinessDateRange(
+      [overnight, sameDay],
+      '2026-10-23',
+      '2026-10-23',
+      businessDateForRow
+    )
+    const on24 = filterCashReconcileRowsByBusinessDateRange(
+      [overnight, sameDay],
+      '2026-10-24',
+      '2026-10-24',
+      businessDateForRow
+    )
+    expect(aggregateCashReconcileRows(on23, { businessDateForRow })).toHaveLength(0)
+    const rows24 = aggregateCashReconcileRows(on24, { businessDateForRow })
+    expect(rows24[0]?.orderCount).toBe(2)
+    expect(rows24[0]?.cashSales).toBe(628)
+  })
+
+  it('summarizeCashOvernightPaidOnDate counts only overnight', () => {
+    const businessDateForRow = (row: {
+      paid_at?: string | null
+      created_at?: string | null
+    }) => {
+      const paid = String(row.paid_at ?? '').trim()
+      if (paid.startsWith('2026-10-24')) return '2026-10-24'
+      const created = String(row.created_at ?? '').trim()
+      if (created.startsWith('2026-10-24')) return '2026-10-24'
+      return created.slice(0, 10)
+    }
+    const s = summarizeCashOvernightPaidOnDate([overnight, sameDay], {
+      businessDateForRow,
+      paidBusinessDate: '2026-10-24',
+    })
+    expect(s.orderCount).toBe(1)
+    expect(s.cashSales).toBe(528)
   })
 })
 

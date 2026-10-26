@@ -8,14 +8,15 @@ import {
   fetchPosSalesOrdersForBusinessRange,
   POS_SALES_CASH_DRILL_ROW_SELECT,
 } from '@/lib/pos-sales-fetch-rows'
-import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'
-import { resolvePosBusinessHoursFromContext } from '@/lib/pos-business-day-server'
 import { applyPosSalesCacheControl } from '@/lib/pos-sales-response-cache'
 import {
+  filterCashReconcileRowsByBusinessDateRange,
   listCashReconcileOrders,
+  summarizeCashOvernightPaidOnDate,
   type CashReconcileDrillOrderInput,
   type CashReconcileOrderRow,
 } from '@/lib/pos-cash-reconcile'
+import { makeCashReconcileBusinessDateForRow } from '@/lib/pos-cash-reconcile-business-date'
 
 export const maxDuration = 60
 
@@ -50,25 +51,33 @@ export async function GET(request: NextRequest) {
       storeCodes: stores.length > 0 ? stores : undefined,
       select: POS_SALES_CASH_DRILL_ROW_SELECT,
       queryLabel: 'posCashOrderDrillDown',
+      ordersDateBasis: 'either',
     })
 
-    const businessDateForRow = (row: CashReconcileOrderRow) => {
-      const raw = String(row.created_at ?? '').trim()
-      if (!raw) return ''
-      const d = new Date(
-        raw.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw.replace(' ', 'T')
-      )
-      if (Number.isNaN(d.getTime())) return String(raw).slice(0, 10)
-      const hours = resolvePosBusinessHoursFromContext(bizCtx, String(row.store_code ?? '').trim())
-      return getPosBusinessDateStrFromConfig(d, hours)
-    }
-
-    const listed = listCashReconcileOrders(rows as CashReconcileDrillOrderInput[], {
+    const businessDateForRow = makeCashReconcileBusinessDateForRow(bizCtx)
+    const dayFilter = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined
+    const rangeLo = dayFilter || startStr
+    const rangeHi = dayFilter || endStr
+    const cashRows = filterCashReconcileRowsByBusinessDateRange(
+      rows as CashReconcileOrderRow[],
+      rangeLo,
+      rangeHi,
+      businessDateForRow
+    ) as CashReconcileDrillOrderInput[]
+    const listed = listCashReconcileOrders(cashRows, {
       businessDateForRow,
       storeCode: store || undefined,
-      date: date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined,
+      date: dayFilter,
       limit,
     })
+    const overnightPaidDate = dayFilter || (startStr === endStr ? startStr : '')
+    const overnight =
+      overnightPaidDate && /^\d{4}-\d{2}-\d{2}$/.test(overnightPaidDate)
+        ? summarizeCashOvernightPaidOnDate(cashRows, {
+            businessDateForRow,
+            paidBusinessDate: overnightPaidDate,
+          })
+        : { orderCount: 0, cashSales: 0 }
 
     if (fetchTruncated || listed.truncated) headers.set('X-Sales-Truncated', '1')
 
@@ -78,6 +87,8 @@ export async function GET(request: NextRequest) {
         orders: listed.orders,
         orderCount: listed.orderCount,
         cashSales: listed.cashSales,
+        overnightOrderCount: overnight.orderCount,
+        overnightCashSales: overnight.cashSales,
         truncated: fetchTruncated || listed.truncated,
         store: store || null,
         date: date || null,

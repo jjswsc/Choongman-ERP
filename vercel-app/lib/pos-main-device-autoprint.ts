@@ -774,6 +774,7 @@ export async function printPaymentReceiptForOrder(
           items: rebuilt.items,
           orderNo: String(data.orderNo || rebuilt.orderNo || ''),
           receiptPrintedAt: data.receiptPrintedAt || rebuilt.receiptPrintedAt,
+          orderOpenedAt: data.orderOpenedAt || rebuilt.orderOpenedAt,
           serverOrderId: data.serverOrderId ?? rebuilt.serverOrderId ?? orderId,
         }
       }

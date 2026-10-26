@@ -802,7 +802,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
   const posOrderNoDigits = formatPosOrderNoDigitsOnly(String(receiptData.orderNo ?? '').trim())
   const receiptBarcodeUrl = d.receiptBarcode ? buildCode128BarcodeUrl(receiptOrderNoRaw) : ''
   const at = printedAt && !Number.isNaN(printedAt.getTime()) ? printedAt : new Date()
-  const printedAtStr = new Intl.DateTimeFormat('en-GB', {
+  const bangkokDateTimeFmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
     month: '2-digit',
@@ -811,7 +811,37 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-  }).format(at)
+  })
+  const printedAtStr = bangkokDateTimeFmt.format(at)
+  const bangkokYmd = (d: Date) =>
+    d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+  const openedRaw = String(receiptData.orderOpenedAt ?? '').trim()
+  let openedAtStr = ''
+  let showOvernightOpenDate = false
+  if (openedRaw) {
+    const openedDt = new Date(
+      openedRaw.includes('T') || /[zZ]|[+-]\d{2}:?\d{2}$/.test(openedRaw)
+        ? openedRaw
+        : openedRaw.replace(' ', 'T')
+    )
+    if (!Number.isNaN(openedDt.getTime())) {
+      openedAtStr = bangkokDateTimeFmt.format(openedDt)
+      showOvernightOpenDate = bangkokYmd(openedDt) < bangkokYmd(at)
+    }
+  }
+  const receiptDateRowsHtml = showOvernightOpenDate
+    ? `${receiptMetaRowHtml(
+        esc(tr('posReceiptPaidDate', '결제일')),
+        esc(printedAtStr)
+      )}${receiptMetaRowHtml(
+        esc(tr('posReceiptOpenDate', '오픈일')),
+        esc(openedAtStr)
+      )}`
+    : receiptMetaRowHtml(esc(tr('date', 'Date')), esc(printedAtStr))
+  const receiptDateSimpleHtml = showOvernightOpenDate
+    ? `<div class="simple-line"><b>${esc(tr('posReceiptPaidDate', '결제일'))}</b>: ${esc(printedAtStr)}</div>
+        <div class="simple-line"><b>${esc(tr('posReceiptOpenDate', '오픈일'))}</b>: ${esc(openedAtStr)}</div>`
+    : `<div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>`
   const isTaxInvoice = !!taxInvoice
   const serviceFeeAmtPrint = Math.max(0, Number(receiptData.serviceFeeAmt ?? 0) || 0)
   const discountAmtForBeforeVat = Math.max(
@@ -1104,7 +1134,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
             : ''
         }
         <div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${orderNoHeaderHtml}</div>
-        <div class="simple-line"><b>${esc(tr('date', 'Date'))}</b>: ${esc(printedAtStr)}</div>
+        ${receiptDateSimpleHtml}
         ${
           posOrderNoDigits
             ? `<div class="simple-line"><b>${esc(tr('posOrderNo', '주문번호'))}</b>: ${esc(posOrderNoDigits)}</div>`
@@ -1237,7 +1267,7 @@ export function buildPosPaymentReceiptDocumentHtml(params: BuildPosPaymentReceip
                 )
               : ''
           }
-          ${receiptMetaRowHtml(esc(tr('date', 'Date')), esc(printedAtStr))}
+          ${receiptDateRowsHtml}
           ${
             posOrderNoDigits
               ? receiptMetaRowHtml(esc(tr('posOrderNo', '주문번호')), esc(posOrderNoDigits))
