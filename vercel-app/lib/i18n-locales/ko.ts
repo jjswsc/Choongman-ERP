@@ -5417,11 +5417,11 @@ export const I18N_BASE_KO = {
   salesPaymentBreakdownCreditTitle: '결제수단별 매출 — 카드/지갑',
   salesPaymentMethodSummaryTitle: '결제수단별 매출',
   salesPaymentMethodSummaryHint:
-    '완료 주문 기준입니다. 현금, 신용카드, QR PromptPay, WeChat, Alipay, TrueMoney처럼 실제 받은 결제수단별로 나눕니다.',
+    '완료 주문·결제 영업일(paid_at) 기준입니다. 현금은 결산·시재와 같은 날로 잡습니다. 신용카드·QR·TrueMoney 등 실제 받은 수단별로 나눕니다.',
   salesPaymentBreakdownFootnote:
-    '배달·카드 표는 POS 결산에 저장한 breakdown(Visa/Grab 등)을 합산합니다. 결산 전 매장·미연동 건만 LINKPOS 또는 주문 배달액으로 보조합니다.',
+    '배달·카드 표는 POS 결산에 저장한 breakdown(Visa/Grab 등)을 합산합니다. 결산 전 매장·미연동 건만 LINKPOS 또는 주문 배달액으로 보조합니다. 주문 기반 현금은 결제 영업일입니다.',
   salesPaymentCashReconcileMismatch:
-    '결산 현금({settlement})과 완료 주문 현금 합({live})이 {diff} 다릅니다. POS 결산(마감)을 열면 주문 기준으로 맞춥니다(มัดจำ이 예전에 섞인 날은 경고하지 않음). 남으면 「현금 맞추기」.',
+    '결산 현금({settlement})과 주문 현금 합(결제 영업일, {live})이 {diff} 다릅니다. POS 결산을 열어 맞추거나 「현금 맞추기」를 누르세요(มัดจำ이 예전에 섞인 날은 경고하지 않음).',
   salesDeliveryPlatformFootnote:
     '비율은 배달 매출 합계 대비입니다. 과거 주문은 품목·메모에 남은 코드로 추정할 수 있습니다.',
   salesChannel: '채널',

@@ -5410,11 +5410,11 @@ Only matters the employee must handle personally on a working day:
   salesPaymentBreakdownCreditTitle: 'Sales Report by Card Type — Credit Card',
   salesPaymentMethodSummaryTitle: 'Sales by payment method',
   salesPaymentMethodSummaryHint:
-    'From completed orders. Split by the tender actually received: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
+    'Completed orders on the payment business day (paid_at). Cash matches settlement and till. Split by tender: Cash, Credit, QR, TrueMoney, etc.',
   salesPaymentBreakdownFootnote:
-    'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved.',
+    'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved. Order cash uses the payment business day.',
   salesPaymentCashReconcileMismatch:
-    'Settlement cash ({settlement}) differs from completed-order cash ({live}) by {diff}. Open POS settlement to align to orders (legacy deposit-mixed days are not flagged). If it remains, tap “Align cash”.',
+    'Settlement cash ({settlement}) differs from order cash on the payment business day ({live}) by {diff}. Open POS settlement to align, or tap “Align cash” (legacy deposit-mixed days are not flagged).',
   salesDeliveryPlatformFootnote:
     'Percentages are share of delivery sales only. Older orders may infer platform from line items.',
   salesChannel: 'Channel',

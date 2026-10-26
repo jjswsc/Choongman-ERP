@@ -17,6 +17,11 @@ import {
   respondPosSalesAnalyticsTimeout,
   tryFetchPosSalesAnalyticsAgg,
 } from '@/lib/pos-sales-analytics-rpc-server'
+import {
+  filterPosSalesRowsToPaidBusinessDay,
+  patchPosPaymentSummaryCash,
+  sumPosSalesPaymentCash,
+} from '@/lib/pos-sales-payment-paid-basis'
 
 type PaymentOrderRow = {
   order_type?: string | null
@@ -50,6 +55,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
+    const { rows, truncated, bizCtx } = await fetchPosSalesOrdersForBusinessRange({
+      request,
+      startStr,
+      endStr,
+      storeCodes: stores.length > 0 ? stores : undefined,
+      select: POS_SALES_PAYMENT_ROW_SELECT,
+      queryLabel: 'posSalesByPayment',
+      ordersDateBasis: 'either',
+    })
+
+    if (truncated) headers.set('X-Sales-Truncated', '1')
+
+    const paidRows = filterPosSalesRowsToPaidBusinessDay(
+      filterCompletedPosSalesRows(rows, orderTypesAllowed),
+      bizCtx,
+      startStr,
+      endStr
+    ) as PaymentOrderRow[]
+    const liveCashPaid = sumPosSalesPaymentCash(paidRows)
+
+    if (!truncated) {
+      headers.set('X-Pos-Sales-Source', 'fetch-paid')
+      const result = sortPosPaymentSalesRows(accumulatePosOrderPaymentSales(paidRows)).map(
+        ({ paymentKey, sales }) => ({ paymentKey, sales })
+      )
+      return NextResponse.json(result, { headers })
+    }
+
     const rpcRows = await tryFetchPosSalesAnalyticsAgg({
       request,
       startStr,
@@ -60,33 +93,25 @@ export async function GET(request: NextRequest) {
     })
 
     if (rpcRows) {
-      headers.set('X-Pos-Sales-Source', 'rpc')
-      const result = rpcRows
-        .map((r) => ({
-          paymentKey: String(r.payment_key ?? r.bucket_key ?? '').trim(),
-          sales: Number(r.total ?? 0) || 0,
-        }))
-        .filter((r) => r.paymentKey && r.sales > 0)
-        .sort((a, b) => b.sales - a.sales)
+      headers.set('X-Pos-Sales-Source', 'rpc+cash-paid')
+      const result = sortPosPaymentSalesRows(
+        patchPosPaymentSummaryCash(
+          rpcRows
+            .map((r) => ({
+              paymentKey: String(r.payment_key ?? r.bucket_key ?? '').trim(),
+              sales: Number(r.total ?? 0) || 0,
+            }))
+            .filter((r) => r.paymentKey && r.sales > 0),
+          liveCashPaid
+        )
+      ).map(({ paymentKey, sales }) => ({ paymentKey, sales }))
       return NextResponse.json(result, { headers })
     }
 
-    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
-      request,
-      startStr,
-      endStr,
-      storeCodes: stores.length > 0 ? stores : undefined,
-      select: POS_SALES_PAYMENT_ROW_SELECT,
-      queryLabel: 'posSalesByPayment',
-    })
-
-    if (truncated) headers.set('X-Sales-Truncated', '1')
-    headers.set('X-Pos-Sales-Source', 'fetch')
-
-    const result = sortPosPaymentSalesRows(
-      accumulatePosOrderPaymentSales(filterCompletedPosSalesRows(rows, orderTypesAllowed) as PaymentOrderRow[])
-    ).map(({ paymentKey, sales }) => ({ paymentKey, sales }))
-
+    headers.set('X-Pos-Sales-Source', 'fetch-paid-truncated')
+    const result = sortPosPaymentSalesRows(accumulatePosOrderPaymentSales(paidRows)).map(
+      ({ paymentKey, sales }) => ({ paymentKey, sales })
+    )
     return NextResponse.json(result, { headers })
   } catch (e) {
     if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)

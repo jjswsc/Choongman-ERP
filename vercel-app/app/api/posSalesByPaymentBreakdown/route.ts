@@ -36,7 +36,6 @@ import {
 } from '@/lib/linkpos-tender-classify'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
-import { loadPosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import { expandSalesStoreCodesForFilterAsync } from '@/lib/pos-sales-store-filter'
 import {
   isPosSalesAnalyticsRpcTimeoutError,
@@ -50,6 +49,11 @@ import {
 import { posDepositCashDrawerDelta } from '@/lib/pos-deposit-domain'
 import { buildSettlementCashReconcile } from '@/lib/pos-settlement-sync-after-pay-correct'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
+import {
+  filterPosSalesRowsToPaidBusinessDay,
+  patchPosPaymentSummaryCash,
+  sumPosSalesPaymentCash,
+} from '@/lib/pos-sales-payment-paid-basis'
 
 async function loadPaymentMethodNames(): Promise<Record<string, string>> {
   const map: Record<string, string> = {}
@@ -219,18 +223,25 @@ export async function GET(request: NextRequest) {
     const storesWithCreditSettlement = storesWithSettlementCreditBreakdown(settlements)
     const storesWithDeliverySettlement = storesWithSettlementDeliveryBreakdown(settlements)
 
-    const { rows, truncated } = await fetchPosSalesOrdersForBusinessRange({
+    const { rows, truncated, bizCtx } = await fetchPosSalesOrdersForBusinessRange({
       request,
       startStr,
       endStr,
       storeCodes: stores.length > 0 ? stores : undefined,
       select: POS_SALES_PAYMENT_ROW_SELECT,
       queryLabel: 'posSalesByPaymentBreakdown',
+      /** overnight 포함 봉투 후 결제 영업일 필터(결산 cash_amt 와 동일 축) */
+      ordersDateBasis: 'either',
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
 
-    const paidRows = filterCompletedPosSalesRows(rows, orderTypesAllowed)
+    const paidRows = filterPosSalesRowsToPaidBusinessDay(
+      filterCompletedPosSalesRows(rows, orderTypesAllowed),
+      bizCtx,
+      startStr,
+      endStr
+    )
 
     let deliveryByChannel: { channelKey: string; sales: number }[]
     if (Object.keys(deliveryFromSettlement).some((k) => (deliveryFromSettlement[k] ?? 0) > 0.005)) {
@@ -284,7 +295,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const bizCtx = await loadPosBusinessDaySettingsContext({ storeCode: stores[0] || null })
     const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
     const attemptFilter = [
       `created_at=gte.${encodeURIComponent(startISO)}`,
@@ -348,32 +358,31 @@ export async function GET(request: NextRequest) {
       if (!isPosSalesAnalyticsRpcTimeoutError(e)) throw e
     }
 
+    const liveCashPaidBasis = sumPosSalesPaymentCash(paidRows)
     let summary: PosPaymentSalesBucketRow[]
     const detailedSummary = sortPosPaymentSalesRows(
       accumulatePosOrderPaymentSales(paidRows, await loadPaymentMethodNames())
     )
     if (!truncated) {
-      headers.set('X-Pos-Sales-Payment-Summary', 'orders')
+      headers.set('X-Pos-Sales-Payment-Summary', 'orders-paid')
       summary = detailedSummary
     } else if (summaryRpc) {
-      headers.set('X-Pos-Sales-Payment-Summary', 'rpc')
-      summary = summaryRpc
-        .map((r) => ({
-          paymentKey: String(r.payment_key ?? r.bucket_key ?? '').trim(),
-          sales: Number(r.total ?? 0) || 0,
-        }))
-        .filter((r) => r.paymentKey && r.sales > 0)
+      headers.set('X-Pos-Sales-Payment-Summary', 'rpc+cash-paid')
+      summary = patchPosPaymentSummaryCash(
+        summaryRpc
+          .map((r) => ({
+            paymentKey: String(r.payment_key ?? r.bucket_key ?? '').trim(),
+            sales: Number(r.total ?? 0) || 0,
+          }))
+          .filter((r) => r.paymentKey && r.sales > 0),
+        liveCashPaidBasis
+      )
     } else {
-      headers.set('X-Pos-Sales-Payment-Summary', 'orders-truncated')
+      headers.set('X-Pos-Sales-Payment-Summary', 'orders-paid-truncated')
       summary = detailedSummary
     }
 
-    const liveCashFromSummary = Math.max(
-      0,
-      Math.round(
-        (Number(summary.find((r) => String(r.paymentKey).toLowerCase() === 'cash')?.sales ?? 0) || 0) * 100
-      ) / 100
-    )
+    const liveCashFromSummary = liveCashPaidBasis
     const settlementCashFromCredit = Math.max(
       0,
       Math.round(
