@@ -1,6 +1,8 @@
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
 import { appendSaasTenantFilter, type SaasTenantScope, LEGACY_SAAS_TENANT_SCOPE } from '@/lib/saas-tenant-scope'
 import {
+  POS_OPEN_TABLE_ROW_SELECT,
   POS_OPEN_TABLE_STATUSES,
   rowCountsTowardOpenTable,
   type PosOpenTableOrderRow,
@@ -16,8 +18,8 @@ import {
   isSupervisorRole,
 } from '@/lib/permissions'
 
-const UNPAID_HALL_SELECT =
-  'id,order_no,table_name,total,status,created_at,store_code,order_type,is_advance,scheduled_at,advance_checked_in_at'
+/** 미결제 홀 — is_advance 등 선주문 컬럼은 레거시 DB에 없을 수 있어 열지 않음 (open-table totals 와 동일) */
+const UNPAID_HALL_SELECT = `id,order_no,${POS_OPEN_TABLE_ROW_SELECT}`
 
 type DbUnpaidRow = PosOpenTableOrderRow & {
   id?: number | string | null
@@ -51,10 +53,19 @@ export async function listUnpaidHallOrdersForStore(params: {
     `&status=in.(${statusIn})` +
     `&order=created_at.asc`
   const filter = appendSaasTenantFilter(base, tenantScope, 'pos_orders')
-  const rows = (await supabaseSelectFilter('pos_orders', filter, {
-    limit,
-    select: UNPAID_HALL_SELECT,
-  })) as DbUnpaidRow[] | null
+  let rows: DbUnpaidRow[] | null = null
+  try {
+    rows = (await supabaseSelectFilterStrippingUnknownColumns(
+      'pos_orders',
+      filter,
+      { limit, select: UNPAID_HALL_SELECT },
+      'listUnpaidHallOrdersForStore'
+    )) as DbUnpaidRow[] | null
+  } catch (e) {
+    /** 스키마·조회 오류로 마감 전체가 막히지 않게 — 미결제 검사만 스킵 */
+    console.error('listUnpaidHallOrdersForStore:', e)
+    return []
+  }
 
   const out: UnpaidHallOrderSummary[] = []
   for (const row of rows || []) {
