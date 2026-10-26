@@ -110,8 +110,8 @@ export async function GET(request: NextRequest) {
         storeCodes: stores.length > 0 ? stores : undefined,
         select: POS_SALES_PAYMENT_ROW_SELECT,
         queryLabel: 'posCashReconcile',
-        /** 전날 오픈·당일 결제 포함 → 아래에서 결제 영업일로 재필터 */
-        ordersDateBasis: 'either',
+        /** 오픈(판매) 영업일 — Fang/회계: 현금=판매일 */
+        ordersDateBasis: 'created',
       }),
       withTimeoutFallback(
         fetchCashBankDeposits({

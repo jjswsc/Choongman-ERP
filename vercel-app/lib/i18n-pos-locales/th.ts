@@ -1236,9 +1236,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posCashTillVsSalesLine: 'ยอดขายเงินสด {cash} · ยอดรับ-จ่ายลิ้นชัก {till} · ส่วนต่าง {diff}',
     posCashTillVsSalesHint:
       'ถอนเงินให้ตรงกับ「ยอดขายเงินสดรายวัน」ทางขวาครับ การ์ดซ้ายคือผลรวมนำเข้า/ถอนลิ้นชัก ไม่ใช่ตัวเลขเดียวกันครับ',
-    posCashOvernightTitle: 'เปิดออเดอร์เมื่อวาน · ชำระวันนี้ (เงินสด)',
+    posCashOvernightTitle: 'เปิดวันนี้ · ชำระวันถัดไป (เงินสด)',
     posCashOvernightLine:
-      '{count} รายการ · ฿{amount} (รวมในยอดขายเงินสดรายวัน · วันทำการชำระ)',
+      '{count} รายการ · ฿{amount} (รวมในยอดขายเงินสดรายวัน · วันเปิดออเดอร์/วันขาย)',
     posReceiptPaidDate: 'วันชำระ',
     posReceiptOpenDate: 'วันเปิดออเดอร์',
     posDrawerCashDiff: 'ส่วนต่างลิ้นชัก (จริง-คาดการณ์)',

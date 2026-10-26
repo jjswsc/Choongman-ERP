@@ -160,8 +160,8 @@ describe('listCashReconcileOrders', () => {
   })
 })
 
-describe('overnight cash on paid business day', () => {
-  /** Future …-033 유형: 23 오픈 · 24 결제 528 */
+describe('overnight cash on open business day', () => {
+  /** Future …-033 유형: 23 오픈 · 24 결제 528 — Fang: 현금은 오픈일 23 */
   const overnight = {
     id: 153669,
     order_no: 'CMFUTUREPARK-20261023-033',
@@ -183,14 +183,11 @@ describe('overnight cash on paid business day', () => {
     paid_at: '2026-10-24T05:10:00.000Z',
   }
 
-  it('buckets overnight cash on paid_at day not created_at day', () => {
+  it('buckets overnight cash on created_at day not paid_at day', () => {
     const businessDateForRow = (row: {
       paid_at?: string | null
       created_at?: string | null
     }) => {
-      const paid = String(row.paid_at ?? '').trim()
-      if (paid.startsWith('2026-10-24')) return '2026-10-24'
-      if (paid.startsWith('2026-10-23')) return '2026-10-23'
       const created = String(row.created_at ?? '').trim()
       if (created.startsWith('2026-10-23')) return '2026-10-23'
       if (created.startsWith('2026-10-24')) return '2026-10-24'
@@ -209,26 +206,27 @@ describe('overnight cash on paid business day', () => {
       '2026-10-24',
       businessDateForRow
     )
-    expect(aggregateCashReconcileRows(on23, { businessDateForRow })).toHaveLength(0)
+    const rows23 = aggregateCashReconcileRows(on23, { businessDateForRow })
+    expect(rows23[0]?.orderCount).toBe(1)
+    expect(rows23[0]?.cashSales).toBe(528)
     const rows24 = aggregateCashReconcileRows(on24, { businessDateForRow })
-    expect(rows24[0]?.orderCount).toBe(2)
-    expect(rows24[0]?.cashSales).toBe(628)
+    expect(rows24[0]?.orderCount).toBe(1)
+    expect(rows24[0]?.cashSales).toBe(100)
   })
 
-  it('summarizeCashOvernightPaidOnDate counts only overnight', () => {
+  it('summarizeCashOvernightPaidOnDate counts overnight on open day', () => {
     const businessDateForRow = (row: {
       paid_at?: string | null
       created_at?: string | null
     }) => {
-      const paid = String(row.paid_at ?? '').trim()
-      if (paid.startsWith('2026-10-24')) return '2026-10-24'
       const created = String(row.created_at ?? '').trim()
+      if (created.startsWith('2026-10-23')) return '2026-10-23'
       if (created.startsWith('2026-10-24')) return '2026-10-24'
       return created.slice(0, 10)
     }
     const s = summarizeCashOvernightPaidOnDate([overnight, sameDay], {
       businessDateForRow,
-      paidBusinessDate: '2026-10-24',
+      paidBusinessDate: '2026-10-23',
     })
     expect(s.orderCount).toBe(1)
     expect(s.cashSales).toBe(528)

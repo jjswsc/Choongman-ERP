@@ -1,6 +1,6 @@
 /**
  * 매출관리「결제/카드」주문 집계 — 결산·시재 현금과 동일하게
- * paid_at(없으면 created_at) 영업일로 필터.
+ * created_at(오픈/판매일, 없으면 paid_at) 영업일로 필터.
  */
 import type { PosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
 import {
@@ -41,7 +41,7 @@ export function sumPosSalesPaymentCash(rows: { payment_cash?: number | null }[])
   return Math.round(sum * 100) / 100
 }
 
-/** RPC·오픈일 집계 summary의 cash 행을 결제 영업일 합으로 덮어씀 */
+/** RPC summary의 cash 행을 오픈 영업일 합으로 덮어씀 */
 export function patchPosPaymentSummaryCash(
   summary: PosPaymentSalesBucketRow[],
   liveCash: number

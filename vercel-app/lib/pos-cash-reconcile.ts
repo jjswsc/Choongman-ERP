@@ -19,16 +19,17 @@ export type CashReconcileOrderRow = {
 }
 
 /**
- * 현금 채널 집계 시각: 결제일 우선(overnight = 오픈≠결제).
- * paid_at 없으면 created_at 폴백(구 데이터).
+ * 현금 채널·시재·결산 집계 시각: 오픈(판매)일 우선 — 회계·현장(Fang) 요청.
+ * created_at 없으면 paid_at 폴백.
+ * (영수증에는 별도로 결제일 표시 가능)
  */
 export function cashReconcileEventTimestamp(row: {
   paid_at?: string | null
   created_at?: string | null
 }): string {
-  const paid = String(row.paid_at ?? '').trim()
-  if (paid) return paid
-  return String(row.created_at ?? '').trim()
+  const created = String(row.created_at ?? '').trim()
+  if (created) return created
+  return String(row.paid_at ?? '').trim()
 }
 
 /** ISO/DB 시각 → Date (파싱 실패 시 null) */
@@ -40,7 +41,7 @@ export function parseCashReconcileEventDate(raw: string): Date | null {
 }
 
 /**
- * 조회 기간 안(결제 영업일)인 현금 행만 — either fetch 후 집계 전 필수.
+ * 조회 기간 안(오픈 영업일)인 현금 행만.
  */
 export function filterCashReconcileRowsByBusinessDateRange(
   rows: CashReconcileOrderRow[],
@@ -161,11 +162,15 @@ export function isCashReconcileOvernightCalendar(
   return /^\d{4}-\d{2}-\d{2}$/.test(c) && /^\d{4}-\d{2}-\d{2}$/.test(p) && c < p
 }
 
+/**
+ * 오픈일 기준 조회일(D)에 포함된 overnight — 전날/당일 오픈·다음날 결제.
+ * 현금은 D에 잡히고, 안내용으로 건수·금액만 표시.
+ */
 export function summarizeCashOvernightPaidOnDate(
   orders: CashReconcileDrillOrderInput[],
   options: {
     businessDateForRow?: (row: CashReconcileOrderRow) => string
-    /** 결제 영업일 (= 조회일) */
+    /** 오픈 영업일 (= 조회일). 키 이름은 호환용 */
     paidBusinessDate: string
   }
 ): { orderCount: number; cashSales: number } {

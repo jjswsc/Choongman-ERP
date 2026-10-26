@@ -144,6 +144,9 @@ export type PosTodaySalesSummary = {
   completedTotal: number
   completedCash: number
   pendingCount: number
+  /** dateBasis=paid 하루 조회 시: 전날 오픈·당일 결제 현금 */
+  overnightOrderCount?: number
+  overnightCashSales?: number
   byStore?: Record<string, PosTodaySalesSummary>
 }
 
@@ -156,6 +159,11 @@ export async function getPosTodaySales(params?: {
   storeCodes?: string[]
   startStr?: string
   endStr?: string
+  /**
+   * paid: 특수 조회용. 시재·결산 현금 기본은 created(오픈/판매일).
+   * 기본(omit)=created — POS 헤더 등 기존 동작.
+   */
+  dateBasis?: 'created' | 'paid' | 'either'
   /** true면 IDB 즉시 반환 없이 네트워크 조회를 기다림(헤더 새로고침 등) */
   forceNetwork?: boolean
 }): Promise<PosTodaySalesSummary> {
@@ -168,6 +176,7 @@ export async function getPosTodaySales(params?: {
   else if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
+  if (params?.dateBasis && params.dateBasis !== 'created') q.set('dateBasis', params.dateBasis)
   /** 수동 새로고침 — 브라우저·중간 캐시가 동일 URL을 재사용하지 않도록 */
   if (params?.forceNetwork) q.set('_', String(Date.now()))
   const qs = q.toString()
@@ -176,12 +185,15 @@ export async function getPosTodaySales(params?: {
     storeCodes.length > 0
       ? [...storeCodes].sort().join(',')
       : params?.storeCode?.trim() || ''
-  const cacheKey = `erp:posTodaySales:${storeKey}:${params?.startStr?.trim() || ''}:${params?.endStr?.trim() || ''}`
+  const basisKey = params?.dateBasis && params.dateBasis !== 'created' ? `:${params.dateBasis}` : ''
+  const cacheKey = `erp:posTodaySales:${storeKey}:${params?.startStr?.trim() || ''}:${params?.endStr?.trim() || ''}${basisKey}`
   const fallback: PosTodaySalesSummary = {
     completedCount: 0,
     completedTotal: 0,
     completedCash: 0,
     pendingCount: 0,
+    overnightOrderCount: 0,
+    overnightCashSales: 0,
   }
   return fetchPosCatalogCached<PosTodaySalesSummary>(cacheKey, url, fallback, {
     forceNetwork: Boolean(params?.forceNetwork),

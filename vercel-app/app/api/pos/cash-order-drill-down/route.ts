@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       storeCodes: stores.length > 0 ? stores : undefined,
       select: POS_SALES_CASH_DRILL_ROW_SELECT,
       queryLabel: 'posCashOrderDrillDown',
-      ordersDateBasis: 'either',
+      ordersDateBasis: 'created',
     })
 
     const businessDateForRow = makeCashReconcileBusinessDateForRow(bizCtx)

@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   const endStrParam = String(searchParams.get('endStr') || '').trim()
   const forceFetch =
     searchParams.get('forceFetch') === '1' || searchParams.get('forceFetch') === 'true'
-  /** paid: 시재 현금 등 — 결제 영업일(overnight 포함). 기본 created = 기존 POS 헤더 */
+  /** created(기본): 오픈/판매 영업일 — 시재·결산 현금과 동일. paid/either 는 특수 조회용 */
   const ordersDateBasis = parsePosOrdersDateBasis(
     searchParams.get('dateBasis') || searchParams.get('ordersDateBasis')
   )
@@ -132,24 +132,22 @@ export async function GET(request: NextRequest) {
     let rows = rowsRaw
     let overnightOrderCount = 0
     let overnightCashSales = 0
-    if (ordersDateBasis === 'paid' || ordersDateBasis === 'either') {
-      const businessDateForRow = makeCashReconcileBusinessDateForRow(bizCtx)
-      if (ordersDateBasis === 'paid') {
-        rows = filterCashReconcileRowsByBusinessDateRange(
-          rowsRaw as CashReconcileOrderRow[],
-          startStr,
-          endStr,
-          businessDateForRow
-        ) as typeof rowsRaw
-      }
-      if (startStr === endStr) {
-        const overnight = summarizeCashOvernightPaidOnDate(rows as CashReconcileDrillOrderInput[], {
-          businessDateForRow,
-          paidBusinessDate: startStr,
-        })
-        overnightOrderCount = overnight.orderCount
-        overnightCashSales = overnight.cashSales
-      }
+    const businessDateForRow = makeCashReconcileBusinessDateForRow(bizCtx)
+    if (ordersDateBasis === 'paid') {
+      rows = filterCashReconcileRowsByBusinessDateRange(
+        rowsRaw as CashReconcileOrderRow[],
+        startStr,
+        endStr,
+        businessDateForRow
+      ) as typeof rowsRaw
+    }
+    if (startStr === endStr) {
+      const overnight = summarizeCashOvernightPaidOnDate(rows as CashReconcileDrillOrderInput[], {
+        businessDateForRow,
+        paidBusinessDate: startStr,
+      })
+      overnightOrderCount = overnight.orderCount
+      overnightCashSales = overnight.cashSales
     }
 
     const byStore =

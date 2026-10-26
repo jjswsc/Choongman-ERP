@@ -4717,13 +4717,13 @@ Only matters the employee must handle personally on a working day:
   helpHow_admin_petty_cash:
     '① Choose a store and period, then search. A single store shows current balance at the top.\n② List and Monthly both include a running-balance column. Use Monthly to set account subjects and to edit/delete. The account chosen here is the debit on the tax book.\n③ HQ, accounting, and office-based staff can pick any store; store accounts see their store (plus extra stores if allowed).',
   helpSum_admin_pos_cash:
-    'Drawer/safe cash in/out and sales-cash withdrawals. Daily cash sales (and withdrawal reference) use the payment business day (paid_at), including overnight open/pay.',
+    'Drawer/safe cash in/out and sales-cash withdrawals. Daily cash sales (and withdrawal reference) use the open/sale business day, including overnight open/pay.',
   helpHow_admin_pos_cash:
-    '① Set period and store, then query.\n② Daily cash sales uses payment business day (paid_at). Click the card for the order list; overnight (opened yesterday, paid today) shows a banner. Withdraw against that amount (it may differ from till net).\n③ Register deposits/withdrawals and sales withdrawals, then reconcile to physical cash and bank deposits.',
+    '① Set period and store, then query.\n② Daily cash sales uses open/sale business day. Click the card for the order list; overnight (opened yesterday, paid today) shows a banner. Withdraw against that amount (it may differ from till net).\n③ Register deposits/withdrawals and sales withdrawals, then reconcile to physical cash and bank deposits.',
   helpSum_admin_pos_settlement:
     'Daily POS settlement and channel clearing (card/delivery fees). Order totals use payment time (business day) to align with EDC. Bank: Sales collection; fees: channel settlement journal.',
   helpHow_admin_pos_settlement:
-    'System sales and tender totals use payment time (paid_at) on the store business day (tables opened yesterday and paid today count today). Before close, check settlement warnings if unpaid hall tables remain. After settlement entry, use Channel settlement for GROSS/NET/fee journals. Do not use revenue_* bank categories. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
+    'System sales and cash use the open/sale business day (overnight pay still counts on the open day). Payment time is for receipts only. Before close, check unpaid hall tables. After settlement entry, use Channel settlement for GROSS/NET/fee journals. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
   helpSum_admin_expense_management:
     'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use PV (with VAT) or PP (no VAT).',
   helpHow_admin_expense_management:
@@ -4975,17 +4975,17 @@ Only matters the employee must handle personally on a working day:
   salesChannelReconcileKbankQrDays: 'KBank QR by day',
   salesChannelReconcileCashDays: 'Cash by day',
   salesCashReconcileIntro:
-    'POS cash uses the payment business day (paid_at)—tables opened yesterday and paid today count on the pay day. Bank cash is store account 4140 (recognition date, or deposit date minus one if empty). Expand a row to match payment day vs bank recognition date. Do not mix with delivery apps, QR, or card.',
+    'POS cash uses the open/sale business day—tables opened yesterday and paid today still count on the open day. Bank cash is store account 4140 (recognition date, or deposit date minus one if empty). Expand a row to match sale day vs bank recognition date. Do not mix with delivery apps, QR, or card.',
   salesCashKpiSales: 'POS cash total',
-  salesCashKpiSalesHint: 'Completed orders payment_cash (payment business day · paid_at)',
+  salesCashKpiSalesHint: 'Completed orders payment_cash (open/sale business day)',
   salesCashKpiCount: 'Cash payment count',
-  salesCashKpiCountHint: 'Completed orders with payment_cash > 0 (payment business day)',
+  salesCashKpiCountHint: 'Completed orders with payment_cash > 0 (open/sale business day)',
   salesCashKpiBank: 'Bank cash deposit',
   salesCashKpiBankHint: 'Store bank account subject 4140 (recognition date)',
   salesCashKpiDiff: 'Diff (bank−POS)',
   salesCashKpiDiffHint: 'Under 1 THB counts as a match',
   salesCashReconcileNote:
-    'Drawer count and bank deposit are separate. Match bank recognition date (or deposit date minus one) to the payment business day (paid_at). Empty bank cells mean no cash deposit was registered. Card and QR are not on this tab.',
+    'Drawer count and bank deposit are separate. Match bank recognition date (or deposit date minus one) to the open/sale business day. Empty bank cells mean no cash deposit was registered. Card and QR are not on this tab.',
   salesCashReconcileEmpty: 'No POS cash payments or bank cash deposits in the selected period.',
   salesCashColCount: 'Count',
   salesCashColPos: 'POS cash',
@@ -4993,7 +4993,7 @@ Only matters the employee must handle personally on a working day:
   salesCashColDiff: 'Diff',
   salesCashDrillTitle: 'Cash payment orders',
   salesCashDrillHint:
-    'Completed orders with payment_cash > 0 (payment business day). Tap an order number to open Receipts management.',
+    'Completed orders with payment_cash > 0 (open/sale business day). Tap an order number to open Receipts management.',
   salesCashDrillLoading: 'Loading orders…',
   salesCashDrillEmpty: 'No cash payment orders match this filter.',
   salesCashDrillLoadFail: 'Could not load orders.',
@@ -5010,9 +5010,9 @@ Only matters the employee must handle personally on a working day:
   posCashTillVsSalesLine: 'Cash sales {cash} · Till net {till} · Gap {diff}',
   posCashTillVsSalesHint:
     'Withdraw against the right-hand “Daily cash sales”. The left card is till in/out net—not the same number.',
-  posCashOvernightTitle: 'Opened yesterday · paid today (cash)',
+  posCashOvernightTitle: 'Opened today · paid next day (cash)',
   posCashOvernightLine:
-    '{count} orders · ฿{amount} (included in daily cash sales · payment business day)',
+    '{count} orders · ฿{amount} (included in open-day cash · pay date for reference only)',
   salesAppReconcileIntro:
     'Grab, LINE MAN, and Shopee use the same layout. Combined = delivery + in-store app pay (dine). Dine is not counted as delivery orders. Cash/card dine-in is excluded. Estimated payout uses the configured fee %. Bank deposit is that store’s bank account subjects 4111 Grab, 4112 LINE MAN, 4113 Shopee. Expand a row to match Bangkok calendar date to bank recognition date (usually next-day payout) and find mismatches.',
   salesAppReconcileKpiNet: 'App net sales',
@@ -5410,11 +5410,11 @@ Only matters the employee must handle personally on a working day:
   salesPaymentBreakdownCreditTitle: 'Sales Report by Card Type — Credit Card',
   salesPaymentMethodSummaryTitle: 'Sales by payment method',
   salesPaymentMethodSummaryHint:
-    'Completed orders on the payment business day (paid_at). Cash matches settlement and till. Split by tender: Cash, Credit, QR, TrueMoney, etc.',
+    'Completed orders on the open/sale business day. Cash matches settlement and till. Split by tender: Cash, Credit, QR, TrueMoney, etc.',
   salesPaymentBreakdownFootnote:
-    'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved. Order cash uses the payment business day.',
+    'Delivery & card tables sum POS settlement breakdowns (Visa/Grab etc.). LINKPOS or order delivery amounts fill gaps before settlement is saved. Order cash uses the open/sale business day.',
   salesPaymentCashReconcileMismatch:
-    'Settlement cash ({settlement}) differs from order cash on the payment business day ({live}) by {diff}. Open POS settlement to align, or tap “Align cash” (legacy deposit-mixed days are not flagged).',
+    'Settlement cash ({settlement}) differs from order cash on the open/sale business day ({live}) by {diff}. Open POS settlement to align, or tap “Align cash” (legacy deposit-mixed days are not flagged).',
   salesDeliveryPlatformFootnote:
     'Percentages are share of delivery sales only. Older orders may infer platform from line items.',
   salesChannel: 'Channel',
@@ -7949,7 +7949,7 @@ orderItemQty: 'Qty',
   helpSum_admin_sales_management:
     'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check matches delivery apps, QR, and card on Bangkok calendar dates (QR uses bank deposit date; delivery/card use recognition date for next-day payout) so you can find mismatched days.',
   helpHow_admin_sales_management:
-    '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ Store compare → Sales by store & category: compare stores by dine-in·delivery·takeout for the selected period, plus delivery-app breakdown (same layout as the daily chart, without unpaid open tables).\n④ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n⑤ Reuse filters via URL or Save preset.\n⑥ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑦ Business hours tab adjusts POS business-day boundaries.\n⑧ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑨ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑩ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑪ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑫ Channel check → Cash: POS cash uses payment business day (paid_at)—overnight open/pay counts on the pay day. Match till/withdraw and store bank 4140 on payment day vs recognition date. Click cash count or amount for the order list.\n⑬ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑭ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
+    '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic; read the hint under the topic buttons.\n③ Store compare → Sales by store & category: compare stores by dine-in·delivery·takeout for the selected period, plus delivery-app breakdown (same layout as the daily chart, without unpaid open tables).\n④ On Date/Time trend and Store × period, use Weekday to keep only selected days of week (business day).\n⑤ Reuse filters via URL or Save preset.\n⑥ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑦ Business hours tab adjusts POS business-day boundaries.\n⑧ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑨ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑩ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑪ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑫ Channel check → Cash: POS cash uses open/sale business day—overnight pay still counts on the open day. Match till/withdraw and store bank 4140 on payment day vs recognition date. Click cash count or amount for the order list.\n⑬ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑭ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
   salesSubnavAria: 'Sales menu',
   salesTopicHintLabel: 'This report',
   salesOverviewIntro:

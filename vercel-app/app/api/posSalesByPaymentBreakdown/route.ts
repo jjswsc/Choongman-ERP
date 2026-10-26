@@ -230,8 +230,8 @@ export async function GET(request: NextRequest) {
       storeCodes: stores.length > 0 ? stores : undefined,
       select: POS_SALES_PAYMENT_ROW_SELECT,
       queryLabel: 'posSalesByPaymentBreakdown',
-      /** overnight 포함 봉투 후 결제 영업일 필터(결산 cash_amt 와 동일 축) */
-      ordersDateBasis: 'either',
+      /** 오픈(판매) 영업일 — 결산·시재 현금과 동일 */
+      ordersDateBasis: 'created',
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
@@ -364,10 +364,10 @@ export async function GET(request: NextRequest) {
       accumulatePosOrderPaymentSales(paidRows, await loadPaymentMethodNames())
     )
     if (!truncated) {
-      headers.set('X-Pos-Sales-Payment-Summary', 'orders-paid')
+      headers.set('X-Pos-Sales-Payment-Summary', 'orders-open')
       summary = detailedSummary
     } else if (summaryRpc) {
-      headers.set('X-Pos-Sales-Payment-Summary', 'rpc+cash-paid')
+      headers.set('X-Pos-Sales-Payment-Summary', 'rpc+cash-open')
       summary = patchPosPaymentSummaryCash(
         summaryRpc
           .map((r) => ({
@@ -378,7 +378,7 @@ export async function GET(request: NextRequest) {
         liveCashPaidBasis
       )
     } else {
-      headers.set('X-Pos-Sales-Payment-Summary', 'orders-paid-truncated')
+      headers.set('X-Pos-Sales-Payment-Summary', 'orders-open-truncated')
       summary = detailedSummary
     }
 

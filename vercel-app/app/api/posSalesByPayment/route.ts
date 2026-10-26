@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       storeCodes: stores.length > 0 ? stores : undefined,
       select: POS_SALES_PAYMENT_ROW_SELECT,
       queryLabel: 'posSalesByPayment',
-      ordersDateBasis: 'either',
+      ordersDateBasis: 'created',
     })
 
     if (truncated) headers.set('X-Sales-Truncated', '1')
@@ -73,10 +73,10 @@ export async function GET(request: NextRequest) {
       startStr,
       endStr
     ) as PaymentOrderRow[]
-    const liveCashPaid = sumPosSalesPaymentCash(paidRows)
+    const liveCashOpen = sumPosSalesPaymentCash(paidRows)
 
     if (!truncated) {
-      headers.set('X-Pos-Sales-Source', 'fetch-paid')
+      headers.set('X-Pos-Sales-Source', 'fetch-open')
       const result = sortPosPaymentSalesRows(accumulatePosOrderPaymentSales(paidRows)).map(
         ({ paymentKey, sales }) => ({ paymentKey, sales })
       )
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (rpcRows) {
-      headers.set('X-Pos-Sales-Source', 'rpc+cash-paid')
+      headers.set('X-Pos-Sales-Source', 'rpc+cash-open')
       const result = sortPosPaymentSalesRows(
         patchPosPaymentSummaryCash(
           rpcRows
@@ -102,13 +102,13 @@ export async function GET(request: NextRequest) {
               sales: Number(r.total ?? 0) || 0,
             }))
             .filter((r) => r.paymentKey && r.sales > 0),
-          liveCashPaid
+          liveCashOpen
         )
       ).map(({ paymentKey, sales }) => ({ paymentKey, sales }))
       return NextResponse.json(result, { headers })
     }
 
-    headers.set('X-Pos-Sales-Source', 'fetch-paid-truncated')
+    headers.set('X-Pos-Sales-Source', 'fetch-open-truncated')
     const result = sortPosPaymentSalesRows(accumulatePosOrderPaymentSales(paidRows)).map(
       ({ paymentKey, sales }) => ({ paymentKey, sales })
     )

@@ -13,7 +13,7 @@ const BIZ_CTX: PosBusinessDaySettingsContext = {
 }
 
 describe('filterPosSalesRowsToPaidBusinessDay', () => {
-  it('puts overnight afternoon pay on pay day not open day', () => {
+  it('puts overnight cash on open day not pay day', () => {
     const rows = [
       {
         order_no: '114',
@@ -31,12 +31,12 @@ describe('filterPosSalesRowsToPaidBusinessDay', () => {
       },
     ]
     const on22 = filterPosSalesRowsToPaidBusinessDay(rows, BIZ_CTX, '2026-10-22', '2026-10-22')
-    expect(on22.map((r) => r.order_no)).toEqual(['185'])
-    expect(sumPosSalesPaymentCash(on22)).toBe(249)
+    expect(on22.map((r) => r.order_no).sort()).toEqual(['114', '185'])
+    expect(sumPosSalesPaymentCash(on22)).toBe(448)
 
     const on23 = filterPosSalesRowsToPaidBusinessDay(rows, BIZ_CTX, '2026-10-23', '2026-10-23')
-    expect(on23.map((r) => r.order_no)).toEqual(['114'])
-    expect(sumPosSalesPaymentCash(on23)).toBe(199)
+    expect(on23.map((r) => r.order_no)).toEqual([])
+    expect(sumPosSalesPaymentCash(on23)).toBe(0)
   })
 })
 
@@ -44,12 +44,12 @@ describe('patchPosPaymentSummaryCash', () => {
   it('replaces cash row and drops zero cash', () => {
     const patched = patchPosPaymentSummaryCash(
       [
-        { paymentKey: 'cash', sales: 4451 },
+        { paymentKey: 'cash', sales: 4252 },
         { paymentKey: 'card', sales: 100 },
       ],
-      4252
+      4451
     )
-    expect(patched.find((r) => r.paymentKey === 'cash')?.sales).toBe(4252)
+    expect(patched.find((r) => r.paymentKey === 'cash')?.sales).toBe(4451)
     expect(patched.find((r) => r.paymentKey === 'card')?.sales).toBe(100)
   })
 })

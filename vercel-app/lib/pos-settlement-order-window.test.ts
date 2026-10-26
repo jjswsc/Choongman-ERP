@@ -5,7 +5,7 @@ import {
 } from '@/lib/pos-settlement-order-window'
 
 describe('buildPosSettlementOrdersDateFilters', () => {
-  it('uses paid_at window and created_at only when paid_at is null', () => {
+  it('uses created_at open-day window (cash = sale day)', () => {
     const start = '2026-10-23T22:00:00.000Z'
     const end = '2026-10-24T22:00:00.000Z'
     const { paidAtFilter, nullPaidCreatedFallbackFilter } = buildPosSettlementOrdersDateFilters(
@@ -13,13 +13,11 @@ describe('buildPosSettlementOrdersDateFilters', () => {
       end,
       'CM MBK'
     )
-    expect(paidAtFilter).toContain('paid_at=gte.')
-    expect(paidAtFilter).toContain('paid_at=lt.')
-    expect(paidAtFilter).not.toContain('created_at=')
+    expect(paidAtFilter).toContain('created_at=gte.')
+    expect(paidAtFilter).toContain('created_at=lt.')
+    expect(paidAtFilter).not.toContain('paid_at=')
     expect(paidAtFilter).toContain('store_code=ilike.')
-    expect(nullPaidCreatedFallbackFilter).toContain('paid_at=is.null')
-    expect(nullPaidCreatedFallbackFilter).toContain('created_at=gte.')
-    expect(nullPaidCreatedFallbackFilter).toContain('created_at=lt.')
+    expect(nullPaidCreatedFallbackFilter).toContain('id=eq.-1')
     expect(decodeURIComponent(paidAtFilter)).toContain(start)
     expect(decodeURIComponent(paidAtFilter)).toContain(end)
   })

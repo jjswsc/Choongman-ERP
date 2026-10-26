@@ -960,9 +960,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posCashTillVsSalesLine: 'Cash sales {cash} · Till net {till} · Gap {diff}',
     posCashTillVsSalesHint:
       'Withdraw against the right-hand “Daily cash sales”. The left card is till in/out net—not the same number.',
-    posCashOvernightTitle: 'Opened yesterday · paid today (cash)',
+    posCashOvernightTitle: 'Opened today · paid next day (cash)',
     posCashOvernightLine:
-      '{count} orders · ฿{amount} (included in daily cash sales · payment business day)',
+      '{count} orders · ฿{amount} (included in daily cash sales · open/sale business day)',
     posReceiptPaidDate: 'Paid date',
     posReceiptOpenDate: 'Opened date',
     posCash: 'Cash',

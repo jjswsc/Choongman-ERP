@@ -1,5 +1,5 @@
 /**
- * 채널 현금·드릴 — paid_at(없으면 created_at) 영업일 라벨.
+ * 채널 현금·드릴 — created_at(없으면 paid_at) 오픈 영업일 라벨.
  * 라우트에서 bizCtx 와 함께 사용.
  */
 import { getPosBusinessDateStrFromConfig } from '@/lib/pos-business-day'

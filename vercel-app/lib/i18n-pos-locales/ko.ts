@@ -935,9 +935,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posCashTillVsSalesLine: '현금 매출 {cash} · 시재 순액 {till} · 차이 {diff}',
     posCashTillVsSalesHint:
       '출금은 오른쪽「하루 현금 매출」에 맞추세요. 왼쪽은 시재 입·출금 합계이며 같은 숫자가 아닙니다.',
-    posCashOvernightTitle: '어제 오픈 · 오늘 결제 현금',
+    posCashOvernightTitle: '오늘 오픈 · 다음날 결제 현금',
     posCashOvernightLine:
-      '{count}건 · ฿{amount} (하루 현금 매출에 포함 · 결제 영업일 기준)',
+      '{count}건 · ฿{amount} (하루 현금 매출에 포함 · 오픈(판매) 영업일 기준)',
     posReceiptPaidDate: '결제일',
     posReceiptOpenDate: '오픈일',
     posCash: '현금',

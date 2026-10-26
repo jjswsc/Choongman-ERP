@@ -186,8 +186,8 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
         storeCode: effectiveStore,
         startStr,
         endStr,
-        /** 시재 출금·마감 = 결제 영업일(overnight 포함) */
-        dateBasis: 'paid',
+        /** 시재 출금·마감 = 오픈(판매) 영업일 — 매출·결산과 동일 */
+        dateBasis: 'created',
       })
         .then((r) => {
           setCompletedCash(r.completedCash ?? 0)
@@ -351,7 +351,7 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
       storeCode: effectiveStore,
       startStr: salesDateForWithdrawal,
       endStr: salesDateForWithdrawal,
-      dateBasis: 'paid',
+      dateBasis: 'created',
     })
       .then((r) => setSalesWithdrawalCash(r.completedCash ?? 0))
       .catch(() => setSalesWithdrawalCash(null))
@@ -602,19 +602,19 @@ export function CashManagementTab({ offlineAware = false, adminLayout = false }:
                   expectedCash: overnightCash.cashSales,
                   expectedCount: overnightCash.orderCount,
                   label:
-                    t('posCashOvernightTitle') || '어제 오픈 · 오늘 결제 현금',
+                    t('posCashOvernightTitle') || '오늘 오픈 · 다음날 결제 현금',
                 })
               }
               className="w-full rounded-md border border-sky-300/80 bg-sky-50 px-3 py-2.5 text-left text-xs text-sky-950 transition-colors hover:bg-sky-100/80 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-100 dark:hover:bg-sky-950/60"
               data-tour="pos-tour-cash-overnight-banner"
             >
               <p className="font-medium">
-                {t('posCashOvernightTitle') || '어제 오픈 · 오늘 결제 현금'}
+                {t('posCashOvernightTitle') || '오늘 오픈 · 다음날 결제 현금'}
               </p>
               <p className="mt-1 tabular-nums leading-relaxed">
                 {(
                   t('posCashOvernightLine') ||
-                  '{count}건 · ฿{amount} (하루 현금 매출에 포함 · 결제 영업일 기준)'
+                  '{count}건 · ฿{amount} (오픈일 현금에 포함 · 결제일만 참고)'
                 )
                   .replace('{count}', String(overnightCash.orderCount))
                   .replace('{amount}', fmt(overnightCash.cashSales))}
