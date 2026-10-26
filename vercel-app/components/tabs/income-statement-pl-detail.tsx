@@ -748,6 +748,19 @@ export function IncomePlDetailTableContent({
         expenseDrillLoading={expenseDrillLoading}
         expenseDrillData={expenseDrillData}
         t={t}
+        onChannelSettlePosted={() => {
+          if (!expenseDrillData?.yearMonth || !purchaseDrillContext) return
+          setExpenseDrillLoading(true)
+          void getIncomeStatementExpenseDrillDown({
+            yearMonth: expenseDrillData.yearMonth,
+            storeFilter: expenseDrillData.storeFilter || purchaseDrillContext.storeFilter,
+            userStore: purchaseDrillContext.userStore,
+            userRole: purchaseDrillContext.userRole,
+            accountSubjectId: expenseDrillData.accountSubjectId ?? null,
+          })
+            .then((d) => setExpenseDrillData(d))
+            .finally(() => setExpenseDrillLoading(false))
+        }}
       />
     </div>
   )

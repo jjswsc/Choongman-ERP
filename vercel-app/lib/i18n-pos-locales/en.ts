@@ -43,7 +43,11 @@ export const I18N_POS_EN: Record<string, string> = {
       'GROSS = payment totals above; NET = bank deposit; FEE = GROSS − NET. Bank category: Sales collection only.',
     posChannelSettleTitle: 'Channel settlement (accounting)',
     posChannelSettleHint:
-      'Delivery: the platform deducts a % from GROSS and deposits NET next day (not HQ PO delivery GP).\nGROSS=1130 receivable, NET=bank deposit, FEE=GROSS−NET. Bank category: Sales collection only.',
+      'Delivery: the platform deducts a % from GROSS and deposits NET next day (not HQ PO delivery GP).\nGROSS=1130 receivable, NET=bank deposit, FEE=GROSS−NET. Bank category: Sales collection only. GROSS, FEE, and NET are editable.',
+    posChannelSettleAmountsEditable:
+      'GROSS, FEE, and NET are editable. Keep NET as the bank deposit, adjust GROSS/FEE, then tap Repost if a journal already exists.',
+    posChannelSettleGrossManual:
+      'Manual edit in progress. Tap Load POS GROSS to restore from POS.',
     posChannelSettleUsePlatformFee: 'Platform fee (est.)',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleCardFeeHint: 'Card: NET = PG settlement. FEE = GROSS − NET.',
@@ -69,11 +73,11 @@ export const I18N_POS_EN: Record<string, string> = {
     posChannelSettleRepost: 'Repost journal',
     posChannelSettleExisting: 'Posted',
     posChannelSettleStaffSop:
-      'Do not calculate a fee %.\nIf the amounts above match the green Posted line, you are done.\nIf they differ, check the bank deposit then tap Repost journal only.\nIf Grab / LINE MAN / Shopee already have ✓, do not touch them.\nDay to day: yellow chip + save is enough.',
+      'GROSS, FEE, and NET are editable.\nKeep NET as the bank deposit; adjust GROSS/FEE, then Repost.\nIf a fee-% warning appears and the deposit is correct, confirm.\nIf amounts match the green Posted line, you are done.\nDay to day: yellow chip + save is enough.',
     posChannelSettlePostedMismatch:
-      'Posted amounts do not match GROSS/FEE/NET above. Check the bank deposit, then tap Repost journal only.',
+      'Posted amounts do not match GROSS/FEE/NET above. Edit the amounts, then tap Repost journal.',
     posChannelSettleGrossFromPosted:
-      'Showing saved Posted amounts. Tap Load POS GROSS if POS differs.',
+      'Showing saved Posted amounts. Edit here or tap Load POS GROSS.',
     posChannelSettlePosted: 'Channel settlement journal created.',
     posChannelSettleAlreadyPosted: 'Already posted with the same amounts.',
     posChannelSettleNoGross: 'No POS gross receivable for this channel.',

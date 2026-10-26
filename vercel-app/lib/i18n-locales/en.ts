@@ -4711,7 +4711,7 @@ Only matters the employee must handle personally on a working day:
   bankPosChannelSettleNeedStore: 'Select a store before channel settlement.',
   bankPosChannelSettleDialogTitle: 'Channel settlement (fee journal)',
   bankPosChannelSettleDialogDesc:
-    'Do not calculate a fee %. If amounts above match green Posted, you are done. If not, check the bank deposit then tap Repost journal only. Grab/LINE/Shopee with ✓: do not touch. Day to day: yellow chip + save. FEE = GROSS − NET.',
+    'GROSS, FEE, and NET are editable. Keep NET as the bank deposit; adjust GROSS/FEE, then Repost if already Posted. Matching green Posted means done. If a fee-% warning appears and the deposit is correct, confirm. FEE = GROSS − NET.',
   helpSum_admin_petty_cash:
     'Store/HQ petty cash in/out with running balance after each line. Pick one store to see current cash on hand; the balance column is on both List and Monthly.',
   helpHow_admin_petty_cash:
@@ -5507,7 +5507,8 @@ Only matters the employee must handle personally on a working day:
     'From saved payroll (net + employee SSO + withholding). Same-month salary-like bank/petty withdrawals are excluded to avoid double-counting.',
   pL_expenseDrillExcludedSettle: 'Channel settlements NOT counted (abnormal fee rate)',
   pL_expenseDrillExcludedSettleNote:
-    'Fee % is above the channel limit, so the bank deposit is probably matched to the wrong day. Open Bank transactions, find the deposit (bank #ID), open its channel settlement and re-link the correct deposit, then Repost. If the amount is really correct, save again and confirm.',
+    'Fee % is above the channel limit. Tap Fee edit on the row, adjust GROSS/FEE/NET, then Repost. If the confirm prompt appears and the bank deposit is correct, confirm to include it in the P&L.',
+  pL_expenseDrillExcludedSettleEdit: 'Edit',
   pL_expenseDrillColChannel: 'Channel',
   pL_expenseDrillColBankTx: 'Bank deposit',
   pL_expenseDrillPayrollColNet: 'Net pay',

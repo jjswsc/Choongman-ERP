@@ -43,7 +43,11 @@ export const I18N_POS_KO: Record<string, string> = {
       'GROSS=위 결제수단 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금은 「매출 수령」만 사용.',
     posChannelSettleTitle: '채널 정산 (회계)',
     posChannelSettleHint:
-      '배달: 플랫폼(Grab/LINE 등)이 매출 GROSS에서 수수료를 빼고 익일 NET을 입금합니다(본사 PO 배달 GP와 별도).\nGROSS(1130)=POS 결제 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금 분류는 「매출 수령」만.',
+      '배달: 플랫폼(Grab/LINE 등)이 매출 GROSS에서 수수료를 빼고 익일 NET을 입금합니다(본사 PO 배달 GP와 별도).\nGROSS(1130)=POS 결제 합계, NET=통장 실입금, FEE=GROSS−NET. 통장 입금 분류는 「매출 수령」만. GROSS·FEE·NET은 직접 수정할 수 있습니다.',
+    posChannelSettleAmountsEditable:
+      'GROSS·FEE·NET 모두 수정할 수 있습니다. NET은 통장 입금으로 두고 GROSS/FEE를 맞춘 뒤, 이미 분개된 건은 Repost를 누르세요.',
+    posChannelSettleGrossManual:
+      '수동 수정 중입니다. POS로 되돌리려면 Load POS GROSS를 누르세요.',
     posChannelSettleUsePlatformFee: '플랫폼 수수료(예상)',
     posChannelSettleFeeDefault: '기본',
     posChannelSettleCardFeeHint: '카드: NET은 PG/카드사 입금액. FEE=GROSS−NET.',
@@ -69,11 +73,11 @@ export const I18N_POS_KO: Record<string, string> = {
     posChannelSettleRepost: '재분개',
     posChannelSettleExisting: '등록됨',
     posChannelSettleStaffSop:
-      '수수료율은 계산하지 마세요.\n위 숫자와 초록 Posted가 같으면 끝입니다.\n다르면 통장 입금을 확인한 뒤 Repost journal만 누르세요.\nGrab/LINE/Shopee에 ✓가 있으면 건드리지 마세요.\n평소는 노란 칩+저장만 하면 됩니다.',
+      'GROSS·FEE·NET을 수정할 수 있습니다.\nNET=통장 입금이 맞으면 두고, GROSS/FEE만 맞춘 뒤 Repost 하세요.\n% 경고가 떠도 입금이 맞으면 확인을 누르면 됩니다.\n초록 Posted가 위와 같으면 끝입니다.\n평소는 노란 칩+저장만 하면 됩니다.',
     posChannelSettlePostedMismatch:
-      'Posted 금액이 위 GROSS/FEE/NET과 다릅니다. 통장 입금을 확인한 뒤 Repost journal만 누르세요.',
+      'Posted 금액이 위 GROSS/FEE/NET과 다릅니다. 숫자를 수정한 뒤 Repost journal을 누르세요.',
     posChannelSettleGrossFromPosted:
-      '등록된 정산(Posted) 금액입니다. POS와 다르면 Load POS GROSS를 누르세요.',
+      '등록된 정산(Posted) 금액입니다. 직접 수정하거나 Load POS GROSS를 누르세요.',
     posChannelSettlePosted: '채널 정산 분개가 생성되었습니다.',
     posChannelSettleAlreadyPosted: '이미 동일 금액으로 분개되어 있습니다.',
     posChannelSettleNoGross: 'POS 채권(GROSS)이 없습니다.',

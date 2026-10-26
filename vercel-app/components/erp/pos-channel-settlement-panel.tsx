@@ -70,6 +70,8 @@ export function PosChannelSettlementPanel({
 }: PosChannelSettlementPanelProps) {
   const [channel, setChannel] = React.useState<PosChannelSettlementChannel>(initialChannel || 'card')
   const [gross, setGross] = React.useState(0)
+  /** 입력 중 소수점을 유지하기 위해 문자열로도 보관 */
+  const [grossInput, setGrossInput] = React.useState('')
   const [net, setNet] = React.useState('')
   const [fee, setFee] = React.useState('')
   const [memo, setMemo] = React.useState('')
@@ -82,8 +84,8 @@ export function PosChannelSettlementPanel({
   const [csvImporting, setCsvImporting] = React.useState(false)
   const [coverDates, setCoverDates] = React.useState<string[]>([])
   const [coverPartial, setCoverPartial] = React.useState(false)
-  /** POS 조회 결과인지, Posted 폴백인지 — GROSS=0 오해 방지 */
-  const [grossSource, setGrossSource] = React.useState<'pos' | 'posted' | 'empty'>('empty')
+  /** POS / Posted / 직원 수동 수정 — GROSS=0 오해 방지 */
+  const [grossSource, setGrossSource] = React.useState<'pos' | 'posted' | 'empty' | 'manual'>('empty')
   const csvInputRef = React.useRef<HTMLInputElement>(null)
   const netRef = React.useRef(net)
   const postedRef = React.useRef(posted)
@@ -115,6 +117,7 @@ export function PosChannelSettlementPanel({
         preferredNet: preferredNet > 0 ? preferredNet : null,
       })
       setGross(resolved.gross)
+      setGrossInput(resolved.gross > 0 ? String(resolved.gross) : '')
       setGrossSource(resolved.source)
       if (resolved.net > 0) setNet(String(resolved.net))
       setFee(resolved.fee > 0 ? String(resolved.fee) : '')
@@ -170,8 +173,8 @@ export function PosChannelSettlementPanel({
       if (res.success && res.settlements) {
         setPosted(res.settlements)
         postedRef.current = res.settlements
-        // POS GROSS가 이미 있으면 덮지 않음. 비어 있을 때만 Posted 폴백.
-        if (grossSourceRef.current !== 'pos') {
+        // POS·수동 입력이 있으면 덮지 않음. 비어 있을 때만 Posted 폴백.
+        if (grossSourceRef.current !== 'pos' && grossSourceRef.current !== 'manual') {
           applyResolvedAmounts(0, res.settlements)
         }
       }
@@ -196,6 +199,8 @@ export function PosChannelSettlementPanel({
     if (initialNet != null && initialNet > 0) return
     setNet('')
     setFee('')
+    setGross(0)
+    setGrossInput('')
     setSuggestedFee(null)
     setPlatformFeePct(null)
     setFeeSourceKey(null)
@@ -209,15 +214,30 @@ export function PosChannelSettlementPanel({
   }, [initialNet])
 
   React.useEffect(() => {
-    if (grossSource === 'posted') return
+    if (grossSource === 'posted' || grossSource === 'manual') return
     if (initialNet == null || initialNet <= 0 || gross <= 0) return
     const netNum = roundSettlementMoney(initialNet)
     const feeNum = deriveFeeFromGrossNet(gross, netNum)
     setFee(feeNum > 0 ? String(feeNum) : '')
   }, [initialNet, gross, grossSource])
 
+  const onGrossChange = (raw: string) => {
+    setGrossInput(raw)
+    const g = roundSettlementMoney(Number(raw) || 0)
+    setGross(g)
+    setGrossSource('manual')
+    grossSourceRef.current = 'manual'
+    setCoverDates([])
+    setCoverPartial(false)
+    setFeeSourceKey('manual')
+    const netNum = roundSettlementMoney(Number(net) || 0)
+    const feeNum = deriveFeeFromGrossNet(g, netNum)
+    setFee(feeNum > 0 ? String(feeNum) : '')
+  }
+
   const onNetChange = (raw: string) => {
     setNet(raw)
+    setFeeSourceKey('manual')
     const netNum = roundSettlementMoney(Number(raw) || 0)
     const feeNum = deriveFeeFromGrossNet(gross, netNum)
     setFee(feeNum > 0 ? String(feeNum) : '')
@@ -225,6 +245,7 @@ export function PosChannelSettlementPanel({
 
   const onFeeChange = (raw: string) => {
     setFee(raw)
+    setFeeSourceKey('manual')
     const feeNum = roundSettlementMoney(Number(raw) || 0)
     const netNum = roundSettlementMoney(Math.max(0, gross - feeNum))
     setNet(netNum > 0 ? String(netNum) : '')
@@ -281,9 +302,11 @@ export function PosChannelSettlementPanel({
         feeSource:
           coverDates.length > 1
             ? 'weekend_cover'
-            : suggestedFee != null && Math.abs(feeNum - suggestedFee) < 0.02
-              ? feeSourceKey || 'platform_policy_pct'
-              : 'manual',
+            : grossSource === 'manual' || feeSourceKey === 'manual'
+              ? 'manual'
+              : suggestedFee != null && Math.abs(feeNum - suggestedFee) < 0.02
+                ? feeSourceKey || 'platform_policy_pct'
+                : 'manual',
         memo: appendCoverMemo(memo.trim() || undefined, coverDates) || undefined,
         bankTransactionId:
           bankTransactionId != null && bankTransactionId > 0 ? bankTransactionId : undefined,
@@ -424,18 +447,36 @@ export function PosChannelSettlementPanel({
         </Button>
       </div>
 
+      <p className="text-[11px] text-muted-foreground leading-snug">
+        {t('posChannelSettleAmountsEditable') ||
+          'GROSS·FEE·NET 모두 수정할 수 있습니다. NET은 통장 입금으로 두고 GROSS/FEE를 맞춘 뒤, 이미 분개된 건은 Repost를 누르세요.'}
+      </p>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-        <div className="rounded-md bg-background/80 px-3 py-2 border">
-          <span className="text-muted-foreground text-xs">GROSS (1130)</span>
-          <p className="font-bold tabular-nums">{formatBaht(gross)} ฿</p>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">GROSS (1130)</label>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            className="h-9 tabular-nums font-semibold"
+            value={grossInput}
+            onChange={(e) => onGrossChange(e.target.value)}
+          />
           {grossSource === 'posted' ? (
-            <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-1">
+            <p className="text-[11px] text-sky-800 dark:text-sky-300">
               {t('posChannelSettleGrossFromPosted') ||
                 '등록된 정산(Posted) 금액입니다. POS와 다르면 Load POS GROSS를 누르세요.'}
             </p>
           ) : null}
+          {grossSource === 'manual' ? (
+            <p className="text-[11px] text-amber-800 dark:text-amber-300">
+              {t('posChannelSettleGrossManual') ||
+                '수동 수정 중입니다. POS로 되돌리려면 Load POS GROSS를 누르세요.'}
+            </p>
+          ) : null}
           {coverDates.length > 1 ? (
-            <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-1">
+            <p className="text-[11px] text-amber-800 dark:text-amber-300">
               {(coverPartial
                 ? t('posChannelSettleSliceHint') || '당일 POS + 옆날 일부: {dates}'
                 : t('posChannelSettleCoverHint') || '주말 묶음: {dates} POS 합산'
@@ -446,13 +487,13 @@ export function PosChannelSettlementPanel({
             </p>
           ) : null}
           {coverPartial ? (
-            <p className="text-[11px] text-sky-800 dark:text-sky-300 mt-1">
+            <p className="text-[11px] text-sky-800 dark:text-sky-300">
               {t('posChannelSettleSliceNoFee') ||
                 '수수료가 0입니다. 매출 수령만으로 끝입니다. 분개 버튼을 누르지 마세요.'}
             </p>
           ) : null}
           {gross > 0 && roundSettlementMoney(Number(net) || 0) > gross + 0.02 ? (
-            <p className="text-[11px] text-red-700 dark:text-red-300 mt-1">
+            <p className="text-[11px] text-red-700 dark:text-red-300">
               {t('posChannelSettleCoverFail') ||
                 '옆날 POS를 합쳐도 이 입금과 안 맞습니다. 수수료 분개는 하지 마세요.'}
             </p>

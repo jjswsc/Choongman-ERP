@@ -4715,7 +4715,7 @@ export const I18N_BASE_KO = {
   bankPosChannelSettleNeedStore: '매장을 선택한 뒤 채널 정산을 진행하세요.',
   bankPosChannelSettleDialogTitle: '채널 정산 (수수료 분개)',
   bankPosChannelSettleDialogDesc:
-    '수수료율은 계산하지 마세요. 위 숫자와 초록 Posted가 같으면 끝입니다. 다르면 통장 입금 확인 후 Repost journal만. Grab/LINE/Shopee에 ✓가 있으면 건드리지 마세요. 평소는 노란 칩+저장. FEE=GROSS−NET.',
+    'GROSS·FEE·NET을 수정할 수 있습니다. NET=통장 입금으로 두고 GROSS/FEE를 맞춘 뒤, 이미 Posted면 Repost. 초록 Posted와 같으면 끝. % 경고가 떠도 입금이 맞으면 확인. FEE=GROSS−NET.',
   helpSum_admin_petty_cash:
     '매장·본사 패티캐시 입출금과 거래 후 잔액을 봅니다. 매장 한 곳을 고르면 현재 잔액이 위에 나오고, 내역·월별 현황 표에도 잔액 열이 있습니다.',
   helpHow_admin_petty_cash:
@@ -5514,7 +5514,8 @@ export const I18N_BASE_KO = {
     '급여 모듈에 저장된 확정 급여(실지급+SSO+원천)입니다. 같은 달 통장·패티 급여성 출금은 이중 방지를 위해 제외됩니다.',
   pL_expenseDrillExcludedSettle: '손익에서 제외된 채널 정산 (수수료율 비정상)',
   pL_expenseDrillExcludedSettleNote:
-    '수수료율이 채널 상한을 넘어 통장 입금이 다른 날짜와 연결됐을 가능성이 큽니다. 통장 거래에서 해당 입금(bank #ID)을 찾아 채널 정산을 열고 맞는 입금으로 다시 연결한 뒤 Repost 하세요. 금액이 실제로 맞으면 다시 저장하면서 확인을 누르면 손익에 들어갑니다.',
+    '수수료율이 채널 상한을 넘었습니다. 행의「수수료 수정」으로 GROSS·FEE·NET을 고친 뒤 Repost 하세요. % 경고가 떠도 통장 입금이 맞으면 확인을 누르면 손익에 반영됩니다.',
+  pL_expenseDrillExcludedSettleEdit: '수정',
   pL_expenseDrillColChannel: '채널',
   pL_expenseDrillColBankTx: '통장 입금',
   pL_expenseDrillPayrollColNet: '실지급',

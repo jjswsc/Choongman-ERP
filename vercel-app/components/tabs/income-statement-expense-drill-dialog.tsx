@@ -2,6 +2,8 @@
 
 import * as React from "react"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import { PosChannelSettlementDialog } from "@/components/erp/pos-channel-settlement-dialog"
+import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
 import { ExternalLink, Loader2 } from "lucide-react"
@@ -11,6 +13,7 @@ import {
   buildExpenseDrillAdminHref,
   expenseDrillNavContextFromDrill,
 } from "@/lib/income-statement-purchase-drill-nav"
+import { normalizePosChannelSettlementChannel } from "@/lib/pos-channel-settlement"
 
 export function IncomeExpenseDrillDialog({
   open,
@@ -19,6 +22,7 @@ export function IncomeExpenseDrillDialog({
   expenseDrillLoading,
   expenseDrillData,
   t,
+  onChannelSettlePosted,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -26,13 +30,24 @@ export function IncomeExpenseDrillDialog({
   expenseDrillLoading: boolean
   expenseDrillData: IncomeStatementExpenseDrillDown | null
   t: (k: string) => string
+  /** 제외 채널 정산 Fee edit 후 손익 드릴 재조회 */
+  onChannelSettlePosted?: () => void
 }) {
   const drillNavCtx =
     expenseDrillData && !expenseDrillData.error
       ? expenseDrillNavContextFromDrill(expenseDrillData)
       : null
 
+  const [settleEdit, setSettleEdit] = React.useState<{
+    storeCode: string
+    settleDate: string
+    channel: NonNullable<ReturnType<typeof normalizePosChannelSettlementChannel>>
+    net: number
+    bankTransactionId?: number
+  } | null>(null)
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
@@ -180,10 +195,14 @@ export function IncomeExpenseDrillDialog({
                         <th className="text-right p-2">{t("amount")}</th>
                         <th className="text-right p-2">%</th>
                         <th className="text-left p-2">{t("pL_expenseDrillColBankTx")}</th>
+                        <th className="text-left p-2">{t("pL_expenseDrillExcludedSettleEdit")}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {expenseDrillData.excludedChannelSettlements!.map((r) => (
+                      {expenseDrillData.excludedChannelSettlements!.map((r) => {
+                        const channel = normalizePosChannelSettlementChannel(r.channel)
+                        const canEdit = Boolean(r.store && r.settleDate && channel)
+                        return (
                         <tr key={r.id} className="border-b border-border/60">
                           <td className="p-2 whitespace-nowrap">{r.settleDate}</td>
                           <td className="p-2">{r.channel}</td>
@@ -194,8 +213,32 @@ export function IncomeExpenseDrillDialog({
                             {r.feePct}% <span className="text-muted-foreground">/ {r.maxPct}%</span>
                           </td>
                           <td className="p-2 font-mono">{r.bankTransactionId ? `#${r.bankTransactionId}` : "—"}</td>
+                          <td className="p-2">
+                            {canEdit ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() =>
+                                  setSettleEdit({
+                                    storeCode: r.store,
+                                    settleDate: r.settleDate,
+                                    channel: channel!,
+                                    net: r.net,
+                                    bankTransactionId: r.bankTransactionId || undefined,
+                                  })
+                                }
+                              >
+                                {t("bankPosChannelSettleEditBtn")}
+                              </Button>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </AdminTableScroll>
@@ -275,5 +318,22 @@ export function IncomeExpenseDrillDialog({
         )}
       </DialogContent>
     </Dialog>
+    <PosChannelSettlementDialog
+      open={!!settleEdit}
+      onOpenChange={(next) => {
+        if (!next) setSettleEdit(null)
+      }}
+      t={t}
+      storeCode={settleEdit?.storeCode || ""}
+      settleDate={settleEdit?.settleDate || ""}
+      initialNet={settleEdit?.net}
+      initialChannel={settleEdit?.channel}
+      bankTransactionId={settleEdit?.bankTransactionId}
+      onPosted={() => {
+        setSettleEdit(null)
+        onChannelSettlePosted?.()
+      }}
+    />
+    </>
   )
 }

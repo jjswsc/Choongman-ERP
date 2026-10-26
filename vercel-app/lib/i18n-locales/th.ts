@@ -2667,7 +2667,8 @@ orderItemQty: 'จำนวน',
   pL_expenseDrillTitle: 'รายละเอียดค่าใช้จ่าย',
   pL_expenseDrillExcludedSettle: 'เคลียร์ช่องทางที่ไม่นับในงบ (อัตราค่าธรรมเนียมผิดปกติ)',
   pL_expenseDrillExcludedSettleNote:
-    'อัตราค่าธรรมเนียมเกินเพดานของช่องทาง น่าจะจับคู่เงินเข้าธนาคารผิดวัน ให้ไปที่รายการธนาคาร หาเงินเข้า (bank #ID) เปิดเคลียร์ช่องทาง เลือกเงินเข้าที่ถูกต้องแล้วกด Repost ถ้ายอดถูกจริง ให้บันทึกใหม่แล้วกดยืนยันครับ',
+    'อัตราค่าธรรมเนียมเกินเพดานของช่องทาง — กด「แก้ค่าธรรมเนียม」ในแถว แก้ GROSS/FEE/NET ได้ แล้วกด Repost ถ้าระบบถาม % เกินช่วงและยอดเงินเข้าถูกจริง กดตกลงยืนยัน รายการจะเข้างบครับ',
+  pL_expenseDrillExcludedSettleEdit: 'แก้ไข',
   pL_expenseDrillColChannel: 'ช่องทาง',
   pL_expenseDrillColBankTx: 'เงินเข้าธนาคาร',
   adminChartOfAccounts: 'ผังบัญชี',
@@ -4055,7 +4056,7 @@ orderItemQty: 'จำนวน',
   bankPosChannelSettleNeedStore: 'เลือกสาขาก่อนแล้วค่อยชำระช่องทางครับ',
   bankPosChannelSettleDialogTitle: 'ชำระช่องทาง (ลงค่าธรรมเนียม)',
   bankPosChannelSettleDialogDesc:
-    'ไม่ต้องคิด % ค่าธรรมเนียมเองครับ ตัวเลขด้านบนกับ Posted สีเขียวตรงกัน = เสร็จแล้ว ถ้าไม่ตรง เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ Grab/LINE/Shopee มี ✓ แล้วห้ามแตะ ปกติกดชิปเหลือง+บันทึก FEE = GROSS − NET',
+    'แก้ GROSS · FEE · NET ได้ครับ NET = เงินเข้าธนาคาร ปรับ GROSS/FEE แล้วกด Repost ถ้ามี Posted แล้ว ตัวเลขตรงแถวเขียว = เสร็จ ถ้าระบบถาม % เกินและเงินเข้าถูก กดตกลงได้ FEE = GROSS − NET',
   bankManualS3PosReceivable:
     'สาขา POS: เงินเข้าบัตร เดลิเวอรี่ QR ให้เป็น「รับชำระ」+ สาขา อย่าใช้หมวดเดลิเวอรี่/บัตร จะมียอดขายซ้ำครับ',
   bankParseNoRows: 'ไม่พบรายการที่แปลงได้ กรุณาตรวจสอบรูปแบบ K-DEPOSIT',

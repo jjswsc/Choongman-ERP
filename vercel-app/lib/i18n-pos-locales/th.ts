@@ -3395,16 +3395,21 @@ export const I18N_POS_TH: Record<string, string> = {
     posChannelSettleCsvTitle: 'Settlement CSV batch',
     posChannelSettleExisting: 'Posted',
     posChannelSettleStaffSop:
-      'ไม่ต้องคิด % ค่าธรรมเนียมเองครับ\nตัวเลขด้านบน กับแถวสีเขียว Posted ตรงกัน = เสร็จแล้ว ไม่ต้องกดอะไรครับ\nถ้าไม่ตรง → เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ\nGrab / LINE MAN / Shopee มี ✓ แล้ว = ห้ามแตะครับ\nปกติกดชิปเหลือง + บันทึก ก็พอครับ',
+      'แก้ GROSS / FEE / NET ได้ครับ\nNET = เงินเข้าธนาคาร ถ้าถูกแล้วให้คงไว้ แล้วปรับ GROSS หรือ FEE จากนั้นกด Repost\nถ้าระบบเตือน % เกินช่วง และเงินเข้าถูกจริง กดตกลงได้ครับ\nตัวเลขด้านบนตรงกับแถวเขียว Posted = เสร็จแล้วครับ\nปกติกดชิปเหลือง + บันทึก ก็พอครับ',
     posChannelSettlePostedMismatch:
-      'ยอด Posted ไม่ตรงกับด้านบนครับ เช็คยอดเข้าบัญชี แล้วกด Repost journal อย่างเดียวครับ',
+      'ยอด Posted ไม่ตรงกับด้านบนครับ แก้ตัวเลขแล้วกด Repost journal ครับ',
     posChannelSettleGrossFromPosted:
-      'แสดงยอด Posted ที่บันทึกไว้แล้วครับ ถ้าต่างจาก POS ให้กด Load POS GROSS',
+      'แสดงยอด Posted ที่บันทึกไว้แล้วครับ แก้ตรงนี้ได้ หรือกด Load POS GROSS',
+    posChannelSettleAmountsEditable:
+      'แก้ GROSS · FEE · NET ได้ครับ ให้ NET เป็นยอดเงินเข้าธนาคาร แล้วปรับ GROSS/FEE จากนั้นถ้ามี Posted แล้วให้กด Repost',
+    posChannelSettleGrossManual:
+      'กำลังแก้ด้วยมือครับ ถ้าจะกลับไปใช้ยอด POS ให้กด Load POS GROSS',
     posChannelSettleFee: 'Fee',
     posChannelSettleFeeDefault: 'default',
     posChannelSettleGpPlatformLink: 'Platform settlement % (Delivery ops)',
     posChannelSettleGpPoLink: 'HQ PO delivery GP % (Billing rates)',
-    posChannelSettleHint: 'Delivery: the platform deducts a % from GROSS and deposits NET next day (not HQ PO delivery GP).\nGROSS=1130 receivable, NET=bank deposit, FEE=GROSS−NET. Bank category: Sales collection only.',
+    posChannelSettleHint:
+      'เดลิเวอรี่: แพลตฟอร์มหัก % จาก GROSS แล้วโอน NET วันถัดไป (แยกจาก GP เดลิเวอรี่ใน PO สำนักงานใหญ่)\nGROSS(1130)=ยอด POS ช่องทางนั้น, NET=เงินเข้าธนาคาร, FEE=GROSS−NET แก้ตัวเลขได้ครับ หมวดเงินเข้าใช้「รับชำระ」เท่านั้น',
     posChannelSettleMemo: 'Memo (optional)',
     posChannelSettleMismatch: 'GROSS must equal fee + NET.',
     posChannelSettleFeePctConfirm:
