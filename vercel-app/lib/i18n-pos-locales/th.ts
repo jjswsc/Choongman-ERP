@@ -3098,7 +3098,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptDateBasisPaid: 'วันชำระเงิน',
     posReceiptDateBasisEither: 'เปิดบิล+ชำระเงิน',
     posReceiptDateBasisHint:
-      'โต๊ะที่เปิดเมื่อวานแล้วชำระวันนี้ ให้เลือก「วันชำระเงิน」หรือ「เปิดบิล+ชำระเงิน」ครับ ค่าเริ่มต้นคือ เปิดบิล+ชำระเงิน',
+      'ค่าเริ่มต้น「วันทำการ (เปิดบิล)」ให้ตรงกับปิดยอด·หน้าแรกครับ overnight (เปิดเมื่อวานชำระวันนี้) ดูได้ที่วันเปิด หรือเลือก「วันชำระเงิน」/「เปิดบิล+ชำระเงิน」ถ้าต้องการ',
     posStatusCooking: 'Cooking',
     posStatusPaid: 'Paid',
     posStatusReady: 'Ready',

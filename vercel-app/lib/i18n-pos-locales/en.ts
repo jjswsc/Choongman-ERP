@@ -981,7 +981,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptDateBasisPaid: 'Payment day',
     posReceiptDateBasisEither: 'Opened + paid',
     posReceiptDateBasisHint:
-      'Tables opened yesterday and paid today appear under Payment day or Opened + paid. Default is Opened + paid.',
+      'Default is business day (opened) to match settlement and home. Overnight (opened yesterday, paid today) stays on the open day; use Payment day or Opened+paid if you need that view.',
     posStatusPaid: 'Paid',
     posStatusCooking: 'Cooking',
     posStatusReady: 'Ready',

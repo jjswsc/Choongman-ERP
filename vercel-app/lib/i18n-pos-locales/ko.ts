@@ -956,7 +956,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posReceiptDateBasisPaid: '결제일',
     posReceiptDateBasisEither: '주문일+결제일',
     posReceiptDateBasisHint:
-      '전날 연 테이블을 오늘 결제하면 「결제일」또는「주문일+결제일」로 보세요. 기본은 주문일+결제일입니다.',
+      '기본은 「영업일(주문일)」이라 결산·홈과 같습니다. overnight(전날 오픈·오늘 결제)는 연 날에 잡히며, 필요하면 「결제일」또는「주문일+결제일」로 보세요.',
     posStatusPaid: '결제완료',
     posStatusCooking: '조리중',
     posStatusReady: '준비완료',

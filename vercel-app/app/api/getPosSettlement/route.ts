@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
       console.error('getPosSettlement linkpos rule fetch:', ruleErr)
     }
 
-    /** 결제 시각(paid_at) 영업일 — EDC·돈통과 동일. paid_at 없으면 created_at 폴백 */
+    /** 오픈(판매) 영업일(created_at) — 시재·영수증 기본 조회와 동일 */
     const { paidAtFilter, nullPaidCreatedFallbackFilter } = buildPosSettlementOrdersDateFilters(
       startISO,
       endISOExclusive,
