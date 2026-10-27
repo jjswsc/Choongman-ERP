@@ -41,20 +41,21 @@ describe('pos-bank-chip-settlement', () => {
         isChannelSettled: false,
       })
     ).toBe('none')
+    // 월별 수기 복귀: UI 비활성 시 항상 none (BANK_CHANNEL_SETTLEMENT_UI_ENABLED=false)
     expect(
       bankChannelSettlementRowAction({
         note: 'Line man sales',
         storeName: 'CM Bangna',
         isChannelSettled: false,
       })
-    ).toBe('post')
+    ).toBe('none')
     expect(
       bankChannelSettlementRowAction({
         note: 'Line man sales',
         storeName: 'CM Bangna',
         isChannelSettled: true,
       })
-    ).toBe('edit')
+    ).toBe('none')
     expect(
       bankChannelSettlementRowAction({
         memo: 'โอนเงินมัดจำ | จาก X1781',

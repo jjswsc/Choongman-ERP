@@ -86,6 +86,7 @@ import { ADMIN_UI_LANG_OPTIONS, type LangCode, useLang } from '@/lib/lang-contex
 import { tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { PosChannelSettlementPanel } from '@/components/erp/pos-channel-settlement-panel'
+import { BANK_CHANNEL_SETTLEMENT_UI_ENABLED } from '@/lib/pos-bank-chip-settlement'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import {
   isOfficeRole,
@@ -2376,7 +2377,11 @@ ${footerStamp}
                 ) : null}
               </div>
 
-              {!openMode && effectiveStore && settleDate && !offlineAware ? (
+              {BANK_CHANNEL_SETTLEMENT_UI_ENABLED &&
+              !openMode &&
+              effectiveStore &&
+              settleDate &&
+              !offlineAware ? (
                 <div className="space-y-1.5" data-tour="pos-channel-settlement-section">
                   <p className="text-xs font-medium text-foreground px-0.5">
                     {t('posSettlementChannelSettleLead') ||

@@ -1,8 +1,14 @@
 /**
- * 손익「배달앱·카드 수수료」— 통장 입금 채널 정산(pos_channel_settlements) 반영.
- * 같은 매장·채널에 월별 일괄 등록(GRAB_FEE·CARD_FEE 등 통장/지급예정)이 있으면 그 달은 일괄 금액만 쓴다(이중 계상 방지).
- * 수수료율이 채널 정상 범위를 벗어난 정산은 입금 오매칭일 가능성이 커서 제외하고 경고로 알린다.
+ * 손익「배달앱·카드 수수료」— 채널 정산(pos_channel_settlements) 집계 헬퍼.
+ *
+ * 2026-10: 월별 수기(지출관리 일괄 5528/5529)만 손익에 사용.
+ * `INCLUDE_CHANNEL_SETTLEMENT_FEES_IN_PL=false` 이면 load 는 빈 결과.
+ * aggregate·coverage 유틸은 테스트·재활성화용으로 유지.
  */
+
+/** false = 손익에 채널 정산 FEE 미합산 (월별 일괄만) */
+export const INCLUDE_CHANNEL_SETTLEMENT_FEES_IN_PL = false
+
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
 import {
   feeAccountSubjectIdsFromMeta,
@@ -214,6 +220,9 @@ export async function loadChannelSettlementFeesForPl(params: {
   subjectMeta: Map<number, AccountSubjectMetaRow>
   coverage: ReadonlySet<string>
 }): Promise<ChannelSettlementFeesForPl & { fetched: number }> {
+  if (!INCLUDE_CHANNEL_SETTLEMENT_FEES_IN_PL) {
+    return { ...emptyChannelSettlementFeesForPl(), fetched: 0 }
+  }
   if (params.isHQ) return { ...emptyChannelSettlementFeesForPl(), fetched: 0 }
   const { deliveryIds, cardIds } = feeAccountSubjectIdsFromMeta(params.subjectMeta)
   const deliverySubjectId = deliveryIds.size > 0 ? [...deliveryIds][0]! : null

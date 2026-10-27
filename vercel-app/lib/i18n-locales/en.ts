@@ -3114,7 +3114,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_financial_statements:
     'Management accounts for running the stores. Amounts may differ from the tax books. View P&L, balance sheet, and margin by store and period. The balance sheet includes borrowings (2150) and loans receivable (1150). Salary (5310) posts to the payroll month, not the pay date. Approved accounting POs (royalty, delivery GP, Grab GP) post to store expenses and HQ (issuer) sales; amounts follow the VAT included/excluded toggle (PO total vs subtotal). VAT-inclusive view adds PP.30 remittance as an expense in the tax month (excluded view and PND stay out).',
   helpHow_admin_financial_statements:
-    '① Choose store and start/end month, then search. Changing month or store alone does not reload income, balance, reconcile, or margin until you search again.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together. Amounts show two decimal places (0.01 baht). Inclusive view only adds PP.30 remittance as expense in the tax month (not the bank pay date).\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.\n⑥ Payroll hits that month’s P&L, not the pay date. Confirmed payroll excludes salary-like bank/petty cash to avoid double counting.\n⑦ Delivery app (5528) and card (5529) fees use the monthly batch entry when one exists; otherwise the sum of channel settlement fees (bank deposit matching) for that store and channel. Settlements with an out-of-range fee rate are excluded and counted in the warning — re-link the deposit in channel settlement.',
+    '① Choose store and start/end month, then search. Changing month or store alone does not reload income, balance, reconcile, or margin until you search again.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together. Amounts show two decimal places (0.01 baht). Inclusive view only adds PP.30 remittance as expense in the tax month (not the bank pay date).\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.\n⑥ Payroll hits that month’s P&L, not the pay date. Confirmed payroll excludes salary-like bank/petty cash to avoid double counting.\n⑦ Delivery app (5528) and card (5529) fees use only Expense Management monthly batch amounts. Auto channel settlements from bank chips are not included in P&L.',
   adminChartOfAccounts: 'Chart of accounts',
   adminAccountingCompliance: 'Accounting & Thailand filing',
   adminTaxFiling: 'Tax accounts',
@@ -4535,7 +4535,7 @@ Only matters the employee must handle personally on a working day:
     '※ Withdrawals: pick category and account subject (or vendor for purchase payment) — classification only. For expense and purchase payment, complete accounting via Query tab → “Link expense mgmt”.',
   bankImportQuickMemosTitle: 'Quick memo phrases',
   bankImportQuickMemoHint:
-    'Focus the Note cell, then tap a chip to fill the note and category. QR is done on save. Grab/LINE MAN/card fees post automatically; click Fee edit only if the amount is wrong.',
+    'Focus the Note cell, then tap a chip to fill the note and category. QR/Grab/LINE MAN/card: save to post Sales collection. Delivery/card fees: register once a month in Expense Management monthly batch.',
   bankImportQuickMemoCopied: 'Copied to clipboard.',
   bankImportQuickMemoCopyFailed: 'Could not copy.',
   bankQuickMemosManage: 'Edit',
@@ -4552,7 +4552,7 @@ Only matters the employee must handle personally on a working day:
   bankImportPosRevenueHint:
     'POS stores: tap a yellow chip (QR/Grab/card) and save — Sales collection and journals post automatically. Saving as delivery/card/QR/cash can double-count revenue.',
   bankPosRevenueDepositSaveHint:
-    'POS store Grab/card/QR: tap the chip and save. Card/delivery fees post on save; use Fee edit later only if the amount is wrong.',
+    'POS store Grab/card/QR: tap the chip and save. Delivery/card fees: enter once a month via Expense Management monthly batch.',
   bankPosRevenueDepositDoubleRisk:
     'Store "{store}" already has POS completed orders, so deposit category "{category}" would double-count sales (4110). Use Channel settlement for card/delivery, or Sales collection for franchise receipts.',
   bankPosRevenueDepositStoreRequired:
@@ -4694,19 +4694,19 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_bank_transactions:
     'Import bank CSV, review categories and memo rules, and tie movements to receivables/payables/borrowings. Officer deposits to the company: Borrowing in + related party (do not post as sales 4110). When changing banks, add accounts (do not delete); HQ/accounting can view delete/create audit in Manage Accounts.',
   helpHow_admin_bank_transactions:
-    '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: pick QR in the category list (same as the yellow chip). Grab/LINE MAN/card: yellow chip, then save — journals post automatically. QR is done. Grab/LINE MAN/card fees also post on save (POS GROSS − deposit); click Fee edit only if the amount is wrong. If a Fri–Mon card deposit is larger than that day’s POS, weekend days are summed to match the fee. Used-oil is Other income. Putting till cash into the bank is Cash to bank. Hiding Delivery/Card/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). If the deposit is larger than invoices, the extra is saved as store credit for the next billing. A later shortfall applies that credit automatically (no Director approval).\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date. On a purchase-payment withdrawal, save WHT next to the vendor: the transfer amount stays as paid, the vendor balance drops by the WHT, and the withholding ledger keeps the tax.',
+    '① Select account and period; in CSV preview verify withdraw category, account subject, and vendor before save.\n② When changing banks, add a new account—do not delete the old one. Only HQ/accounting can delete accounts; who/when is audit-logged.\n③ Store bank: pick QR in the category list (same as the yellow chip). Grab/LINE MAN/card: yellow chip, then save — Sales collection journals post automatically. Delivery/card fees: enter once a month via Expense Management monthly batch (accounts 5528/5529). Used-oil is Other income. Putting till cash into the bank is Cash to bank. Hiding Delivery/Card/Cash is expected; saving those types can double-count sales.\n④ Sales collection deposits update store receivable balance first. Use Link receivable to allocate invoices (checkboxes update automatically). If amounts differ, enter a reason (≤฿1 small / larger gaps need Director or office payroll manager approval). If the deposit is larger than invoices, the extra is saved as store credit for the next billing. A later shortfall applies that credit automatically (no Director approval).\n⑤ If the same line will be paid from Expense Management, follow help detail for safe categories. Revenue Department payments (PND, PP.30): choose Tax, leave account subject blank, then Link expense mgmt—do not use Expense. If tax was registered in Expense Management first, importing the statement merges bank memo into that tax row when date, amount, and PP.30 (or similar) match, instead of adding an unclassified duplicate. One bank transfer should be one expense (attach both receipts). Only if GL accounts or WHT rates differ and you already split into two plans, use “Search two plans” in “Link expense mgmt” by date range so the sum equals the withdrawal.\n⑥ If balances disagree, check period, duplicates, and category mistakes. Beginning balance under calculated balance is the balance just before the query start date. On a purchase-payment withdrawal, save WHT next to the vendor: the transfer amount stays as paid, the vendor balance drops by the WHT, and the withholding ledger keeps the tax.',
   bankManualS3PosReceivable:
     'POS auto-journal stores: card/delivery/QR deposits → Sales collection + store. Avoid revenue_* categories (double 4110).',
   bankPosReceivableDepositTitle: 'POS auto-journal — deposit category',
   bankPosReceivableDepositBody:
     'Use Sales collection + store + sales date for Grab/card/QR deposits. Delivery/Card/QR/Cash appear in the list, but saving those on a POS store is rejected or converted to Sales collection.',
   bankPosStoreCategoryLockedHint:
-    'Hiding Delivery/Card/Cash is expected. Pick QR in the category list. Grab/LINE MAN/card: yellow chip. Journals and fees post on save; use Fee edit only if the amount is wrong. Used-oil is Other income. Till cash to bank is Cash to bank.',
+    'Hiding Delivery/Card/Cash is expected. Pick QR in the category list. Grab/LINE MAN/card: yellow chip. Save posts Sales collection only. Fees: Expense Management monthly batch. Used-oil is Other income. Till cash to bank is Cash to bank.',
   bankPosStoreCategorySelectTitle:
-    'POS store: pick QR in the category list. Grab/card: yellow chip. Save — journals post automatically.',
+    'POS store: pick QR in the category list. Grab/card: yellow chip. Save — Sales collection journals post automatically.',
   bankPosStoreCategoryHiddenOptions: 'Delivery/Card/QR/Cash hidden — tap a chip and save',
   bankPosChannelSettleHint:
-    'QR: chip + save only. Grab/card fees post on save; click Fee edit below only if the amount is wrong. If green Posted differs from the amounts above, tap Repost journal only.',
+    'QR/Grab/card deposits: chip + save only. Delivery/card fees: register via Expense Management monthly batch.',
   bankPosChannelSettlePosLink: 'POS settlement →',
   bankPosChannelSettleRowBtn: 'Channel settlement',
   bankPosChannelSettleEditBtn: 'Fee edit',
@@ -4723,9 +4723,9 @@ Only matters the employee must handle personally on a working day:
   helpHow_admin_pos_cash:
     '① Set period and store, then query.\n② Daily cash sales uses open/sale business day. Click the card for the order list; overnight (opened yesterday, paid today) shows a banner. Withdraw against that amount (it may differ from till net).\n③ Register deposits/withdrawals and sales withdrawals, then reconcile to physical cash and bank deposits.',
   helpSum_admin_pos_settlement:
-    'Daily POS settlement and channel clearing (card/delivery fees). Order totals use payment time (business day) to align with EDC. Bank: Sales collection; fees: channel settlement journal.',
+    'Daily POS settlement. Order totals use the open/sale business day to align with sales and tax invoice dates. Bank: Sales collection; delivery/card fees: Expense Management monthly batch.',
   helpHow_admin_pos_settlement:
-    'System sales and cash use the open/sale business day (overnight pay still counts on the open day). Payment time is for receipts only. Closing with unpaid hall tables is blocked unless a manager override (reason + drawer PIN, or manager/HQ role) is provided. Paying a prior-day open bill today also asks for confirmation. After settlement entry, use Channel settlement for GROSS/NET/fee journals. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
+    'System sales and cash use the open/sale business day (overnight pay still counts on the open day). Payment time is for receipts only. Closing with unpaid hall tables is blocked unless a manager override (reason + drawer PIN, or manager/HQ role) is provided. Paying a prior-day open bill today also asks for confirmation. Platform delivery/card fees (5528/5529) are entered via Expense Management monthly batch. Card brand lines must match POS card orders; entering only Other saves that amount as the whole card total.',
   helpSum_admin_expense_management:
     'Accruals, approvals, and payments (bank/petty/card) with bank and payable links. Loan repayment/lending requires a related party (officer) and is not franchise A/R. Use To Pay > Bank transfer view for payee/account/bank/amount like Excel (copy/print). Document numbers use PV (with VAT) or PP (no VAT).',
   helpHow_admin_expense_management:
@@ -5542,8 +5542,8 @@ Only matters the employee must handle personally on a working day:
   pL_colItem: 'Item',
   pL_expenseSourcePetty: 'Petty cash',
   pL_expenseSourceBank: 'Bank withdrawals',
-  pL_expenseSourceDeliveryApps: 'Delivery app fees (platform / manual 5528)',
-  pL_expenseSourceCardFees: 'Card fees',
+  pL_expenseSourceDeliveryApps: 'Delivery app fees (monthly batch 5528)',
+  pL_expenseSourceCardFees: 'Card fees (monthly batch 5529)',
   pL_expenseSourceFixed: 'Fixed expenses',
   pL_expenseSourceStockInbound: 'Inbound (expense-routed items)',
   pL_expenseSourcePayroll: 'Confirmed payroll',

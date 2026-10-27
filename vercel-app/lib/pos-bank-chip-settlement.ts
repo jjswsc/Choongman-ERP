@@ -68,12 +68,19 @@ export function channelSettlementAllowsReceivableReceive(params: {
 
 export type BankChannelSettlementAction = 'none' | 'post' | 'edit'
 
+/**
+ * 월별 수기 복귀(2026-10): 통장 목록의 「채널 정산/수수료 수정」 버튼 숨김.
+ * 패널·API는 유지 — 재활성화 시 true.
+ */
+export const BANK_CHANNEL_SETTLEMENT_UI_ENABLED = false
+
 export function bankChannelSettlementRowAction(params: {
   memo?: string | null
   note?: string | null
   storeName?: string | null
   isChannelSettled?: boolean
 }): BankChannelSettlementAction {
+  if (!BANK_CHANNEL_SETTLEMENT_UI_ENABLED) return 'none'
   if (!String(params.storeName || '').trim()) return 'none'
   if (!channelSettlementAllowsReceivableReceive({ memo: params.memo, note: params.note })) {
     return 'none'

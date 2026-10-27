@@ -1,19 +1,10 @@
 /**
- * 통장 입금 저장 후 Grab/라인맨/카드 수수료 분개를 자동으로 붙인다.
- * 실패해도 통장 저장은 유지. QR·현금·폐유는 호출하지 않음.
+ * 통장 입금 저장 후 Grab/라인맨/카드 수수료 자동 분개.
+ *
+ * 2026-10: 회계 회의 후 월별 수기(지출관리 일괄 5528/5529)로 복귀.
+ * 자동 post는 비활성 — 호출처는 유지해 재활성화 시 한곳만 켜면 됨.
  */
-import { saveChannelSettlement } from '@/lib/pos-channel-settlement-process'
-import { autoPostChannelFeeDecision } from '@/lib/pos-channel-cover-gross'
-import { fetchChannelGrossCoveringNet, memoWithWeekendCover } from '@/lib/pos-channel-cover-gross-server'
-import { deriveFeeFromGrossNet, roundSettlementMoney } from '@/lib/pos-channel-settlement'
-import {
-  channelFeeSettleDateCandidates,
-  channelSettlementAllowsReceivableReceive,
-  inferPosBankChipKind,
-  settlementChannelForPosBankChip,
-} from '@/lib/pos-bank-chip-settlement'
-
-export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
+export async function maybeAutoPostChannelFeeAfterBankDeposit(_params: {
   bankTransactionId?: number | null
   storeCode?: string | null
   transDate?: string | null
@@ -24,47 +15,5 @@ export async function maybeAutoPostChannelFeeAfterBankDeposit(params: {
   note?: string | null
   postedBy?: string | null
 }): Promise<void> {
-  const bankId = Math.floor(Number(params.bankTransactionId) || 0)
-  if (bankId <= 0) return
-  if (String(params.category || '').toLowerCase() !== 'receivable_receive') return
-  const storeCode = String(params.storeCode || '').trim()
-  if (!storeCode) return
-  if (!channelSettlementAllowsReceivableReceive({ memo: params.memo, note: params.note })) return
-  const channel = settlementChannelForPosBankChip(inferPosBankChipKind(params.memo, params.note))
-  if (!channel) return
-  const net = roundSettlementMoney(Math.abs(Number(params.netAmount) || 0))
-  if (net <= 0) return
-
-  const dates = channelFeeSettleDateCandidates({
-    transDate: params.transDate,
-    salesDate: params.salesDate,
-  })
-  for (const settleDate of dates) {
-    try {
-      const grossRow = await fetchChannelGrossCoveringNet({ storeCode, settleDate, channel, net })
-      const gross = roundSettlementMoney(Number(grossRow.gross) || 0)
-      // NET이 GROSS 수수료 밴드 밖이면 post 하지 않음(소액 칩·당일 POS 통째 매칭 차단).
-      const decision = autoPostChannelFeeDecision(channel, gross, net)
-      if (decision === 'skip') continue
-      if (decision === 'no-fee') return
-      const fee = deriveFeeFromGrossNet(gross, net)
-      const out = await saveChannelSettlement({
-        storeCode,
-        settleDate,
-        channel,
-        gross,
-        net,
-        fee,
-        memo: memoWithWeekendCover(String(params.memo || params.note || '').trim() || null, grossRow.coverDates),
-        feeSource: grossRow.expanded ? 'auto_bank_chip_cover' : 'auto_bank_chip',
-        bankTransactionId: bankId,
-        postedBy: params.postedBy || null,
-      })
-      if (out.ok || out.code === 'ALREADY_POSTED' || out.code === 'BANK_ALREADY_LINKED_SETTLEMENT') {
-        return
-      }
-    } catch (e) {
-      console.warn('maybeAutoPostChannelFeeAfterBankDeposit:', e)
-    }
-  }
+  return
 }
