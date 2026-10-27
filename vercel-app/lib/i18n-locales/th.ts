@@ -467,6 +467,8 @@ export const I18N_BASE_TH = {
   noticePositionAll: 'ทุกบทบาท',
   noticeTitlePlaceholder: 'ใส่หัวข้อประกาศ',
   noticeContentPlaceholder: 'ใส่เนื้อหาประกาศ...',
+  ugcTranslateWriteHint:
+    'เพื่อให้แปลอัตโนมัติชัดขึ้น เขียนสั้นๆ เป็นประโยค และใส่คำเฉพาะ (ร้าน/ตำแหน่ง/เมนู) ทั้งภาษาเกาหลีและไทยด้วยครับ',
   noticeFileLabel: 'ไฟล์แนบ',
   noticeFileAdd: 'เพิ่มไฟล์ (รูป, PDF, เอกสาร)',
   noticeFileLimit: 'รูป/PDF/เอกสาร 5MB, วิดีโอ 50MB, สูงสุด 3 ไฟล์',

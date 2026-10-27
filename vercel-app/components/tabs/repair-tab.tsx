@@ -205,6 +205,7 @@ export function RepairTab() {
           <div>
             <label className="text-[11px] font-medium text-muted-foreground">{t("repair_field_description")}</label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="text-xs mt-0.5" />
+            <p className="mt-1 text-[11px] text-muted-foreground leading-snug">{t("ugcTranslateWriteHint")}</p>
           </div>
           <div>
             <input

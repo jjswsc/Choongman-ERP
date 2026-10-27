@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **789**개 · 접두어 그룹 **98**개
+- `sql/` 최상위: **794**개 · 접두어 그룹 **100**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **72**개
 
@@ -918,6 +918,15 @@
 
 </details>
 
+<details><summary><code>diagnose_*</code> (4)</summary>
+
+- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
+
+</details>
+
 <details><summary><code>interior_*</code> (4)</summary>
 
 - [`interior_dashboard_rpc.sql`](../sql/interior_dashboard_rpc.sql) — rpc
@@ -1328,6 +1337,12 @@
 <details><summary><code>schedules_*</code> (1)</summary>
 
 - [`schedules_employee_code.sql`](../sql/schedules_employee_code.sql)
+
+</details>
+
+<details><summary><code>translate_*</code> (1)</summary>
+
+- [`translate_cache_01_table.sql`](../sql/translate_cache_01_table.sql) — log
 
 </details>
 

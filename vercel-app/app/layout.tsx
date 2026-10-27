@@ -1,7 +1,7 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
-import { Geist_Mono, Inter, Noto_Sans_Thai } from "next/font/google"
+import { Geist_Mono, IBM_Plex_Sans_Thai, Inter, Noto_Sans_Thai } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
@@ -24,6 +24,13 @@ const pretendard = localFont({
   variable: "--font-pretendard",
   display: "swap",
   preload: true,
+})
+const ibmPlexSansThai = IBM_Plex_Sans_Thai({
+  subsets: ["latin", "thai"],
+  variable: "--font-ibm-plex-sans-thai",
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  preload: false,
 })
 const notoSansThai = Noto_Sans_Thai({
   subsets: ["latin", "thai"],
@@ -122,7 +129,7 @@ export default async function RootLayout({
   return (
     <html lang="ko" translate="no" className="notranslate">
       <body
-        className={`${inter.variable} ${pretendard.variable} ${notoSansThai.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased notranslate`}
+        className={`${inter.variable} ${pretendard.variable} ${ibmPlexSansThai.variable} ${notoSansThai.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased notranslate`}
       >
         <AppBrandProvider value={brand}>
           <StaleBundleAutoRecover />

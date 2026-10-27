@@ -689,6 +689,7 @@ export function StoreCheckIssueDialog(props: {
 
         <div className="space-y-2">
           <p className="text-xs font-semibold">{t("check_issue_new")}</p>
+          <p className="text-[11px] text-muted-foreground leading-snug">{t("ugcTranslateWriteHint")}</p>
           {drafts.map((d, idx) => (
             <div key={d.uid} className="space-y-2 rounded-lg border p-3">
               <div className="flex items-center gap-2">

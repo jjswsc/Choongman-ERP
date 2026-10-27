@@ -584,6 +584,8 @@ Only matters the employee must handle personally on a working day:
   noticePositionAll: 'All roles',
   noticeTitlePlaceholder: 'Enter notice title',
   noticeContentPlaceholder: 'Enter notice content...',
+  ugcTranslateWriteHint:
+    'For clearer auto-translate: keep sentences short, and write store/role/menu terms in both Korean and Thai when possible.',
   noticeFileLabel: 'Attachments',
   noticeFileAdd: 'Add file (image, PDF, document)',
   noticeFileLimit: '5MB (image/PDF/doc), 50MB video, max 3 files',

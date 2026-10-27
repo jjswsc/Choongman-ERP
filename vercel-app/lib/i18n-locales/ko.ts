@@ -593,6 +593,8 @@ export const I18N_BASE_KO = {
   noticePositionAll: '전체 직급',
   noticeTitlePlaceholder: '공지 제목을 입력하세요',
   noticeContentPlaceholder: '공지 내용을 입력하세요...',
+  ugcTranslateWriteHint:
+    '자동 번역 품질을 위해 짧게·한 문장씩 쓰고, 매장·직급·메뉴 등 고유 용어는 한국어와 태국어를 함께 적어 주세요.',
   noticeFileLabel: '첨부파일',
   noticeFileAdd: '파일 추가 (이미지, PDF, 문서 등)',
   noticeFileLimit: '이미지·PDF·문서 5MB, 동영상 50MB, 최대 3개',

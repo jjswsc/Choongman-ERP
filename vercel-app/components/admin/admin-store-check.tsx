@@ -868,6 +868,7 @@ export function AdminStoreCheck() {
                       placeholder=""
                       readOnly={viewOnlyMode}
                     />
+                    <p className="mt-1 text-[11px] text-muted-foreground leading-snug">{t("ugcTranslateWriteHint")}</p>
                     {totalMemo?.trim() && transMap[totalMemo.trim()] && (
                       <p className="text-xs text-muted-foreground mt-1 font-medium" title={totalMemo}>{tr(totalMemo)}</p>
                     )}

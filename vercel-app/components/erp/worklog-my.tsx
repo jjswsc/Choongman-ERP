@@ -796,6 +796,9 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
         <p className="mt-3 text-xs text-muted-foreground">
           {viewMode === "period" ? t("workLogPeriodViewHint") : t("workLogFlowHint")}
         </p>
+        {viewMode === "day" ? (
+          <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">{t("ugcTranslateWriteHint")}</p>
+        ) : null}
       </div>
 
       {viewMode === "period" ? (

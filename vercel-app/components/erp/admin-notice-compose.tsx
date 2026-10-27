@@ -362,6 +362,7 @@ export function AdminNoticeCompose({ compact = false }: Props) {
             placeholder={t("noticeContentPlaceholder")}
             className="min-h-[120px] text-sm resize-none"
           />
+          <p className="text-[11px] text-muted-foreground leading-snug">{t("ugcTranslateWriteHint")}</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

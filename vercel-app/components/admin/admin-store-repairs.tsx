@@ -866,6 +866,7 @@ export function AdminStoreRepairs() {
                     rows={3}
                     className="text-xs"
                   />
+                  <p className="mt-1 text-[11px] text-muted-foreground leading-snug">{t("ugcTranslateWriteHint")}</p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>

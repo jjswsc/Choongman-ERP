@@ -999,7 +999,7 @@ export default function OutboundPage() {
       <html><head><meta charset="utf-8"/><title>${escape(packingListTitle)}</title>
       <style>
         *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-        body{font-family:'Inter','Pretendard','Noto Sans KR','Sukhumvit Set','Noto Sans Thai',Arial,sans-serif; padding:24px; font-size:12px; color:#0f172a; line-height:1.5; max-width:210mm; margin:0 auto;}
+        body{font-family:'Inter','Pretendard','Noto Sans KR','IBM Plex Sans Thai','Noto Sans Thai',Arial,sans-serif; padding:24px; font-size:12px; color:#0f172a; line-height:1.5; max-width:210mm; margin:0 auto;}
         .wh-print-section{margin-bottom:28px;}
         @media print{
           @page{margin:12mm;size:A4}

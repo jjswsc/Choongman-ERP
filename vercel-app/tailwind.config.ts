@@ -78,7 +78,7 @@ const config: Config = {
         sans: [
           "var(--font-inter)",
           "var(--font-pretendard)",
-          '"Sukhumvit Set"',
+          "var(--font-ibm-plex-sans-thai)",
           "var(--font-noto-sans-thai)",
           '"Apple SD Gothic Neo"',
           "system-ui",

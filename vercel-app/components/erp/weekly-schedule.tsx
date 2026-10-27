@@ -533,7 +533,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         letter-spacing: 0.14em !important;
         color: #0f172a !important;
         margin: 0 !important;
-        font-family: Inter, Pretendard, "Noto Sans KR", "Sukhumvit Set", "Noto Sans Thai", sans-serif !important;
+        font-family: Inter, Pretendard, "Noto Sans KR", "IBM Plex Sans Thai", "Noto Sans Thai", sans-serif !important;
       }
       #weekly-schedule-print-area .print-report-store,
       #weekly-schedule-print-area .print-report-period {
@@ -542,7 +542,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         color: #1e293b !important;
         line-height: 1.35 !important;
         margin: 0.35em 0 0 !important;
-        font-family: Inter, Pretendard, "Noto Sans KR", "Sukhumvit Set", "Noto Sans Thai", sans-serif !important;
+        font-family: Inter, Pretendard, "Noto Sans KR", "IBM Plex Sans Thai", "Noto Sans Thai", sans-serif !important;
       }
       #weekly-schedule-print-area .print-report-period { font-size: 12.5px !important; font-weight: 700 !important; }
       #weekly-schedule-print-area .print-schedule-wrap { width: 100% !important; min-width: 100% !important; }

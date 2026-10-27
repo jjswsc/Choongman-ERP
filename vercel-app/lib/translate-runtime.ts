@@ -1,7 +1,16 @@
 /**
  * 서버 런타임 번역 (Google gtx → MyMemory 폴백)
  * /api/translate · getMyNotices(lang) · FCM 등에서 공유
+ *
+ * 품질(A): 용어집 보호/복원 + 메모리·DB(translate_cache) 이중 캐시
  */
+import { createHash } from 'node:crypto'
+import {
+  applyGlossaryPostCorrect,
+  protectGlossaryTerms,
+  restoreGlossaryTerms,
+} from '@/lib/translate-glossary'
+
 const LANG_MAP: Record<string, string> = {
   ko: 'ko',
   en: 'en',
@@ -60,6 +69,51 @@ function cacheSet(key: string, value: string) {
     const oldest = translateCache.keys().next().value
     if (oldest === undefined) break
     translateCache.delete(oldest)
+  }
+}
+
+function cacheKeyHash(tl: string, source: string): string {
+  return createHash('sha256').update(`${tl}\0${source}`, 'utf8').digest('hex')
+}
+
+async function dbCacheGet(hash: string): Promise<string | null> {
+  try {
+    const { supabaseSelectFilter } = await import('@/lib/supabase-server')
+    const rows = (await supabaseSelectFilter(
+      'translate_cache',
+      `cache_key=eq.${encodeURIComponent(hash)}`,
+      { limit: 1, select: 'translated' }
+    )) as Array<{ translated?: string }>
+    const t = String(rows?.[0]?.translated || '').trim()
+    return t || null
+  } catch {
+    return null
+  }
+}
+
+async function dbCacheSet(
+  hash: string,
+  source: string,
+  tl: string,
+  translated: string
+): Promise<void> {
+  try {
+    const { supabaseUpsert } = await import('@/lib/supabase-server')
+    await supabaseUpsert(
+      'translate_cache',
+      [
+        {
+          cache_key: hash,
+          source_text: source.slice(0, 8000),
+          target_lang: tl,
+          translated: translated.slice(0, 8000),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      'cache_key'
+    )
+  } catch {
+    /* 테이블 미배포·일시 오류 시 무시 */
   }
 }
 
@@ -221,29 +275,52 @@ async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T, inde
   return results
 }
 
+async function translateProvidersRaw(text: string, tl: string): Promise<string | null> {
+  let out = await translateViaProvider(text, tl, 'google')
+  if (out == null || translationLooksFailed(text, out, tl)) {
+    const fb = await translateViaProvider(text, tl, 'mymemory')
+    if (fb != null && !translationLooksFailed(text, fb, tl)) {
+      out = fb
+    } else if (out == null) {
+      out = fb
+    }
+  }
+  return out
+}
+
 export async function translateOneRuntime(text: string, targetLang: string): Promise<string> {
   const trimmed = String(text || '').trim()
   if (!trimmed) return ''
   const tl = normalizeTranslateTargetLang(targetLang)
   if (alreadyTargetLang(trimmed, tl)) return trimmed
 
-  const cacheKey = `${tl}\0${trimmed}`
-  const cached = cacheGet(cacheKey)
+  const memKey = `${tl}\0${trimmed}`
+  const cached = cacheGet(memKey)
   if (cached !== undefined) return cached
 
-  let out = await translateViaProvider(trimmed, tl, 'google')
-  if (out == null || translationLooksFailed(trimmed, out, tl)) {
-    const fb = await translateViaProvider(trimmed, tl, 'mymemory')
-    if (fb != null && !translationLooksFailed(trimmed, fb, tl)) {
-      out = fb
-    } else if (out == null) {
-      out = fb
-    }
+  const hash = cacheKeyHash(tl, trimmed)
+  const fromDb = await dbCacheGet(hash)
+  if (fromDb) {
+    cacheSet(memKey, fromDb)
+    return fromDb
   }
 
-  const finalOut = (out && out.trim()) || trimmed
+  const { text: protectedText, slots } = protectGlossaryTerms(trimmed)
+  let out = await translateProvidersRaw(protectedText, tl)
+  if (out == null) {
+    // 보호문이 실패하면 원문 재시도
+    out = protectedText !== trimmed ? await translateProvidersRaw(trimmed, tl) : null
+  }
+
+  let finalOut = (out && out.trim()) || trimmed
+  if (slots.length > 0) {
+    finalOut = restoreGlossaryTerms(finalOut, slots, tl)
+  }
+  finalOut = applyGlossaryPostCorrect(finalOut, tl)
+
   if (!translationLooksFailed(trimmed, finalOut, tl)) {
-    cacheSet(cacheKey, finalOut)
+    cacheSet(memKey, finalOut)
+    void dbCacheSet(hash, trimmed, tl, finalOut)
   } else {
     console.warn('translate failed to change script', { tl, sample: trimmed.slice(0, 40) })
   }
