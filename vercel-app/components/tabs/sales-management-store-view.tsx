@@ -28,6 +28,13 @@ export function SalesStoreView({
   scopedStoreData,
   posStoreDisplayName,
 }: SalesStoreViewProps) {
+  if (scopedStoreData.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        {tr("salesDataNone", "데이터 없음")}
+      </p>
+    )
+  }
   return (
     <>
       <div className="mb-4 h-[220px]">

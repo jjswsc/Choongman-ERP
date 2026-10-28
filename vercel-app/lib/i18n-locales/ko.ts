@@ -5364,6 +5364,7 @@ export const I18N_BASE_KO = {
   salesQueryLoading: '집계 조회 중… 잠시만 기다려 주세요.',
   salesLongRangeFastQueryHint:
     '31일을 넘는 조회는 직전 동일기간·전주 동기간 비교를 생략합니다. 메뉴·채널 확인은 기간을 한 달 이내로 나눠 주세요.',
+  salesQueryFailed: '매출 집계를 가져오지 못했습니다. 잠시 후 다시 조회해 주세요.',
   salesSelectTopic: '주제를 선택하세요',
   salesAmountKindLabel: '매출액 종류',
   salesReportTopicLabel: '리포트(주제)',

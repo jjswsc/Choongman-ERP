@@ -143,6 +143,12 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     if (isPosSalesAnalyticsRpcTimeoutError(e)) return respondPosSalesAnalyticsTimeout(headers)
     console.error('posSalesByStore:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(
+      {
+        success: false,
+        message: '매출 집계를 가져오지 못했습니다. 잠시 후 다시 조회해 주세요.',
+      },
+      { status: 500, headers }
+    )
   }
 }

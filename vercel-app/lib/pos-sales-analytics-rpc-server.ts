@@ -3,7 +3,15 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import type { PosOrderTypeValue } from '@/lib/pos-sales-order-type-filter'
 import { loadPosBusinessDaySettingsContext, type PosBusinessDaySettingsContext } from '@/lib/pos-business-day-server'
+import { diffDaysInclusiveBangkok } from '@/lib/attendance-utils'
+import { mapWithConcurrency } from '@/lib/map-with-concurrency'
 import { posSalesBusinessDateRangeUtcEnvelope } from '@/lib/pos-sales-business-day-range'
+import {
+  mergePosSalesAnalyticsAggRows,
+  POS_SALES_ANALYTICS_RPC_CHUNK_DAYS,
+  POS_SALES_ANALYTICS_RPC_MIN_CHUNK_DAYS,
+  splitPosSalesAnalyticsYmdChunks,
+} from '@/lib/pos-sales-analytics-rpc-chunk'
 import { normStoreKey } from '@/lib/store-list-keys'
 import { expandSalesStoreCodesForFilterAsync } from '@/lib/pos-sales-store-filter'
 import { supabaseRpc } from '@/lib/supabase-server'
@@ -143,7 +151,6 @@ export async function fetchPosSalesAnalyticsAgg(params: {
   }
 
   const bizCtx = params.bizCtx ?? (await loadPosBusinessDaySettingsContext(tenantScope?.tenantId))
-  const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(bizCtx, startStr, endStr)
   const expanded =
     params.storeCodes && params.storeCodes.length > 0
       ? await expandSalesStoreCodesForFilterAsync(params.storeCodes)
@@ -152,23 +159,93 @@ export async function fetchPosSalesAnalyticsAgg(params: {
   const pTenantId =
     tenantScope?.enforce && tenantScope.tenantId ? tenantScope.tenantId : null
 
+  const rpcArgs = {
+    bizCtx,
+    expanded,
+    orderTypes: params.orderTypes,
+    aggMode: params.aggMode,
+    periodGroup: params.periodGroup,
+    menuSearchTokens: params.menuSearchTokens,
+    menuSearchAnd: params.menuSearchAnd,
+    pTenantId,
+  }
+
+  return queryPosSalesAnalyticsAggChunked(
+    { ...rpcArgs, startStr, endStr },
+    POS_SALES_ANALYTICS_RPC_CHUNK_DAYS
+  )
+}
+
+type PosSalesAnalyticsAggRpcArgs = {
+  bizCtx: PosBusinessDaySettingsContext
+  startStr: string
+  endStr: string
+  expanded: string[] | null
+  orderTypes?: PosOrderTypeValue[] | null
+  aggMode: PosSalesAnalyticsAggMode
+  periodGroup?: string
+  menuSearchTokens?: string[]
+  menuSearchAnd?: boolean
+  pTenantId: string | null
+}
+
+async function queryPosSalesAnalyticsAggOnce(
+  args: PosSalesAnalyticsAggRpcArgs
+): Promise<PosSalesAnalyticsAggRow[]> {
+  const { startISO, endISOExclusive } = posSalesBusinessDateRangeUtcEnvelope(
+    args.bizCtx,
+    args.startStr,
+    args.endStr
+  )
   const rows = (await supabaseRpc<PosSalesAnalyticsAggRow[]>('get_pos_sales_analytics_agg', {
     p_start_utc: startISO,
     p_end_utc_exclusive: endISOExclusive,
-    p_start_ymd: startStr,
-    p_end_ymd: endStr,
-    p_store_codes: expanded && expanded.length > 0 ? expanded : null,
-    p_order_types: params.orderTypes?.length ? params.orderTypes : null,
-    p_agg_mode: params.aggMode,
-    p_period_group: params.periodGroup ?? 'day',
-    p_biz_hours: buildPosSalesBizHoursRpcPayload(bizCtx),
+    p_start_ymd: args.startStr,
+    p_end_ymd: args.endStr,
+    p_store_codes: args.expanded && args.expanded.length > 0 ? args.expanded : null,
+    p_order_types: args.orderTypes?.length ? args.orderTypes : null,
+    p_agg_mode: args.aggMode,
+    p_period_group: args.periodGroup ?? 'day',
+    p_biz_hours: buildPosSalesBizHoursRpcPayload(args.bizCtx),
     p_menu_search_tokens:
-      params.menuSearchTokens && params.menuSearchTokens.length > 0 ? params.menuSearchTokens : null,
-    p_menu_search_and: params.menuSearchAnd === true,
-    p_tenant_id: pTenantId,
+      args.menuSearchTokens && args.menuSearchTokens.length > 0 ? args.menuSearchTokens : null,
+    p_menu_search_and: args.menuSearchAnd === true,
+    p_tenant_id: args.pTenantId,
   })) as PosSalesAnalyticsAggRow[] | null
-
   return Array.isArray(rows) ? rows : []
+}
+
+/**
+ * 31일을 넘는 구간은 나눠 집계한다.
+ * 한 번에 5개월을 스캔하면 statement timeout 이 나고, 화면은 실패를 매출 0으로 보여 준다.
+ * 시간 초과가 난 조각만 더 짧게 다시 나눈다.
+ */
+async function queryPosSalesAnalyticsAggChunked(
+  args: PosSalesAnalyticsAggRpcArgs,
+  chunkDays: number
+): Promise<PosSalesAnalyticsAggRow[]> {
+  const span = diffDaysInclusiveBangkok(args.startStr, args.endStr)
+  if (span <= chunkDays) {
+    try {
+      return await queryPosSalesAnalyticsAggOnce(args)
+    } catch (e) {
+      if (!isSupabaseStatementTimeoutError(e) || span <= POS_SALES_ANALYTICS_RPC_MIN_CHUNK_DAYS) {
+        throw e
+      }
+      return queryPosSalesAnalyticsAggChunked(
+        args,
+        Math.max(POS_SALES_ANALYTICS_RPC_MIN_CHUNK_DAYS, Math.floor(span / 2))
+      )
+    }
+  }
+  const chunks = splitPosSalesAnalyticsYmdChunks(args.startStr, args.endStr, chunkDays)
+  const parts = await mapWithConcurrency(chunks, 3, (chunk) =>
+    queryPosSalesAnalyticsAggChunked(
+      { ...args, startStr: chunk.startStr, endStr: chunk.endStr },
+      chunkDays
+    )
+  )
+  return mergePosSalesAnalyticsAggRows(parts.flat())
 }
 
 export async function tryFetchPosSalesAnalyticsAgg(

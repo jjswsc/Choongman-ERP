@@ -235,6 +235,63 @@ export function yearRangeContainingYmd(ymd: string): { startStr: string; endStr:
   return yearRangeYmd(y)
 }
 
+export function resolveForecastHorizonRange(
+  horizon: ForecastHorizon,
+  anchorYmd: string
+): { rangeStart: string; rangeEnd: string } {
+  const anchor = String(anchorYmd || '').slice(0, 10)
+  if (horizon === 'week') {
+    const w = weekRangeContainingYmd(anchor)
+    return { rangeStart: w.startStr, rangeEnd: w.endStr }
+  }
+  if (horizon === 'month') {
+    const { year, month } = parseYearMonthFromYmd(anchor)
+    const m = monthRangeYmd(year, month)
+    return { rangeStart: m.startStr, rangeEnd: m.endStr }
+  }
+  const y = yearRangeContainingYmd(anchor)
+  return { rangeStart: y.startStr, rangeEnd: y.endStr }
+}
+
+/**
+ * 주/월: lookback(기본 84일) 일별만으로 실적·요일평균 충분.
+ * 연: 연초~기준일 실적은 월별 집계로 받아 타임아웃을 피함 (일별 YTD 금지).
+ * monthActual* 는 horizon과 무관하게 해당 연 YTD(월별) — UI에서 연간으로 바꿔도 재조회 없이 사용.
+ */
+export function resolveForecastFetchPlan(params: {
+  horizon: ForecastHorizon
+  anchorYmd: string
+  lookbackDays?: number
+}): {
+  lookbackStart: string
+  lookbackEnd: string
+  rangeStart: string
+  rangeEnd: string
+  monthActualStart: string
+  monthActualEnd: string
+} {
+  const anchor = String(params.anchorYmd || '').slice(0, 10)
+  const lookbackDays = Math.max(14, Math.min(365, params.lookbackDays ?? 84))
+  const lookbackEnd = anchor
+  const lookbackStart = addBangkokCalendarDays(anchor, -(lookbackDays - 1))
+  const { rangeStart, rangeEnd } = resolveForecastHorizonRange(params.horizon, anchor)
+  const yearR = yearRangeContainingYmd(anchor)
+  return {
+    lookbackStart,
+    lookbackEnd,
+    rangeStart,
+    rangeEnd,
+    monthActualStart: yearR.startStr,
+    monthActualEnd: anchor,
+  }
+}
+
+export function sumPeriodRowTotals(rows: PeriodAggRow[]): number {
+  let sum = 0
+  for (const r of rows) sum += Number(r.total ?? 0) || 0
+  return Math.round(sum * 100) / 100
+}
+
 /** 요일 평균 기반 기간 예상 매출 */
 export function computeSalesForecast(params: {
   horizon: ForecastHorizon
@@ -242,33 +299,24 @@ export function computeSalesForecast(params: {
   lookbackDailyRows: PeriodAggRow[]
   actualDailyRows: PeriodAggRow[]
   lookbackDays?: number
+  /**
+   * 연간 등: 일별 맵 대신 이미 합산한 기간 실적(월별 합계).
+   * 지정 시 actualDailyRows의 일별 합산은 쓰지 않음.
+   */
+  actualToDateOverride?: number
 }): SalesForecastSummary {
   const anchor = String(params.anchorYmd || '').slice(0, 10)
   const lookbackDays = Math.max(14, Math.min(365, params.lookbackDays ?? 84))
   const lookbackEnd = anchor
   const lookbackStart = addBangkokCalendarDays(anchor, -(lookbackDays - 1))
-
-  let rangeStart = anchor
-  let rangeEnd = anchor
-  if (params.horizon === 'week') {
-    const w = weekRangeContainingYmd(anchor)
-    rangeStart = w.startStr
-    rangeEnd = w.endStr
-  } else if (params.horizon === 'month') {
-    const { year, month } = parseYearMonthFromYmd(anchor)
-    const m = monthRangeYmd(year, month)
-    rangeStart = m.startStr
-    rangeEnd = m.endStr
-  } else {
-    const y = yearRangeContainingYmd(anchor)
-    rangeStart = y.startStr
-    rangeEnd = y.endStr
-  }
+  const { rangeStart, rangeEnd } = resolveForecastHorizonRange(params.horizon, anchor)
 
   const dowAverages = computeDowAverageMap(params.lookbackDailyRows)
   const actualMap = indexDailyTotals(params.actualDailyRows)
+  const useOverride =
+    params.actualToDateOverride != null && Number.isFinite(params.actualToDateOverride)
 
-  let actualToDate = 0
+  let actualToDate = useOverride ? Number(params.actualToDateOverride) : 0
   let projectedRemaining = 0
   let completedDays = 0
   let remainingDays = 0
@@ -276,7 +324,7 @@ export function computeSalesForecast(params: {
   for (const ymd of iterBangkokYmdInclusive(rangeStart, rangeEnd)) {
     if (ymd <= anchor) {
       completedDays += 1
-      actualToDate += actualMap.get(ymd) ?? 0
+      if (!useOverride) actualToDate += actualMap.get(ymd) ?? 0
     } else {
       remainingDays += 1
       const dow = getDayOfWeekBangkok(ymd)

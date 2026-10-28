@@ -240,6 +240,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     return filterPosSalesStoreOptionsForManagement(raw)
   }, [canSearchAll, posOptions, auth?.store, auth?.allowedStores])
   const [loading, setLoading] = React.useState(false)
+  /** 조회 실패를 매출 0으로 보여 주지 않기 위한 메시지. 성공 시 빈 문자열. */
+  const [salesQueryError, setSalesQueryError] = React.useState("")
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
   const [fetchedAnalyticsKey, setFetchedAnalyticsKey] = React.useState("")
   const fetchedAnalyticsKeyRef = React.useRef(fetchedAnalyticsKey)
@@ -1304,6 +1306,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setForecastActualRows([])
     setForecastMonthActualTotal(null)
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
+    setSalesQueryError("")
     setFetchedAnalyticsKey("")
     lastFetchedDataFilterKeyRef.current = ""
     viewCacheRestoreKeyRef.current = null
@@ -2069,6 +2072,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gForecastActual = guarded(setForecastActualRows)
     const gForecastMonthActual = guarded(setForecastMonthActualTotal)
     const gSummary = guarded(setSummaryCards)
+    const noteQueryFailure = (e: unknown) => {
+      if (loadIdRef.current !== id) return
+      const fallback = tr(
+        "salesQueryFailed",
+        "매출 집계를 가져오지 못했습니다. 잠시 후 다시 조회해 주세요."
+      )
+      const msg = e instanceof Error && e.message.trim() ? e.message.trim() : fallback
+      setSalesQueryError((prev) => prev || msg)
+    }
+    setSalesQueryError("")
     if (!opts?.silent) setLoading(true)
     if (isLongRangeSalesQuery && isSalesHeavyTopicSkippedOnLongRange(selectedView)) {
       setPeriodSplitSeries(null)
@@ -2121,7 +2134,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               }))
             }
           })
-          .catch(() => {
+          .catch((err) => {
+            noteQueryFailure(err)
             if (loadIdRef.current !== id) return
             setPeriodSplitSeries(null)
             setPeriodData([])
@@ -2165,7 +2179,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               prevWeek: 0,
             })
           })
-          .catch(() => {
+          .catch((err) => {
+            noteQueryFailure(err)
             gYoy([])
             gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
@@ -2209,7 +2224,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               prevWeek: 0,
             })
           })
-          .catch(() => {
+          .catch((err) => {
+            noteQueryFailure(err)
             gMom([])
             gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
@@ -2257,7 +2273,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               prevWeek: 0,
             })
           })
-          .catch(() => {
+          .catch((err) => {
+            noteQueryFailure(err)
             gForecast(null)
             gForecastLookback([])
             gForecastActual([])
@@ -2275,7 +2292,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           orderTypes: orderTypesParam,
         })
           .then(gDelivery)
-          .catch(() => gDelivery({ items: [], total: 0 }))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gDelivery({ items: [], total: 0 })
+          })
       )
     }
     if (needChannelReconcile) {
@@ -2292,7 +2312,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           stores: salesFetchStoresParam,
         })
           .then(gAppReconcile)
-          .catch(() => gAppReconcile(EMPTY_POS_DELIVERY_APP_RECONCILE))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gAppReconcile(EMPTY_POS_DELIVERY_APP_RECONCILE)
+          })
       )
       tasks.push(
         getPosKbankQrReconcile({
@@ -2301,7 +2324,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           stores: salesFetchStoresParam,
         })
           .then(gKbankQrReconcile)
-          .catch(() => gKbankQrReconcile(EMPTY_POS_KBANK_QR_RECONCILE))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gKbankQrReconcile(EMPTY_POS_KBANK_QR_RECONCILE)
+          })
       )
       tasks.push(
         getPosCardReconcile({
@@ -2310,7 +2336,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           stores: salesFetchStoresParam,
         })
           .then(gCardReconcile)
-          .catch(() => gCardReconcile(EMPTY_POS_CARD_RECONCILE))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gCardReconcile(EMPTY_POS_CARD_RECONCILE)
+          })
       )
       tasks.push(
         getPosCashReconcile({
@@ -2319,7 +2348,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           stores: salesFetchStoresParam,
         })
           .then(gCashReconcile)
-          .catch(() => gCashReconcile(EMPTY_POS_CASH_RECONCILE))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gCashReconcile(EMPTY_POS_CASH_RECONCILE)
+          })
       )
       }
     }
@@ -2332,7 +2364,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           orderTypes: orderTypesParam,
         })
           .then(gChannel)
-          .catch(() => gChannel([]))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gChannel([])
+          })
       )
     }
     if (needStoreChannel) {
@@ -2351,7 +2386,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               : rows
             gStoreChannel(scoped)
           })
-          .catch(() => gStoreChannel([]))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gStoreChannel([])
+          })
       )
     }
     if (needStoreDeliveryPlatform) {
@@ -2372,7 +2410,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               : rows
             gStoreDeliveryPlatform(scoped)
           })
-          .catch(() => gStoreDeliveryPlatform([]))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gStoreDeliveryPlatform([])
+          })
       )
     }
     if (needPayment) {
@@ -2391,7 +2432,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               gSummary({ current: total, prevRange: 0, prevWeek: 0 })
             }
           })
-          .catch(() => {
+          .catch((err) => {
+            noteQueryFailure(err)
             gPaymentBreakdown({
               deliveryByChannel: [],
               deliveryTotal: 0,
@@ -2423,7 +2465,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               })
             }
           })
-          .catch(() => {
+          .catch((err) => {
+            noteQueryFailure(err)
             gStore([])
             if (needCurrentSummaryOnly) gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
@@ -2443,7 +2486,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           orderTypes: orderTypesParam,
         })
           .then(gMenu)
-          .catch(() => gMenu([]))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gMenu([])
+          })
       )
       }
     }
@@ -2458,7 +2504,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           orderTypes: orderTypesParam,
         })
           .then(gPromoBundle)
-          .catch(() => gPromoBundle(EMPTY_POS_SALES_BY_PROMO))
+          .catch((err) => {
+            noteQueryFailure(err)
+            gPromoBundle(EMPTY_POS_SALES_BY_PROMO)
+          })
       )
     }
     if (
@@ -2562,6 +2611,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     selectedStores.length,
     forecastHorizon,
     isLongRangeSalesQuery,
+    tr,
   ])
 
   useErpRefetchOnActivate(() => {
@@ -2918,6 +2968,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </p>
           ) : null}
 
+          {salesQueryError ? null : (
           <SalesManagementSummaryInsights
             tr={tr}
             summaryRowShowFull={summaryRowShowFull}
@@ -2934,6 +2985,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             insightTopChannels={insightTopChannels}
             showInsightPanel={showInsightPanel}
           />
+          )}
 
           <div className="mt-6 max-h-[calc(100dvh-380px)] min-h-[200px] overflow-auto rounded-lg border p-4">
             {isHoursPanel ? (
@@ -2943,6 +2995,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 canEditStore={canSearchAll || canEditPosBizDayStore}
                 storeChoices={posBizDayStoreChoices}
               />
+            ) : salesQueryError ? (
+              <p className={ADMIN_PANEL_WARNING_CN} role="alert">
+                {salesQueryError}
+              </p>
             ) : (
             <>
             {selectedView === "period" && (

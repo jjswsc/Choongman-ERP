@@ -5357,6 +5357,7 @@ Only matters the employee must handle personally on a working day:
   salesQueryLoading: 'Loading aggregates… please wait.',
   salesLongRangeFastQueryHint:
     'Ranges longer than 31 days skip prior-period / prior-week comparison. For menu or channel-check reports, split the range into one month or less.',
+  salesQueryFailed: 'Could not load the sales totals. Please query again in a moment.',
   salesSelectTopic: 'Select topic',
   salesAmountKindLabel: 'Sales amount type',
   salesReportTopicLabel: 'Report (topic)',

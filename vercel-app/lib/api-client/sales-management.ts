@@ -9,8 +9,10 @@ function appendPosSalesFreshParam(q: URLSearchParams, fresh?: boolean) {
   if (fresh) q.set('fresh', '1')
 }
 
-/** 매출 집계 API — 장시간 hang 방지 (12매장·수개월 풀스캔 폴백 등) */
-const POS_SALES_CLIENT_TIMEOUT_MS = 45_000
+/** 매출 집계 API — 서버 maxDuration(60s) 안에서 월 단위 분할 집계가 끝나도록 둔다. */
+const POS_SALES_CLIENT_TIMEOUT_MS = 55_000
+const POS_SALES_TIMEOUT_MESSAGE =
+  '매출 집계가 시간 초과되었습니다. 조회 기간을 줄여 다시 시도해 주세요.'
 
 function throwIfPosSalesAggTimeout(res: Response, data: unknown) {
   if (res.status !== 504) return
@@ -18,7 +20,7 @@ function throwIfPosSalesAggTimeout(res: Response, data: unknown) {
     data && typeof data === 'object' && data !== null && 'message' in data
       ? String((data as { message?: unknown }).message || '')
       : ''
-  throw new Error(msg || '매출 집계가 시간 초과되었습니다. 조회 기간을 줄여 다시 시도해 주세요.')
+  throw new Error(msg || POS_SALES_TIMEOUT_MESSAGE)
 }
 
 async function posSalesApiFetch(pathWithQuery: string, fresh?: boolean): Promise<Response> {
@@ -29,6 +31,13 @@ async function posSalesApiFetch(pathWithQuery: string, fresh?: boolean): Promise
       signal: ctrl.signal,
       ...(fresh ? { cache: 'no-store' as RequestCache } : {}),
     })
+  } catch (e) {
+    const name = e instanceof Error ? e.name : ''
+    const msg = e instanceof Error ? e.message : ''
+    if (name === 'AbortError' || /aborted|timeout/i.test(msg)) {
+      throw new Error(POS_SALES_TIMEOUT_MESSAGE)
+    }
+    throw e
   } finally {
     clearTimeout(timer)
   }
@@ -50,8 +59,24 @@ export async function getPosSalesByStore(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   appendPosSalesFreshParam(q, params.fresh)
   const res = await posSalesApiFetch(`/api/posSalesByStore?${q}`, params.fresh)
-  const data: unknown = await res.json()
+  let data: unknown
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error(
+      res.status === 504 || res.status === 502
+        ? POS_SALES_TIMEOUT_MESSAGE
+        : '매출 집계를 가져오지 못했습니다. 잠시 후 다시 조회해 주세요.'
+    )
+  }
   throwIfPosSalesAggTimeout(res, data)
+  if (!Array.isArray(data)) {
+    const msg =
+      data && typeof data === 'object' && data !== null && 'message' in data
+        ? String((data as { message?: unknown }).message || '')
+        : ''
+    throw new Error(msg || '매출 집계를 가져오지 못했습니다. 잠시 후 다시 조회해 주세요.')
+  }
   return data as {
     storeName: string
     count: number

@@ -5,6 +5,12 @@
 
 import { isOnline } from './network'
 import { getFromCache, setCache, cacheKeyAnalytics } from './cache'
+
+/** 온라인데 조회가 실패했고 이 조건의 캐시도 없으면, 빈 배열을 성공(매출 0)처럼 돌려주지 않는다. */
+function cachedOrRethrow<T>(cached: T | null | undefined, err: unknown): T {
+  if (cached != null) return cached
+  throw err instanceof Error ? err : new Error('매출 집계를 가져오지 못했습니다.')
+}
 import {
   getPosSalesFilterOptions,
   getPosSalesByPeriod,
@@ -73,12 +79,12 @@ export async function getPosSalesByPeriodWithCache(params: {
       const data = await getPosSalesByPeriod(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<unknown>('pos_sales_cache', key)
       if (Array.isArray(cached))
         return { kind: 'aggregate' as const, rows: cached as PosSalesPeriodRow[], truncated: false }
-      const typed = cached as PosSalesByPeriodResult | null
-      return typed ?? { kind: 'aggregate' as const, rows: [], truncated: false }
+      if (cached != null) return cached as PosSalesByPeriodResult
+      throw err instanceof Error ? err : new Error('매출 집계를 가져오지 못했습니다.')
     }
   }
   const cached = await getFromCache<unknown>('pos_sales_cache', key)
@@ -106,7 +112,7 @@ export async function getPosSalesByDeliveryAppWithCache(params: {
       const data = await getPosSalesByDeliveryApp(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<{
         items: {
           channelKey: string
@@ -116,7 +122,7 @@ export async function getPosSalesByDeliveryAppWithCache(params: {
         }[]
         total: number
       }>('pos_sales_cache', key)
-      return cached ?? { items: [], total: 0 }
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<{
@@ -149,11 +155,11 @@ export async function getPosSalesByChannelWithCache(params: {
       const data = await getPosSalesByChannel(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<
         { channelKey: string; sales: number }[]
       >('pos_sales_cache', key)
-      return cached ?? []
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<
@@ -183,11 +189,11 @@ export async function getPosSalesByMenuWithCache(params: {
       const data = await getPosSalesByMenu(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<
         { name: string; qty: number; sales: number }[]
       >('pos_sales_cache', key)
-      return cached ?? []
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<
@@ -265,9 +271,9 @@ export async function getPosSalesByPromoWithCache(params: {
       const data = await getPosSalesByPromo(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<PosSalesByPromoResult>('pos_sales_cache', key)
-      return cached ?? empty
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<PosSalesByPromoResult>('pos_sales_cache', key)
@@ -292,11 +298,11 @@ export async function getPosSalesByPaymentWithCache(params: {
       const data = await getPosSalesByPayment(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<
         { paymentKey: string; sales: number }[]
       >('pos_sales_cache', key)
-      return cached ?? []
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<
@@ -330,9 +336,9 @@ export async function getPosSalesByPaymentBreakdownWithCache(params: {
       const data = await getPosSalesByPaymentBreakdown(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<PosSalesPaymentBreakdown>('pos_sales_cache', key)
-      return cached ?? empty
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<PosSalesPaymentBreakdown>('pos_sales_cache', key)
@@ -357,7 +363,7 @@ export async function getPosSalesByStoreWithCache(params: {
       const data = await getPosSalesByStore(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<
         {
           storeName: string
@@ -376,7 +382,7 @@ export async function getPosSalesByStoreWithCache(params: {
           salesPerOrder?: number
         }[]
       >('pos_sales_cache', key)
-      return cached ?? []
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<
@@ -418,11 +424,11 @@ export async function getPosSalesByStoreChannelWithCache(params: {
       const data = await getPosSalesByStoreChannel(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<
         { storeName: string; dineIn: number; takeout: number; delivery: number }[]
       >('pos_sales_cache', key)
-      return cached ?? []
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<
@@ -449,9 +455,9 @@ export async function getPosSalesByStoreDeliveryPlatformWithCache(params: {
       const data = await getPosSalesByStoreDeliveryPlatform(params)
       await setCache('pos_sales_cache', key, data)
       return data
-    } catch {
+    } catch (err) {
       const cached = await getFromCache<PosSalesStoreDeliveryPlatformRow[]>('pos_sales_cache', key)
-      return cached ?? []
+      return cachedOrRethrow(cached, err)
     }
   }
   const cached = await getFromCache<PosSalesStoreDeliveryPlatformRow[]>('pos_sales_cache', key)

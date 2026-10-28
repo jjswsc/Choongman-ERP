@@ -6,6 +6,8 @@ import {
   computeDowAverageMap,
   computeSalesForecast,
   pctChange,
+  resolveForecastFetchPlan,
+  sumPeriodRowTotals,
 } from '@/lib/pos-sales-forecast-compare'
 
 function dayRow(key: string, total: number, count: number, guests = 0): PeriodAggRow {
@@ -81,6 +83,36 @@ describe('computeSalesForecast', () => {
     expect(forecast.actualToDate).toBe(1100)
     expect(forecast.expectedTotal).toBeGreaterThan(forecast.actualToDate)
     expect(forecast.remainingDays).toBeGreaterThan(0)
+  })
+
+  it('uses actualToDateOverride for year horizon without daily YTD', () => {
+    const lookback = [dayRow('2026-10-01', 1000, 10, 8)]
+    const forecast = computeSalesForecast({
+      horizon: 'year',
+      anchorYmd: '2026-10-20',
+      lookbackDailyRows: lookback,
+      actualDailyRows: lookback,
+      actualToDateOverride: 5_000_000,
+    })
+    expect(forecast.actualToDate).toBe(5_000_000)
+    expect(forecast.rangeStart).toBe('2026-01-01')
+    expect(forecast.rangeEnd).toBe('2026-12-31')
+    expect(forecast.expectedTotal).toBeGreaterThan(forecast.actualToDate)
+  })
+})
+
+describe('resolveForecastFetchPlan', () => {
+  it('keeps month actual as year-to-date for any horizon', () => {
+    const plan = resolveForecastFetchPlan({ horizon: 'week', anchorYmd: '2026-10-20' })
+    expect(plan.monthActualStart).toBe('2026-01-01')
+    expect(plan.monthActualEnd).toBe('2026-10-20')
+    expect(plan.lookbackEnd).toBe('2026-10-20')
+  })
+})
+
+describe('sumPeriodRowTotals', () => {
+  it('sums totals', () => {
+    expect(sumPeriodRowTotals([dayRow('2026-01', 100, 1), dayRow('2026-02', 50.5, 1)])).toBe(150.5)
   })
 })
 
