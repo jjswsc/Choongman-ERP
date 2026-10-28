@@ -444,7 +444,7 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuSoldOutTabMenus: 'เมนู',
     posMenuSoldOutTabParts: 'ส่วนชิ้น',
     posOptionPartSoldOutHint:
-      'ปิดส่วนชิ้น (เช่น ปีก/Wing) = ปิดเฉพาะ POS และ QR หน้าร้านของสาขานี้ · Grab ยังขายได้ · ปิดไว้จนกว่าจะกดเปิดเองครับ',
+      'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR · ปิดทุกช่องทาง = รวม Grab ด้วย · หลังปิดทุกช่องทาง ให้ซิงก์เมนูแอปเดลิเวอรี่อีกครั้งครับ · ปิดไว้จนกว่าจะกดเปิดเองครับ',
     posOptionPartSoldOutSearchPh: 'ค้นหาชื่อส่วนชิ้น',
     posOptionPartSoldOutEmpty: 'ไม่พบตัวเลือกส่วนชิ้นครับ',
     posOptionPartSoldOutNeedStore: 'ต้องมีรหัสสาขา กรุณาเข้าสู่ระบบ POS ด้วยสาขาครับ',

@@ -207,8 +207,14 @@ export function PosMenuSoldOutContent() {
     }
   }
 
-  const handlePartToggle = async (item: PosOptionStepSoldOutItem, soldOut: boolean) => {
-    if (!storeCode || item.soldOut === soldOut) return
+  const partSaleState = (item: PosOptionStepSoldOutItem): MenuSaleState => {
+    if (!item.soldOut) return 'selling'
+    return item.soldOutScope === 'store' ? 'store' : 'all'
+  }
+
+  const handlePartSetState = async (item: PosOptionStepSoldOutItem, next: MenuSaleState) => {
+    if (!storeCode || partSaleState(item) === next) return
+    const nextSoldOut = next !== 'selling'
     const toggleKey = `${item.stepKey}:${item.stepValue}`
     setTogglingId(toggleKey)
     try {
@@ -216,24 +222,27 @@ export function PosMenuSoldOutContent() {
         storeCode,
         stepKey: item.stepKey,
         stepValue: item.stepValue,
-        soldOut,
-        soldOutScope: 'store',
+        soldOut: nextSoldOut,
+        soldOutScope: nextSoldOut ? next : undefined,
       })
       if (!res.success) {
         await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail_detail'))
         return
       }
-      const nextDate = soldOut
+      const nextDate = nextSoldOut
         ? String(res.soldOutDate || todayStr).slice(0, 10)
+        : null
+      const nextScope: PosMenuSoldOutScope | null = nextDate
+        ? res.soldOutScope ?? (next === 'store' ? 'store' : 'all')
         : null
       setParts((prev) =>
         prev.map((p) =>
           p.stepKey === item.stepKey && p.stepValue === item.stepValue
             ? {
                 ...p,
-                soldOut,
+                soldOut: nextSoldOut,
                 soldOutDate: nextDate,
-                soldOutScope: soldOut ? 'store' : null,
+                soldOutScope: nextScope,
               }
             : p
         )
@@ -282,7 +291,7 @@ export function PosMenuSoldOutContent() {
               <p className="text-xs text-muted-foreground">
                 {mainTab === 'parts'
                   ? t('posOptionPartSoldOutHint') ||
-                    '부위(예: Wing)를 끄면 이 매장 POS·QR에서만 숨깁니다. Grab 배달은 그대로 판매. 다시 열 때까지 유지.'
+                    '매장만 중지 = POS·QR만. 전체 중지 = Grab 배달 포함. 전체 중지 후 배달앱 메뉴 동기화를 한 번 해 주세요. 다시 열 때까지 유지.'
                   : t('posMenuSoldOutManageHint') ||
                     '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
               </p>
@@ -472,12 +481,17 @@ export function PosMenuSoldOutContent() {
             {filteredParts.map((item) => {
               const busy = togglingId === `${item.stepKey}:${item.stepValue}`
               const label = partLabel(item.stepValue, t)
+              const state = partSaleState(item)
               return (
                 <li
                   key={`${item.stepKey}:${item.stepValue}`}
                   className={cn(
                     'flex min-h-[72px] flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center',
-                    item.soldOut ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'
+                    state === 'all'
+                      ? 'border-red-200 bg-red-50'
+                      : state === 'store'
+                        ? 'border-amber-200 bg-amber-50'
+                        : 'border-slate-200 bg-white'
                   )}
                 >
                   <div className="min-w-0 flex-1">
@@ -493,36 +507,27 @@ export function PosMenuSoldOutContent() {
                     {busy ? (
                       <Loader2 className="mx-2 h-4 w-4 animate-spin text-muted-foreground" />
                     ) : null}
-                    <button
-                      type="button"
-                      disabled={busy}
-                      aria-pressed={!item.soldOut}
-                      onClick={() => void handlePartToggle(item, false)}
-                      className={cn(
-                        'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
-                        'active:scale-[0.98] disabled:opacity-60',
-                        !item.soldOut
-                          ? 'border-emerald-600 bg-emerald-600 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      )}
-                    >
-                      {t('posAvailable') || '판매'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      aria-pressed={item.soldOut}
-                      onClick={() => void handlePartToggle(item, true)}
-                      className={cn(
-                        'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
-                        'active:scale-[0.98] disabled:opacity-60',
-                        item.soldOut
-                          ? 'border-amber-500 bg-amber-500 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      )}
-                    >
-                      {t('posMenuSoldOutScopeStore') || '매장만 중지'}
-                    </button>
+                    {stateOptions.map((opt) => {
+                      const active = state === opt.id
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={busy}
+                          aria-pressed={active}
+                          onClick={() => void handlePartSetState(item, opt.id)}
+                          className={cn(
+                            'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
+                            'active:scale-[0.98] disabled:opacity-60',
+                            active
+                              ? opt.activeCn
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </li>
               )

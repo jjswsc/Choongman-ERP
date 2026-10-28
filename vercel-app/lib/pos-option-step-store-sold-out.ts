@@ -46,7 +46,48 @@ export function shouldApplyOptionStepSoldOutForChannel(
   return true
 }
 
-/** 옵션 응답에 매장 부위 품절을 sell_* 플래그로 반영 (배달은 유지) */
+/**
+ * 옵션 응답에 매장 부위 품절을 sell_* 플래그로 반영.
+ * - storefrontKeys: 홀·포장·픽업 off (scope=store|all)
+ * - deliveryKeys: 배달 off (scope=all 만 — load 시 channel=delivery)
+ */
+export function applyPartSoldOutToOptionFlags<
+  T extends {
+    optionStepValues?: Record<string, string> | null
+    sellHall?: boolean
+    sellDelivery?: boolean
+    sellPackaging?: boolean
+    sellMember?: boolean
+  },
+>(
+  options: T[],
+  keys: {
+    storefrontKeys?: ReadonlySet<string>
+    deliveryKeys?: ReadonlySet<string>
+  }
+): T[] {
+  const storefrontKeys = keys.storefrontKeys
+  const deliveryKeys = keys.deliveryKeys
+  if ((!storefrontKeys || !storefrontKeys.size) && (!deliveryKeys || !deliveryKeys.size)) {
+    return options
+  }
+  return options.map((opt) => {
+    const hitStore =
+      !!storefrontKeys?.size && optionStepValuesHitSoldOut(opt.optionStepValues, storefrontKeys)
+    const hitDelivery =
+      !!deliveryKeys?.size && optionStepValuesHitSoldOut(opt.optionStepValues, deliveryKeys)
+    if (!hitStore && !hitDelivery) return opt
+    return {
+      ...opt,
+      ...(hitStore
+        ? { sellHall: false, sellPackaging: false, sellMember: false }
+        : null),
+      ...(hitDelivery ? { sellDelivery: false } : null),
+    }
+  })
+}
+
+/** @deprecated applyPartSoldOutToOptionFlags 사용 — 하위 호환 */
 export function applyStorefrontPartSoldOutToOptionFlags<
   T extends {
     optionStepValues?: Record<string, string> | null
@@ -56,16 +97,7 @@ export function applyStorefrontPartSoldOutToOptionFlags<
     sellMember?: boolean
   },
 >(options: T[], soldOutKeys: ReadonlySet<string>): T[] {
-  if (!soldOutKeys.size) return options
-  return options.map((opt) => {
-    if (!optionStepValuesHitSoldOut(opt.optionStepValues, soldOutKeys)) return opt
-    return {
-      ...opt,
-      sellHall: false,
-      sellPackaging: false,
-      sellMember: false,
-    }
-  })
+  return applyPartSoldOutToOptionFlags(options, { storefrontKeys: soldOutKeys })
 }
 
 export { normalizePosMenuSoldOutScope }

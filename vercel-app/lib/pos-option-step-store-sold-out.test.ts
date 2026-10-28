@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyStorefrontPartSoldOutToOptionFlags,
+  applyPartSoldOutToOptionFlags,
   optionStepSoldOutKey,
   optionStepValuesHitSoldOut,
   shouldApplyOptionStepSoldOutForChannel,
@@ -26,7 +26,7 @@ describe('pos-option-step-store-sold-out', () => {
 
   it('clears storefront sell flags for sold-out part', () => {
     const keys = new Set(['part:Wing'])
-    const out = applyStorefrontPartSoldOutToOptionFlags(
+    const out = applyPartSoldOutToOptionFlags(
       [
         {
           optionStepValues: { part: 'Wing', size: 'M' },
@@ -43,12 +43,31 @@ describe('pos-option-step-store-sold-out', () => {
           sellMember: true,
         },
       ],
-      keys
+      { storefrontKeys: keys }
     )
     expect(out[0]?.sellHall).toBe(false)
     expect(out[0]?.sellPackaging).toBe(false)
     expect(out[0]?.sellMember).toBe(false)
     expect(out[0]?.sellDelivery).toBe(true)
     expect(out[1]?.sellHall).toBe(true)
+  })
+
+  it('clears delivery flag when scope=all keys provided', () => {
+    const storefront = new Set(['part:Wing'])
+    const delivery = new Set(['part:Wing'])
+    const out = applyPartSoldOutToOptionFlags(
+      [
+        {
+          optionStepValues: { part: 'Wing', size: 'M' },
+          sellHall: true,
+          sellDelivery: true,
+          sellPackaging: true,
+          sellMember: true,
+        },
+      ],
+      { storefrontKeys: storefront, deliveryKeys: delivery }
+    )
+    expect(out[0]?.sellHall).toBe(false)
+    expect(out[0]?.sellDelivery).toBe(false)
   })
 })

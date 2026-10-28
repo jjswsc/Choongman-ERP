@@ -1881,7 +1881,7 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuSoldOutTabMenus: 'Menus',
     posMenuSoldOutTabParts: 'Parts',
     posOptionPartSoldOutHint:
-      'Turning off a part (e.g. Wing) hides it on this store\'s POS & QR only. Grab delivery keeps selling. Stays off until you turn it back on.',
+      'Store only = POS & QR. All channels = includes Grab. After All channels, run delivery menu sync once. Stays off until you turn it back on.',
     posOptionPartSoldOutSearchPh: 'Search part name',
     posOptionPartSoldOutEmpty: 'No part options found.',
     posOptionPartSoldOutNeedStore: 'Store code required. Sign in to POS with a store.',

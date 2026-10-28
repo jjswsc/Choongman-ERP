@@ -18,7 +18,7 @@ import {
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
 import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
-import { applyStorefrontPartSoldOutToOptionFlags } from '@/lib/pos-option-step-store-sold-out'
+import { applyPartSoldOutToOptionFlags } from '@/lib/pos-option-step-store-sold-out'
 import { loadStoreOptionStepSoldOut } from '@/lib/pos-option-step-store-sold-out-server'
 
 /** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
@@ -251,12 +251,19 @@ export async function GET(request: NextRequest) {
     })
 
     let merged = [...linkedOptions, ...list]
-    // 코드맵·관리자(매장 없음)는 품절 오버레이 생략. 매장 POS는 부위 품절 → sellHall/packaging/member off (배달 유지)
+    // 코드맵·관리자(매장 없음)는 품절 오버레이 생략.
+    // scope=store → 홀·포장·픽업만 / scope=all → 배달(sellDelivery)도 off
     if (!forCodeMap && storeCode) {
       try {
-        const soldOutLoad = await loadStoreOptionStepSoldOut(storeCode, { channel: 'storefront' })
-        if (soldOutLoad.schemaReady && soldOutLoad.soldOutKeys.size > 0) {
-          merged = applyStorefrontPartSoldOutToOptionFlags(merged, soldOutLoad.soldOutKeys)
+        const [storefrontLoad, deliveryLoad] = await Promise.all([
+          loadStoreOptionStepSoldOut(storeCode, { channel: 'storefront' }),
+          loadStoreOptionStepSoldOut(storeCode, { channel: 'delivery' }),
+        ])
+        if (storefrontLoad.schemaReady) {
+          merged = applyPartSoldOutToOptionFlags(merged, {
+            storefrontKeys: storefrontLoad.soldOutKeys,
+            deliveryKeys: deliveryLoad.soldOutKeys,
+          })
         }
       } catch (e) {
         console.error('getPosMenuOptions option-step sold-out:', e)

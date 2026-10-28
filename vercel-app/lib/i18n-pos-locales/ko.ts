@@ -1868,7 +1868,7 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuSoldOutTabMenus: '메뉴',
     posMenuSoldOutTabParts: '부위',
     posOptionPartSoldOutHint:
-      '부위(예: Wing)를 끄면 이 매장 POS·QR에서만 숨깁니다. Grab 배달은 그대로 판매. 다시 열 때까지 유지.',
+      '매장만 중지 = POS·QR만. 전체 중지 = Grab 배달 포함. 전체 중지 후 배달앱 메뉴 동기화를 한 번 해 주세요. 다시 열 때까지 유지.',
     posOptionPartSoldOutSearchPh: '부위명 검색',
     posOptionPartSoldOutEmpty: '부위 옵션이 없습니다.',
     posOptionPartSoldOutNeedStore: '매장 코드가 필요합니다. POS에 매장으로 로그인해 주세요.',

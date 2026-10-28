@@ -41,6 +41,10 @@ import {
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
+import {
+  isOptionStepSoldOutForStore,
+  loadStoreOptionStepSoldOut,
+} from '@/lib/pos-option-step-store-sold-out-server'
 import { grabSellingTimeWindowForSlot } from '@/lib/grab-selling-time-window'
 import {
   normalizePromotionCategoryMain,
@@ -819,13 +823,20 @@ export async function buildGrabMenuFromPos(params: {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
   })
-  const [resolved, storeSoldOutLoad] = await Promise.all([
+  const [resolved, storeSoldOutLoad, optionStepSoldOutLoad] = await Promise.all([
     resolvePolicyBundleForGrabMenu(storeGuess),
     loadStoreMenuSoldOutMap(storeGuess, { channel: 'delivery' }).catch(() => ({
       byMenuId: new Map<number, string>(),
       schemaReady: false,
     })),
+    loadStoreOptionStepSoldOut(storeGuess, { channel: 'delivery' }).catch(() => ({
+      byKey: new Map<string, string>(),
+      scopeByKey: new Map(),
+      soldOutKeys: new Set<string>(),
+      schemaReady: false,
+    })),
   ])
+  const deliveryPartSoldOutKeys = optionStepSoldOutLoad.soldOutKeys
   const { policyBundle } = resolved
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])
   const categoryOrderMap = buildCategoryOrderMap(policyBundle?.categoryOrders || [])
@@ -910,6 +921,13 @@ export async function buildGrabMenuFromPos(params: {
     }
     // S는 POS 기본가라 배달 옵션에서 꺼져 있어도 Grab에서는 손님이 골라야 한다.
     if (opt.sell_delivery === false && !isChickenDefaultOptionName(opt.name)) continue
+    // 매장 「전체 중지」부위 품절 — Grab 옵션에서도 제외
+    if (
+      deliveryPartSoldOutKeys.size > 0 &&
+      isOptionStepSoldOutForStore(opt.option_step_values, deliveryPartSoldOutKeys)
+    ) {
+      continue
+    }
     const list = optionByMenuId.get(menuId) || []
     list.push(opt)
     optionByMenuId.set(menuId, list)
@@ -918,6 +936,12 @@ export async function buildGrabMenuFromPos(params: {
     const menuId = Number(opt.menu_id ?? 0)
     if (!menuId) continue
     if (opt.sell_delivery === false && !isChickenDefaultOptionName(opt.name)) continue
+    if (
+      deliveryPartSoldOutKeys.size > 0 &&
+      isOptionStepSoldOutForStore(opt.option_step_values, deliveryPartSoldOutKeys)
+    ) {
+      continue
+    }
     const list = optionByMenuId.get(menuId) || []
     list.push(opt)
     optionByMenuId.set(menuId, list)
