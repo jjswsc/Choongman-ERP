@@ -1868,10 +1868,14 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuSoldOutTabMenus: '메뉴',
     posMenuSoldOutTabParts: '부위',
     posOptionPartSoldOutHint:
-      '매장만 중지 = POS·QR만. 전체 중지 = Grab 배달 포함. 전체 중지 후 배달앱 메뉴 동기화를 한 번 해 주세요. 다시 열 때까지 유지.',
+      '매장만 중지 = POS·QR만. 전체 중지/해제 = Grab 포함(자동 메뉴 갱신 요청). 다시 열 때까지 유지.',
     posOptionPartSoldOutSearchPh: '부위명 검색',
     posOptionPartSoldOutEmpty: '부위 옵션이 없습니다.',
     posOptionPartSoldOutNeedStore: '매장 코드가 필요합니다. POS에 매장으로 로그인해 주세요.',
+    posOptionPartSoldOutGrabSyncOk:
+      'Grab 메뉴 갱신 요청을 보냈습니다. 손님 앱 반영까지 잠시 걸릴 수 있습니다.',
+    posOptionPartSoldOutGrabSyncNeedManual:
+      '배달 범위가 바뀌었습니다. 배달앱 메뉴 동기화를 한 번 확인해 주세요.',
     posMenuSoldOutSearchPh: '메뉴명·코드 검색',
     posMenuSoldOutFilterAll: '전체',
     posMenuSoldOutTempOff: '일시 판매중지',

@@ -511,7 +511,7 @@ export function MemberPortalOrderTab({
     try {
       const [rows, opts, cats] = await Promise.all([
         getPosMenus({ storeCode, fresh: true, strictStoreScope: true }),
-        getPosMenuOptions({ fresh: true }),
+        getPosMenuOptions({ fresh: true, storeCode }),
         getPosMenuCategories(),
       ])
       setMenus(Array.isArray(rows) ? rows : [])

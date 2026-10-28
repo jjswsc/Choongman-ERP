@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { canAccessPosOrder } from '@/lib/permissions'
+import { triggerGrabMenuNotificationPerStoreCodes } from '@/lib/grab-menu-sync-trigger'
+import { canAccessPosOrder, isOfficeRole } from '@/lib/permissions'
 import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
 import {
   OPTION_STEP_SOLD_OUT_PART_KEY,
@@ -7,6 +8,7 @@ import {
   normalizeOptionStepValue,
   normalizePosMenuSoldOutScope,
   optionStepSoldOutKey,
+  type PosMenuSoldOutScope,
 } from '@/lib/pos-option-step-store-sold-out'
 import {
   listDistinctOptionStepParts,
@@ -15,10 +17,30 @@ import {
 } from '@/lib/pos-option-step-store-sold-out-server'
 import { requireAuth } from '@/lib/verify-auth'
 
+function resolveAuthorizedStoreCode(params: {
+  requested: string
+  authStore: string
+  role: string
+}): { storeCode: string } | { error: string; status: number } {
+  const authStore = stripTenantPrefixedStoreCode(params.authStore)
+  const requested = stripTenantPrefixedStoreCode(params.requested) || authStore
+  if (!requested) {
+    return { error: 'storeCode required', status: 400 }
+  }
+  // 매장 직원은 자기 매장만. 본사는 다른 매장 지정 가능.
+  if (!isOfficeRole(params.role) && authStore && requested.toLowerCase() !== authStore.toLowerCase()) {
+    return { error: '다른 매장의 옵션 품절은 변경할 수 없습니다.', status: 403 }
+  }
+  if (!isOfficeRole(params.role) && !authStore) {
+    return { error: 'storeCode required', status: 400 }
+  }
+  return { storeCode: isOfficeRole(params.role) ? requested : authStore || requested }
+}
+
 /**
  * 매장별 옵션 단계(부위) 품절.
  * GET  — part 목록 + 현재 품절 상태
- * POST — 토글 (scope 기본 store = หน้าร้าน만)
+ * POST — 토글 (scope store|all). 배달 범위 변경 시 Grab 메뉴 동기화 요청
  */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
@@ -37,15 +59,18 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url)
-    const storeCode = stripTenantPrefixedStoreCode(
-      searchParams.get('storeCode') || searchParams.get('store_code') || auth.store || ''
-    )
-    if (!storeCode) {
+    const resolved = resolveAuthorizedStoreCode({
+      requested: searchParams.get('storeCode') || searchParams.get('store_code') || '',
+      authStore: auth.store || '',
+      role: auth.role || '',
+    })
+    if ('error' in resolved) {
       return NextResponse.json(
-        { success: false, message: 'storeCode required' },
-        { status: 400, headers }
+        { success: false, message: resolved.error },
+        { status: resolved.status, headers }
       )
     }
+    const { storeCode } = resolved
 
     const [load, parts] = await Promise.all([
       loadStoreOptionStepSoldOut(storeCode, { channel: 'storefront' }),
@@ -107,20 +132,38 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const storeCode = stripTenantPrefixedStoreCode(
-      body?.storeCode ?? body?.store_code ?? auth.store ?? ''
-    )
+    const resolved = resolveAuthorizedStoreCode({
+      requested: body?.storeCode ?? body?.store_code ?? '',
+      authStore: auth.store || '',
+      role: auth.role || '',
+    })
+    if ('error' in resolved) {
+      return NextResponse.json(
+        { success: false, message: resolved.error },
+        { status: resolved.status, headers }
+      )
+    }
+    const { storeCode } = resolved
     const stepKey = normalizeOptionStepKey(body?.stepKey ?? body?.step_key ?? OPTION_STEP_SOLD_OUT_PART_KEY)
     const stepValue = normalizeOptionStepValue(body?.stepValue ?? body?.step_value)
     const soldOut = body?.soldOut === true
     const scope = normalizePosMenuSoldOutScope(body?.scope ?? 'store')
 
-    if (!storeCode || !stepValue) {
+    if (!stepValue) {
       return NextResponse.json(
-        { success: false, message: 'storeCode and stepValue required' },
+        { success: false, message: 'stepValue required' },
         { status: 400, headers }
       )
     }
+
+    const before = await loadStoreOptionStepSoldOut(storeCode, { channel: 'storefront' }).catch(() => ({
+      byKey: new Map<string, string>(),
+      scopeByKey: new Map<string, PosMenuSoldOutScope>(),
+      soldOutKeys: new Set<string>(),
+      schemaReady: true,
+    }))
+    const key = optionStepSoldOutKey(stepKey, stepValue)
+    const prevScope = before.byKey.has(key) ? before.scopeByKey.get(key) || 'all' : null
 
     const result = await setStoreOptionStepSoldOut({
       storeCode,
@@ -142,6 +185,27 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const nextScope = result.soldOutScope
+    const affectsDelivery =
+      prevScope === 'all' || nextScope === 'all' || (soldOut && scope === 'all')
+    let grabSync: {
+      attempted: number
+      sent: number
+      failed: number
+    } | null = null
+    if (affectsDelivery) {
+      try {
+        grabSync = await triggerGrabMenuNotificationPerStoreCodes({
+          reason: 'option_step_sold_out',
+          storeCodes: [storeCode],
+          syncPromoTargetPriceCampaigns: false,
+        })
+      } catch (e) {
+        console.error('pos/option-step-sold-out grab sync:', e)
+        grabSync = { attempted: 0, sent: 0, failed: 1 }
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -150,6 +214,8 @@ export async function POST(req: NextRequest) {
         stepValue,
         soldOutDate: result.soldOutDate,
         soldOutScope: result.soldOutScope,
+        grabSyncRequested: !!affectsDelivery,
+        grabSync,
       },
       { headers }
     )

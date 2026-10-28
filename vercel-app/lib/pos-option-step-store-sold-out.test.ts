@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyPartSoldOutToOptionFlags,
+  canSynthesizeChickenDefaultPart,
+  isMenuUnavailableDueToPartSoldOut,
   optionStepSoldOutKey,
   optionStepValuesHitSoldOut,
   shouldApplyOptionStepSoldOutForChannel,
@@ -69,5 +71,27 @@ describe('pos-option-step-store-sold-out', () => {
     )
     expect(out[0]?.sellHall).toBe(false)
     expect(out[0]?.sellDelivery).toBe(false)
+  })
+
+  it('marks menu unavailable when every part option is filtered out', () => {
+    const before = [
+      { optionStepValues: { part: 'Wing' } },
+      { optionStepValues: { part: 'Boneless' } },
+    ]
+    expect(isMenuUnavailableDueToPartSoldOut(before, [])).toBe(true)
+    expect(isMenuUnavailableDueToPartSoldOut(before, [{ optionStepValues: { part: 'Wing' } }])).toBe(
+      false
+    )
+  })
+
+  it('blocks synthetic S Boneless when remaining parts exclude Boneless', () => {
+    expect(canSynthesizeChickenDefaultPart([{ optionStepValues: { part: 'Wing' } }])).toBe(false)
+    expect(
+      canSynthesizeChickenDefaultPart([
+        { optionStepValues: { part: 'Wing' } },
+        { optionStepValues: { part: 'Boneless' } },
+      ])
+    ).toBe(true)
+    expect(canSynthesizeChickenDefaultPart([{ optionStepValues: null }])).toBe(true)
   })
 })

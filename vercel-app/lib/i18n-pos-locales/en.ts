@@ -1881,10 +1881,14 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuSoldOutTabMenus: 'Menus',
     posMenuSoldOutTabParts: 'Parts',
     posOptionPartSoldOutHint:
-      'Store only = POS & QR. All channels = includes Grab. After All channels, run delivery menu sync once. Stays off until you turn it back on.',
+      'Store only = POS & QR. All channels on/off = includes Grab (auto menu refresh request). Stays off until you turn it back on.',
     posOptionPartSoldOutSearchPh: 'Search part name',
     posOptionPartSoldOutEmpty: 'No part options found.',
     posOptionPartSoldOutNeedStore: 'Store code required. Sign in to POS with a store.',
+    posOptionPartSoldOutGrabSyncOk:
+      'Grab menu refresh requested. It may take a moment to show in the guest app.',
+    posOptionPartSoldOutGrabSyncNeedManual:
+      'Delivery scope changed. Please confirm delivery app menu sync once.',
     posMenuSoldOutSearchPh: 'Search name or code',
     posMenuSoldOutFilterAll: 'All',
     posMenuSoldOutTempOff: 'Temporarily unavailable',

@@ -823,13 +823,15 @@ export async function buildGrabMenuFromPos(params: {
     merchantID: params.merchantID,
     partnerMerchantID: params.partnerMerchantID,
   })
-  const [resolved, storeSoldOutLoad, optionStepSoldOutLoad] = await Promise.all([
-    resolvePolicyBundleForGrabMenu(storeGuess),
-    loadStoreMenuSoldOutMap(storeGuess, { channel: 'delivery' }).catch(() => ({
+  const resolved = await resolvePolicyBundleForGrabMenu(storeGuess)
+  // 품절은 정책과 같은 canonical store_code 로 읽어 POS 토글과 키를 맞춘다
+  const soldOutStoreCode = String(resolved.storeCode || storeGuess || '').trim()
+  const [storeSoldOutLoad, optionStepSoldOutLoad] = await Promise.all([
+    loadStoreMenuSoldOutMap(soldOutStoreCode, { channel: 'delivery' }).catch(() => ({
       byMenuId: new Map<number, string>(),
       schemaReady: false,
     })),
-    loadStoreOptionStepSoldOut(storeGuess, { channel: 'delivery' }).catch(() => ({
+    loadStoreOptionStepSoldOut(soldOutStoreCode, { channel: 'delivery' }).catch(() => ({
       byKey: new Map<string, string>(),
       scopeByKey: new Map(),
       soldOutKeys: new Set<string>(),

@@ -100,5 +100,36 @@ export function applyStorefrontPartSoldOutToOptionFlags<
   return applyPartSoldOutToOptionFlags(options, { storefrontKeys: soldOutKeys })
 }
 
+/** 필터 전후에 part 옵션이 전부 사라지면 메뉴 자체를 품절로 본다 */
+export function isMenuUnavailableDueToPartSoldOut(
+  optionsBefore: Array<{ optionStepValues?: Record<string, string> | null }>,
+  optionsAfter: Array<{ optionStepValues?: Record<string, string> | null }>
+): boolean {
+  const hasPart = (list: Array<{ optionStepValues?: Record<string, string> | null }>) =>
+    list.some((o) => normalizeOptionStepValue(o.optionStepValues?.[OPTION_STEP_SOLD_OUT_PART_KEY]))
+  return hasPart(optionsBefore) && !hasPart(optionsAfter)
+}
+
+/**
+ * 암시적 S Boneless(목록 시작가) 허용 여부.
+ * 남은 옵션에 part 키가 있는데 Boneless가 없으면(부위 품절) 합성 S를 막는다.
+ */
+export function canSynthesizeChickenDefaultPart(
+  options: Array<{ optionStepValues?: Record<string, string> | null }>
+): boolean {
+  let sawPartKey = false
+  let sawBoneless = false
+  for (const o of options) {
+    const sv = o.optionStepValues
+    if (!sv || typeof sv !== 'object') continue
+    const part = normalizeOptionStepValue(sv[OPTION_STEP_SOLD_OUT_PART_KEY] ?? sv.part)
+    if (!part) continue
+    sawPartKey = true
+    if (part.toLowerCase() === 'boneless') sawBoneless = true
+  }
+  if (!sawPartKey) return true
+  return sawBoneless
+}
+
 export { normalizePosMenuSoldOutScope }
 export type { PosMenuSoldOutScope }

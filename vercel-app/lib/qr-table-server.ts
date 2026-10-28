@@ -61,6 +61,7 @@ import {
 } from '@/lib/qr-table-promo'
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
+import { isMenuUnavailableDueToPartSoldOut } from '@/lib/pos-option-step-store-sold-out'
 import { isOptionStepSoldOutForStore, loadStoreOptionStepSoldOut } from '@/lib/pos-option-step-store-sold-out-server'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { loadMemberTenantId } from '@/lib/member-portal-tenant-scope'
@@ -1976,12 +1977,16 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   for (const m of menus) {
     const id = Number(m.id || 0)
     if (!id) continue
-    const soldOut = isMenuSoldOutForStore({
+    const menuSoldOut = isMenuSoldOutForStore({
       menuId: id,
       globalSoldOutDate: m.sold_out_date,
       storeMap: soldOutLoad.byMenuId,
       useStoreScope: soldOutLoad.schemaReady,
     })
+    const rawOpts = optionsByMenuIdRaw.get(id) || []
+    const filteredOpts = optionsByMenuId.get(id) || []
+    const soldOut =
+      menuSoldOut || isMenuUnavailableDueToPartSoldOut(rawOpts, filteredOpts)
     const isIncluded = included.has(id)
     const categoryMain = normalizePromotionCategoryMain(m.category_main)
     const category = String(m.category || '').trim()
@@ -2485,10 +2490,15 @@ export async function submitQrCart(params: {
         globalSoldOutDate: menu.sold_out_date,
         storeMap: soldOutLoad.byMenuId,
         useStoreScope: soldOutLoad.schemaReady,
-      })
+      }) ||
+      isMenuUnavailableDueToPartSoldOut(
+        optionsByMenuIdRaw.get(menuId) || [],
+        optionsByMenuId.get(menuId) || []
+      )
     ) {
       throw new Error(`menu_sold_out:${menuId}`)
-    }    const isIncluded = included.has(menuId)
+    }
+    const isIncluded = included.has(menuId)
     if (!isIncluded && extraAllow.restricted && !extraAllow.allowed.has(menuId)) {
       throw new Error(`menu_not_in_extras:${menuId}`)
     }

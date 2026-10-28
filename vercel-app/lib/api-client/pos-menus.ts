@@ -381,6 +381,8 @@ export async function updatePosOptionStepSoldOut(params: {
     soldOutScope?: PosMenuSoldOutScope | null
     stepKey?: string
     stepValue?: string
+    grabSyncRequested?: boolean
+    grabSync?: { attempted: number; sent: number; failed: number } | null
   }
   if (data?.success) {
     void getPosMenuOptions({ fresh: true, storeCode: params.storeCode })

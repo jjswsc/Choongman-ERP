@@ -444,10 +444,14 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuSoldOutTabMenus: 'เมนู',
     posMenuSoldOutTabParts: 'ส่วนชิ้น',
     posOptionPartSoldOutHint:
-      'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR · ปิดทุกช่องทาง = รวม Grab ด้วย · หลังปิดทุกช่องทาง ให้ซิงก์เมนูแอปเดลิเวอรี่อีกครั้งครับ · ปิดไว้จนกว่าจะกดเปิดเองครับ',
+      'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR · ปิด/เปิดทุกช่องทาง = รวม Grab (ระบบขอรีเฟรชเมนูให้อัตโนมัติ) · ปิดไว้จนกว่าจะกดเปิดเองครับ',
     posOptionPartSoldOutSearchPh: 'ค้นหาชื่อส่วนชิ้น',
     posOptionPartSoldOutEmpty: 'ไม่พบตัวเลือกส่วนชิ้นครับ',
     posOptionPartSoldOutNeedStore: 'ต้องมีรหัสสาขา กรุณาเข้าสู่ระบบ POS ด้วยสาขาครับ',
+    posOptionPartSoldOutGrabSyncOk:
+      'ส่งคำขอรีเฟรชเมนู Grab แล้วครับ แอปลูกค้าอาจใช้เวลาสักครู่ถึงจะอัปเดต',
+    posOptionPartSoldOutGrabSyncNeedManual:
+      'เปลี่ยนขอบเขตเดลิเวอรี่แล้ว กรุณาตรวจซิงก์เมนูแอปเดลิเวอรี่อีกครั้งครับ',
     posMenuSoldOutSearchPh: 'ค้นหาชื่อหรือรหัสเมนู',
     posMenuSoldOutFilterAll: 'ทั้งหมด',
     posMenuSoldOutTempOff: 'ปิดการขายชั่วคราว',

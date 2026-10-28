@@ -9,6 +9,7 @@ import {
   isChickenDefaultOptionName,
   menuHasChickenSizeProfile,
 } from '@/lib/pos-chicken-option-inference'
+import { canSynthesizeChickenDefaultPart } from '@/lib/pos-option-step-store-sold-out'
 import { POS_CHICKEN_DEFAULT_OPTION_DISPLAY } from '@/lib/pos-print-translate'
 import { formatQrOrderPromoDetail } from '@/lib/qr-table-promo'
 
@@ -544,7 +545,7 @@ export function resolveQrGuestLineOption(params: {
         picked: [implicit, ...picked],
       })
     }
-    if (menuHasChickenSizeProfile(required)) {
+    if (menuHasChickenSizeProfile(required) && canSynthesizeChickenDefaultPart(required)) {
       const optionName = POS_CHICKEN_DEFAULT_OPTION_DISPLAY
       const additiveMod = picked.reduce((sum, o) => sum + (Number(o.priceModifier) || 0), 0)
       return {

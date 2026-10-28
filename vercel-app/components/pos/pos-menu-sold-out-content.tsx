@@ -247,6 +247,21 @@ export function PosMenuSoldOutContent() {
             : p
         )
       )
+      if (res.grabSyncRequested) {
+        const sent = Number(res.grabSync?.sent || 0)
+        const failed = Number(res.grabSync?.failed || 0)
+        if (sent > 0 && failed === 0) {
+          await appAlert(
+            t('posOptionPartSoldOutGrabSyncOk') ||
+              'Grab 메뉴 갱신 요청을 보냈습니다. 손님 앱 반영까지 잠시 걸릴 수 있습니다.'
+          )
+        } else {
+          await appAlert(
+            t('posOptionPartSoldOutGrabSyncNeedManual') ||
+              '배달 범위가 바뀌었습니다. 배달앱 메뉴 동기화를 한 번 확인해 주세요.'
+          )
+        }
+      }
     } catch (e) {
       await appAlert(String(e))
     } finally {

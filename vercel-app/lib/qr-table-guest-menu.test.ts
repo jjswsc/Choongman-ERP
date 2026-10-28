@@ -222,6 +222,30 @@ describe('resolveQrGuestLineOption', () => {
     })
   })
 
+  it('rejects synthetic S when remaining options only have non-Boneless parts', () => {
+    const r = resolveQrGuestLineOption({
+      menuId: 11,
+      menuName: 'CURRY Bar.B.Q FRIED CHICKEN',
+      menuPrice: 149,
+      buffetIncluded: false,
+      menuOptions: [
+        {
+          id: 7,
+          menuId: 11,
+          name: 'M - Wing',
+          optionCode: 'C011-2',
+          priceModifier: 20,
+          optionType: 'substitution',
+          sortOrder: 2,
+          optionStepValues: { part: 'Wing', size: 'M' },
+        },
+      ],
+      optionIds: [],
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toBe('option_required')
+  })
+
   it('attaches the S - Boneless option id when that row exists', () => {
     const withS = [
       {
