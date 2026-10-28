@@ -3,12 +3,12 @@ import { canApproveReceivableBankMismatch } from '@/lib/bank-receivable-link-pol
 import { registerReceivableStoreCredit } from '@/lib/bank-receivable-store-credit'
 import { requireAuth } from '@/lib/verify-auth'
 
-/** 매장 선수금(과납분) 등록 — Director 또는 오피스 급여 담당 */
+/** 매장 선수금(과납분) 등록 — 회계 · Director · 오피스 급여 담당 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Content-Type', 'application/json')
-  const authResult = await requireAuth(request, 'office')
+  const authResult = await requireAuth(request, 'office_or_accounting')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     authResult.errorResponse.headers.set('Content-Type', 'application/json')
@@ -23,7 +23,10 @@ export async function POST(request: NextRequest) {
     })
   ) {
     return NextResponse.json(
-      { success: false, message: 'Director 또는 오피스 급여 담당자만 선수금을 등록할 수 있습니다.' },
+      {
+        success: false,
+        message: '회계·Director 또는 오피스 급여 담당자만 선수금을 등록할 수 있습니다.',
+      },
       { status: 403, headers }
     )
   }

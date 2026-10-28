@@ -43,7 +43,7 @@ export async function tryVerifyBearerFromRequest(req: Request | NextRequest): Pr
   return verifyToken(m[1].trim())
 }
 
-export type AuthLevel = 'any' | 'manager' | 'office' | 'director'
+export type AuthLevel = 'any' | 'manager' | 'office' | 'office_or_accounting' | 'director'
 
 /**
  * 요청에서 JWT를 추출하고 검증.
@@ -95,7 +95,7 @@ export async function getVerifiedAuth(
 /**
  * 인증 필수 + 권한 레벨 검사
  * @param req NextRequest
- * @param requiredLevel 'any' | 'manager' | 'office' | 'director'
+ * @param requiredLevel 'any' | 'manager' | 'office' | 'office_or_accounting' | 'director'
  * @returns { auth, errorResponse } - auth 있으면 성공, errorResponse 있으면 401/403 반환용
  */
 export async function requireAuth(
@@ -134,6 +134,7 @@ export async function requireAuth(
   const roleRaw = String(auth.role || '')
   const isDirector = ['director', 'ceo', 'hr'].some((x) => r.includes(x))
   const isOffice = isOfficeRole(roleRaw)
+  const isAccounting = isAccountingRole(roleRaw)
   const isManager = isManagerOrFranchiseeRole(roleRaw)
 
   if (requiredLevel === 'director' && !isDirector) {
@@ -162,11 +163,24 @@ export async function requireAuth(
       ),
     }
   }
+  if (requiredLevel === 'office_or_accounting' && !isOffice && !isAccounting) {
+    return {
+      auth: null,
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          message: '본사 또는 회계 권한이 필요합니다.',
+          msg: '본사 또는 회계 권한이 필요합니다.',
+        },
+        { status: 403 }
+      ),
+    }
+  }
   if (
     requiredLevel === 'manager' &&
     !isManager &&
     !isOffice &&
-    !isAccountingRole(r) &&
+    !isAccounting &&
     !isSupervisorRole(roleRaw)
   ) {
     return {

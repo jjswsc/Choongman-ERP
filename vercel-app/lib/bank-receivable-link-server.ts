@@ -10,6 +10,7 @@ import {
 import {
   canApproveReceivableBankMismatch,
   classifyReceivableBankLinkMismatch,
+  shouldAbsorbReceivableBankLinkShortfall,
   validateReceivableBankLinkRequest,
 } from '@/lib/bank-receivable-link-policy'
 import {
@@ -293,7 +294,8 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
     }
 
     const { kind } = classifyReceivableBankLinkMismatch(bankAmt, selectedTotal, storeCreditApply)
-    const absorbShortfall = kind !== 'exact'
+    /** 소액만 반올림 흡수. 큰 부족은 부분 수금(잔여 미수 유지) */
+    const absorbShortfall = shouldAbsorbReceivableBankLinkShortfall(kind)
     const allocations = buildReceivableLinkAllocations({
       bankAmt,
       storeCreditApply,
@@ -301,7 +303,10 @@ export async function linkReceivableAccrualsFromBankTransaction(params: {
       absorbShortfall,
     })
     const allocSum = sumReceivableLinkAllocation(allocations)
-    if (Math.abs(allocSum.total - selectedTotal) > 0.02) {
+    const expectedAlloc = absorbShortfall
+      ? selectedTotal
+      : roundReceivableMoney(Math.min(selectedTotal, bankAmt + storeCreditApply))
+    if (Math.abs(allocSum.total - expectedAlloc) > 0.02) {
       return {
         ok: false,
         message: '차액 배분 계산이 맞지 않습니다. 선수금 적용액 또는 선택 인보이스를 확인하세요.',

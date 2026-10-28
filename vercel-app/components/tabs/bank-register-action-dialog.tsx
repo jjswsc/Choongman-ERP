@@ -928,11 +928,11 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                           ฿{surplusCredit.toLocaleString()}
                         </p>
                       ) : null}
-                      {showMismatchFields && kind === "large" && !canApproveReceivableMismatch ? (
-                        <p className="text-xs text-destructive">
+                      {showMismatchFields && kind === "large" ? (
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
                           {tt(
-                            "bankReceivablePickMismatchApprovalRequired",
-                            "큰 차액 — Director 또는 오피스 급여 담당 승인 필요"
+                            "bankReceivablePickPartialShortfallHint",
+                            "입금액만 부분 수금됩니다. 남은 미수는 다음 입금에서 같은 인보이스에 이어서 연결하세요."
                           )}
                         </p>
                       ) : null}
@@ -980,12 +980,12 @@ export function BankRegisterActionDialog(props: BankRegisterActionDialogProps) {
                         </div>
                       </div>
                     ) : null}
-                    {showMismatchFields ? (
+                    {showMismatchFields && kind === "small" ? (
                       <div className="space-y-2 rounded-md border border-border px-3 py-2 text-sm">
                         <p className="text-xs text-muted-foreground leading-snug">
                           {tt(
                             "bankReceivablePickMismatchHint",
-                            "부족분이 이전 과납 선수금으로 안 맞을 때만 사유를 입력하세요. ฿1 초과 부족은 Director 또는 오피스 급여 담당 승인이 필요합니다."
+                            "฿1 이하 소액 차액은 사유를 선택한 뒤 반올림으로 맞춥니다. 큰 부족은 부분 수금이며 남은 미수는 다음 입금에서 연결합니다."
                           )}
                         </p>
                         <div>

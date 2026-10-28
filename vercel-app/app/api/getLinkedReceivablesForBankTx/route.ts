@@ -6,7 +6,7 @@ import { requireAuth } from '@/lib/verify-auth'
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const authResult = await requireAuth(request, 'office')
+  const authResult = await requireAuth(request, 'office_or_accounting')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     authResult.errorResponse.headers.set('Content-Type', 'application/json')

@@ -1,4 +1,5 @@
 import { canManageOfficePayroll, type OfficePayrollAuth } from '@/lib/office-payroll-access'
+import { isAccountingRole } from '@/lib/permissions'
 import { roundReceivableMoney } from '@/lib/bank-receivable-link'
 
 /** 소액 차액 자동 허용 한도(바트) — VAT 반올림·정수 송금 등 */
@@ -19,8 +20,12 @@ export const RECEIVABLE_BANK_LINK_MISMATCH_REASONS: ReceivableBankLinkMismatchRe
   'other',
 ]
 
-/** Director 또는 오피스 급여 담당(employees.can_manage_office_payroll) */
+/**
+ * 수동 선수금 등록 등 민감 조정.
+ * 회계 · Director · 오피스 급여 담당(employees.can_manage_office_payroll)
+ */
 export function canApproveReceivableBankMismatch(auth: OfficePayrollAuth): boolean {
+  if (isAccountingRole(String(auth.role || ''))) return true
   return canManageOfficePayroll(auth)
 }
 
@@ -42,6 +47,16 @@ export function classifyReceivableBankLinkMismatch(
   if (Math.abs(gap) <= 0.01) return { kind: 'exact', gap }
   if (Math.abs(gap) <= RECEIVABLE_BANK_LINK_SMALL_MISMATCH_TOLERANCE) return { kind: 'small', gap }
   return { kind: 'large', gap }
+}
+
+/**
+ * 소액(≤฿1) 부족만 반올림 흡수. 큰 부족은 부분 수금(잔액 유지) — 회계가 분할 입금을 이어서 연결.
+ * 과납은 선수금 적립.
+ */
+export function shouldAbsorbReceivableBankLinkShortfall(
+  kind: ReceivableBankLinkMismatchKind
+): boolean {
+  return kind === 'small'
 }
 
 export function validateReceivableBankLinkRequest(params: {
@@ -74,15 +89,8 @@ export function validateReceivableBankLinkRequest(params: {
     return { ok: true, kind, gap }
   }
 
-  const note = String(params.mismatchNote || '').trim()
-  if (!note) {
-    return { ok: false, message: '차액이 큽니다. หมายเหตุ(사유)를 입력하세요.' }
-  }
-  if (!params.canApproveMismatch) {
-    return {
-      ok: false,
-      message: '차액 연결은 Director 또는 오피스 급여 담당자 승인이 필요합니다.',
-    }
-  }
+  // 큰 부족 = 부분 수금(잔여 미수 유지). Director 승인·차액 탕감 없음.
+  void params.canApproveMismatch
+  void params.mismatchNote
   return { ok: true, kind, gap }
 }

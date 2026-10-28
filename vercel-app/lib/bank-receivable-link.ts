@@ -186,9 +186,12 @@ export function canSaveReceivablePickWithMismatch(params: {
     // 과납: 소액은 반올림, 큰 금액은 다음 입금 상계용 선수금으로 적립
     return true
   }
+  // 소액 부족(≤฿1): 사유 선택 후 반올림 흡수
   if (Math.abs(gap) <= 1) return Boolean(String(params.mismatchReason || '').trim())
-  if (!params.canApproveMismatch) return false
-  return Boolean(String(params.mismatchNote || '').trim())
+  // 큰 부족: 부분 수금(잔액 유지) — 승인·차액 메모 불필요
+  void params.canApproveMismatch
+  void params.mismatchNote
+  return true
 }
 
 /** 선택 합계가 통장보다 클 때 적용할 선수금(가용 잔액·부족분 중 작은 값) */

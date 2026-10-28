@@ -160,6 +160,27 @@ describe('bank-receivable-link', () => {
     expect(parts[0]?.fromRounding).toBe(0.5)
   })
 
+  it('keeps open balance on split deposit without absorbing large shortfall', () => {
+    const parts = buildReceivableLinkAllocations({
+      bankAmt: 26706.99,
+      storeCreditApply: 0,
+      targets: [{ accrualId: 1, remaining: 86045.12 }],
+      absorbShortfall: false,
+    })
+    expect(parts[0]?.fromBank).toBe(26706.99)
+    expect(parts[0]?.fromRounding).toBe(0)
+    expect(
+      canSaveReceivablePickWithMismatch({
+        bankAmt: 26706.99,
+        selectedTotal: 86045.12,
+        storeCreditApply: 0,
+        mismatchNote: '',
+        mismatchReason: '',
+        canApproveMismatch: false,
+      })
+    ).toBe(true)
+  })
+
   it('offsets Seacon overpay against the next billing without director approval', () => {
     const bankSep8 = 81523.3
     const invoicesSep8 = 62017.2
