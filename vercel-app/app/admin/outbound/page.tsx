@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 import { SALES_OUTBOUND_INVOICE_TITLE } from "@/lib/sales-tax-document-title"
+import { resolveOutboundInvoiceDates } from "@/lib/outbound-invoice-dates"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
 import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 import {
@@ -2222,9 +2223,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       const d = m[1]
       return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
     })()
-    const dateStr =
-      (opts?.issueDate || dateFromIv || group.date || "").split(" ")[0] ||
-      new Date().toISOString().slice(0, 10)
+    // Outbound Entry: 출고일 → Issue Date, 배송일 → Due Date
+    const { issueDate: dateStr, dueDate: dueDateStr } = resolveOutboundInvoiceDates({
+      issueDateCandidates: [opts?.issueDate, dateFromIv, group.date],
+      deliveryDates: printItems.map((it) => it.deliveryDate),
+      fallbackYmd: getBangkokTodayDateString(),
+    })
     const maybeOrderId = Number((group.items || [])[0]?.orderRowId || 0)
     const forceStockLogIds = (printItems.length ? printItems : group.items || [])
       .map((it) => Math.floor(Number(it.stockLogId || 0)))
@@ -2243,7 +2247,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       documentType: SALES_OUTBOUND_INVOICE_TITLE,
       documentNo: docNo,
       issueDate: dateStr,
-      dueDate: dateStr,
+      dueDate: dueDateStr,
       // Document No(IV/IVF…)와 별도 — ERP 입력 reference_no. 없으면 Document No로 채우지 않음.
       referenceNo: erpReferenceNo || "-",
       company,

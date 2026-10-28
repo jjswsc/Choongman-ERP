@@ -14,6 +14,7 @@ import {
   resolveInvoiceClientFromBillToCandidates,
 } from '@/lib/invoice-client-resolve'
 import { isOutboundBillableForInvoice } from '@/lib/outbound-billable-delivery'
+import { resolveOutboundInvoiceDates } from '@/lib/outbound-invoice-dates'
 import { thaiInvoiceTotalsFromRawSubtotal } from '@/lib/invoice-vat-total'
 import { SALES_OUTBOUND_INVOICE_TITLE } from '@/lib/sales-tax-document-title'
 import type { InvoiceData } from '@/components/invoice'
@@ -79,7 +80,11 @@ export async function openStockDailyMatrixInvoicePrint(
   const client = memoClient || resolvedClient
 
   const docNo = (group.invoiceNo || `IV-${(group.date || '').replace(/\D/g, '')}`).trim()
-  const dateStr = (group.date || '').split(' ')[0] || inv.ymd
+  const { issueDate: dateStr, dueDate: dueDateStr } = resolveOutboundInvoiceDates({
+    issueDateCandidates: [group.date, inv.ymd],
+    deliveryDates: (group.items || []).map((it) => it.deliveryDate),
+    fallbackYmd: inv.ymd,
+  })
   const erpReferenceNo =
     (group.items || []).map((it) => String(it.referenceNo || '').trim()).find(Boolean) || ''
   const forceStockLogId = Number((group.items || [])[0]?.stockLogId || 0)
@@ -89,7 +94,7 @@ export async function openStockDailyMatrixInvoicePrint(
     documentType: SALES_OUTBOUND_INVOICE_TITLE,
     documentNo: docNo,
     issueDate: dateStr,
-    dueDate: dateStr,
+    dueDate: dueDateStr,
     referenceNo: erpReferenceNo || '-',
     company,
     client,
