@@ -313,20 +313,79 @@ export async function getPosMenuOptions(params?: {
   menuId?: string
   fresh?: boolean
   forCodeMap?: boolean
+  /** 매장 부위 품절 반영 (sellHall 등). 없으면 서버가 auth.store 사용 */
+  storeCode?: string | null
 }) {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)
   if (params?.forCodeMap) q.set('forCodeMap', '1')
+  const storeCode = String(params?.storeCode || '').trim()
+  if (storeCode) q.set('storeCode', storeCode)
   if (params?.fresh) q.set('_t', String(Date.now()))
   const qs = q.toString()
   const url = '/api/getPosMenuOptions' + (qs ? `?${qs}` : '')
-  const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}:${params?.forCodeMap ? 'codemap' : 'default'}`
+  const cacheKey = `erp:posCatalog:options:${params?.menuId?.trim() || 'all'}:${params?.forCodeMap ? 'codemap' : 'default'}:${storeCode || 'nostore'}`
   return fetchPosCatalogCached<PosMenuOption[]>(
     cacheKey,
     url,
     [],
     params?.fresh ? { forceNetwork: true } : undefined
   )
+}
+
+export type PosOptionStepSoldOutItem = {
+  stepKey: string
+  stepValue: string
+  soldOut: boolean
+  soldOutDate: string | null
+  soldOutScope: PosMenuSoldOutScope | null
+}
+
+export async function getPosOptionStepSoldOut(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', String(params.storeCode || '').trim())
+  const res = await apiFetchWithOffline(`/api/pos/option-step-sold-out?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    schemaReady?: boolean
+    storeCode?: string
+    items?: PosOptionStepSoldOutItem[]
+  }>
+}
+
+export async function updatePosOptionStepSoldOut(params: {
+  storeCode: string
+  stepKey?: string
+  stepValue: string
+  soldOut: boolean
+  soldOutScope?: PosMenuSoldOutScope
+}) {
+  const res = await apiFetchWithOffline('/api/pos/option-step-sold-out', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      stepKey: params.stepKey || 'part',
+      stepValue: params.stepValue,
+      soldOut: params.soldOut,
+      scope: params.soldOutScope || 'store',
+    }),
+  })
+  const data = (await res.json()) as {
+    success: boolean
+    message?: string
+    code?: string
+    soldOutDate?: string | null
+    soldOutScope?: PosMenuSoldOutScope | null
+    stepKey?: string
+    stepValue?: string
+  }
+  if (data?.success) {
+    void getPosMenuOptions({ fresh: true, storeCode: params.storeCode })
+  }
+  return data
 }
 
 export async function getPosOptionGroups(params?: { menuId?: string }) {

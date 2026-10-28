@@ -17,6 +17,9 @@ import {
   markPosMenusTenantIdColumnMissing,
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
+import { applyStorefrontPartSoldOutToOptionFlags } from '@/lib/pos-option-step-store-sold-out'
+import { loadStoreOptionStepSoldOut } from '@/lib/pos-option-step-store-sold-out-server'
 
 /** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
 export async function GET(request: NextRequest) {
@@ -27,9 +30,13 @@ export async function GET(request: NextRequest) {
   const menuId = searchParams.get('menuId')?.trim()
   const forCodeMap =
     searchParams.get('forCodeMap') === '1' || searchParams.get('forCodeMap') === 'true'
+  const storeCodeParam = stripTenantPrefixedStoreCode(
+    searchParams.get('storeCode') || searchParams.get('store_code') || ''
+  )
 
   try {
     const auth = await getVerifiedAuth(request, { skipSaasGate: true })
+    const storeCode = storeCodeParam || stripTenantPrefixedStoreCode(auth?.store || '')
     const catalogScope = await resolvePosCatalogTenantScope({ auth })
     if (isPosCatalogTenantQueryBlocked(catalogScope)) {
       return NextResponse.json([], { headers })
@@ -243,7 +250,19 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json([...linkedOptions, ...list], { headers })
+    let merged = [...linkedOptions, ...list]
+    // 코드맵·관리자(매장 없음)는 품절 오버레이 생략. 매장 POS는 부위 품절 → sellHall/packaging/member off (배달 유지)
+    if (!forCodeMap && storeCode) {
+      try {
+        const soldOutLoad = await loadStoreOptionStepSoldOut(storeCode, { channel: 'storefront' })
+        if (soldOutLoad.schemaReady && soldOutLoad.soldOutKeys.size > 0) {
+          merged = applyStorefrontPartSoldOutToOptionFlags(merged, soldOutLoad.soldOutKeys)
+        }
+      } catch (e) {
+        console.error('getPosMenuOptions option-step sold-out:', e)
+      }
+    }
+    return NextResponse.json(merged, { headers })
   } catch (e) {
     console.error('getPosMenuOptions:', e)
     return NextResponse.json([], { headers })

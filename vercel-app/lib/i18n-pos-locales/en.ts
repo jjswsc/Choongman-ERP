@@ -1878,6 +1878,13 @@ export const I18N_POS_EN: Record<string, string> = {
     posMemberManage: 'Member points',
     posMenuSoldOutManage: 'Menu sold out',
     posMenuSoldOutManageHint: 'Store only = blocks this store\'s POS & QR, Grab keeps selling. All channels = Grab too. Stays off until you turn it back on.',
+    posMenuSoldOutTabMenus: 'Menus',
+    posMenuSoldOutTabParts: 'Parts',
+    posOptionPartSoldOutHint:
+      'Turning off a part (e.g. Wing) hides it on this store\'s POS & QR only. Grab delivery keeps selling. Stays off until you turn it back on.',
+    posOptionPartSoldOutSearchPh: 'Search part name',
+    posOptionPartSoldOutEmpty: 'No part options found.',
+    posOptionPartSoldOutNeedStore: 'Store code required. Sign in to POS with a store.',
     posMenuSoldOutSearchPh: 'Search name or code',
     posMenuSoldOutFilterAll: 'All',
     posMenuSoldOutTempOff: 'Temporarily unavailable',

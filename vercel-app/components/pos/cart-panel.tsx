@@ -1654,7 +1654,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   useEffect(() => {
     let cancelled = false
-    void getPosMenuOptions()
+    void getPosMenuOptions({ storeCode: currentStoreId || undefined })
       .then((rows) => {
         if (cancelled) return
         setPosMenuOptions(rows || [])
@@ -1666,7 +1666,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [currentStoreId])
 
   const confirmGuestDirect = () => {
     const v = parseIntegerInput(guestDirectValue, 0)

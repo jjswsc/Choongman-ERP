@@ -441,6 +441,13 @@ export const I18N_POS_TH: Record<string, string> = {
     posMemberManage: 'สมาชิก',
     posMenuSoldOutManage: 'เปิด-ปิดเมนู',
     posMenuSoldOutManageHint: 'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR หน้าร้าน (Grab ยังขายได้) · ปิดทุกช่องทาง = ปิดรวม Grab ด้วย · ปิดไว้จนกว่าจะกดเปิดเองครับ',
+    posMenuSoldOutTabMenus: 'เมนู',
+    posMenuSoldOutTabParts: 'ส่วนชิ้น',
+    posOptionPartSoldOutHint:
+      'ปิดส่วนชิ้น (เช่น ปีก/Wing) = ปิดเฉพาะ POS และ QR หน้าร้านของสาขานี้ · Grab ยังขายได้ · ปิดไว้จนกว่าจะกดเปิดเองครับ',
+    posOptionPartSoldOutSearchPh: 'ค้นหาชื่อส่วนชิ้น',
+    posOptionPartSoldOutEmpty: 'ไม่พบตัวเลือกส่วนชิ้นครับ',
+    posOptionPartSoldOutNeedStore: 'ต้องมีรหัสสาขา กรุณาเข้าสู่ระบบ POS ด้วยสาขาครับ',
     posMenuSoldOutSearchPh: 'ค้นหาชื่อหรือรหัสเมนู',
     posMenuSoldOutFilterAll: 'ทั้งหมด',
     posMenuSoldOutTempOff: 'ปิดการขายชั่วคราว',

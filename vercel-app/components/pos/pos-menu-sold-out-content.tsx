@@ -4,7 +4,13 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { CircleOff, Home, Loader2, RefreshCw, Search } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { getPosMenus, type PosMenu } from '@/lib/api-client/pos-menus'
+import {
+  getPosMenus,
+  getPosOptionStepSoldOut,
+  updatePosOptionStepSoldOut,
+  type PosMenu,
+  type PosOptionStepSoldOutItem,
+} from '@/lib/api-client/pos-menus'
 import { updatePosMenuSoldOut } from '@/lib/api-client/sauces'
 import { bangkokTodayYmd } from '@/lib/bangkok-date'
 import { appAlert } from '@/lib/app-message'
@@ -21,10 +27,28 @@ import { cn } from '@/lib/utils'
 type FilterMode = 'all' | 'selling' | 'storeOff' | 'allOff'
 /** selling = 판매, store = หน้าร้าน만 중지(배달 판매), all = 전 채널 중지 */
 type MenuSaleState = 'selling' | PosMenuSoldOutScope
+type MainTab = 'menus' | 'parts'
 
 function menuSaleState(menu: PosMenu): MenuSaleState {
   if (!isPosMenuSoldOut(menu.soldOutDate)) return 'selling'
   return menu.soldOutScope === 'store' ? 'store' : 'all'
+}
+
+function partLabel(stepValue: string, t: (k: string) => string): string {
+  const v = String(stepValue || '').trim()
+  const key =
+    v === 'Boneless'
+      ? 'posOptionPartBoneless'
+      : v === 'Wing'
+        ? 'posOptionPartWing'
+        : v === 'Drumette' || v === 'Drumstick'
+          ? 'posOptionPartDrumstick'
+          : ''
+  if (key) {
+    const label = t(key)
+    if (label && label !== key) return label
+  }
+  return v
 }
 
 /** POS 매장용 품절 토글 — sold_out_date 있으면 수동 해제 전까지 유지 (QR·터미널 공통) */
@@ -34,31 +58,54 @@ export function PosMenuSoldOutContent() {
   const t = useT(useLang().lang)
   const storeCode = String(auth?.store || '').trim()
 
+  const [mainTab, setMainTab] = React.useState<MainTab>('menus')
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [parts, setParts] = React.useState<PosOptionStepSoldOutItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [togglingId, setTogglingId] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState('')
   const [filter, setFilter] = React.useState<FilterMode>('all')
   const todayStr = bangkokTodayYmd()
 
+  const loadMenus = React.useCallback(async () => {
+    let list = await getPosMenus({
+      fresh: true,
+      storeCode: storeCode || undefined,
+    })
+    if (!Array.isArray(list) || list.length === 0) {
+      list = await getPosMenus({ fresh: true })
+    }
+    setMenus((Array.isArray(list) ? list : []).filter((m) => m.isActive !== false))
+  }, [storeCode])
+
+  const loadParts = React.useCallback(async () => {
+    if (!storeCode) {
+      setParts([])
+      return
+    }
+    const res = await getPosOptionStepSoldOut({ storeCode })
+    if (!res.success) {
+      throw new Error(res.message || t('msg_save_fail_detail') || 'load failed')
+    }
+    setParts(Array.isArray(res.items) ? res.items : [])
+  }, [storeCode, t])
+
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      let list = await getPosMenus({
-        fresh: true,
-        storeCode: storeCode || undefined,
-      })
-      if (!Array.isArray(list) || list.length === 0) {
-        list = await getPosMenus({ fresh: true })
+      if (mainTab === 'menus') {
+        await loadMenus()
+      } else {
+        await loadParts()
       }
-      setMenus((Array.isArray(list) ? list : []).filter((m) => m.isActive !== false))
     } catch (e) {
       await appAlert(String(e))
-      setMenus([])
+      if (mainTab === 'menus') setMenus([])
+      else setParts([])
     } finally {
       setLoading(false)
     }
-  }, [storeCode])
+  }, [mainTab, loadMenus, loadParts])
 
   React.useEffect(() => {
     if (!initialized) return
@@ -94,6 +141,20 @@ export function PosMenuSoldOutContent() {
       })
   }, [menus, search, filter])
 
+  const filteredParts = React.useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return parts
+      .filter((p) => {
+        if (!q) return true
+        const label = partLabel(p.stepValue, t).toLowerCase()
+        return label.includes(q) || p.stepValue.toLowerCase().includes(q)
+      })
+      .sort((a, b) => {
+        if (a.soldOut !== b.soldOut) return a.soldOut ? -1 : 1
+        return a.stepValue.localeCompare(b.stepValue)
+      })
+  }, [parts, search, t])
+
   const counts = React.useMemo(() => {
     let store = 0
     let all = 0
@@ -104,6 +165,11 @@ export function PosMenuSoldOutContent() {
     }
     return { store, all }
   }, [menus])
+
+  const partSoldOutCount = React.useMemo(
+    () => parts.filter((p) => p.soldOut).length,
+    [parts]
+  )
 
   const handleSetState = async (menu: PosMenu, next: MenuSaleState) => {
     if (menuSaleState(menu) === next) return
@@ -132,6 +198,44 @@ export function PosMenuSoldOutContent() {
       setMenus((prev) =>
         prev.map((m) =>
           m.id === menu.id ? { ...m, soldOutDate: nextDate, soldOutScope: nextScope } : m
+        )
+      )
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const handlePartToggle = async (item: PosOptionStepSoldOutItem, soldOut: boolean) => {
+    if (!storeCode || item.soldOut === soldOut) return
+    const toggleKey = `${item.stepKey}:${item.stepValue}`
+    setTogglingId(toggleKey)
+    try {
+      const res = await updatePosOptionStepSoldOut({
+        storeCode,
+        stepKey: item.stepKey,
+        stepValue: item.stepValue,
+        soldOut,
+        soldOutScope: 'store',
+      })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail_detail'))
+        return
+      }
+      const nextDate = soldOut
+        ? String(res.soldOutDate || todayStr).slice(0, 10)
+        : null
+      setParts((prev) =>
+        prev.map((p) =>
+          p.stepKey === item.stepKey && p.stepValue === item.stepValue
+            ? {
+                ...p,
+                soldOut,
+                soldOutDate: nextDate,
+                soldOutScope: soldOut ? 'store' : null,
+              }
+            : p
         )
       )
     } catch (e) {
@@ -176,8 +280,11 @@ export function PosMenuSoldOutContent() {
                 {t('posMenuSoldOutManage') || '메뉴 품절'}
               </h1>
               <p className="text-xs text-muted-foreground">
-                {t('posMenuSoldOutManageHint') ||
-                  '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
+                {mainTab === 'parts'
+                  ? t('posOptionPartSoldOutHint') ||
+                    '부위(예: Wing)를 끄면 이 매장 POS·QR에서만 숨깁니다. Grab 배달은 그대로 판매. 다시 열 때까지 유지.'
+                  : t('posMenuSoldOutManageHint') ||
+                    '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
               </p>
             </div>
           </div>
@@ -211,103 +318,211 @@ export function PosMenuSoldOutContent() {
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={mainTab === 'menus' ? 'default' : 'outline'}
+            className="h-9"
+            onClick={() => {
+              setSearch('')
+              setMainTab('menus')
+            }}
+          >
+            {t('posMenuSoldOutTabMenus') || '메뉴'}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={mainTab === 'parts' ? 'default' : 'outline'}
+            className="h-9"
+            onClick={() => {
+              setSearch('')
+              setMainTab('parts')
+            }}
+          >
+            {`${t('posMenuSoldOutTabParts') || '부위'}${partSoldOutCount > 0 ? ` (${partSoldOutCount})` : ''}`}
+          </Button>
+        </div>
+
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('posMenuSoldOutSearchPh') || '메뉴명·코드 검색'}
+            placeholder={
+              mainTab === 'parts'
+                ? t('posOptionPartSoldOutSearchPh') || '부위명 검색'
+                : t('posMenuSoldOutSearchPh') || '메뉴명·코드 검색'
+            }
             className="h-11 pl-9 text-base"
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { id: 'all' as const, label: t('posMenuSoldOutFilterAll') || '전체' },
-              { id: 'selling' as const, label: t('posAvailable') || '판매' },
-              {
-                id: 'storeOff' as const,
-                label: `${t('posMenuSoldOutScopeStore') || '매장만 중지'}${counts.store > 0 ? ` (${counts.store})` : ''}`,
-              },
-              {
-                id: 'allOff' as const,
-                label: `${t('posMenuSoldOutScopeAll') || '전체 중지'}${counts.all > 0 ? ` (${counts.all})` : ''}`,
-              },
-            ] as const
-          ).map((tab) => (
-            <Button
-              key={tab.id}
-              type="button"
-              size="sm"
-              variant={filter === tab.id ? 'default' : 'outline'}
-              className="h-9"
-              onClick={() => setFilter(tab.id)}
-            >
-              {tab.label}
-            </Button>
-          ))}
-        </div>
+        {mainTab === 'menus' ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { id: 'all' as const, label: t('posMenuSoldOutFilterAll') || '전체' },
+                  { id: 'selling' as const, label: t('posAvailable') || '판매' },
+                  {
+                    id: 'storeOff' as const,
+                    label: `${t('posMenuSoldOutScopeStore') || '매장만 중지'}${counts.store > 0 ? ` (${counts.store})` : ''}`,
+                  },
+                  {
+                    id: 'allOff' as const,
+                    label: `${t('posMenuSoldOutScopeAll') || '전체 중지'}${counts.all > 0 ? ` (${counts.all})` : ''}`,
+                  },
+                ] as const
+              ).map((tab) => (
+                <Button
+                  key={tab.id}
+                  type="button"
+                  size="sm"
+                  variant={filter === tab.id ? 'default' : 'outline'}
+                  className="h-9"
+                  onClick={() => setFilter(tab.id)}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
 
-        {loading ? (
+            {loading ? (
+              <div className="flex min-h-[30vh] items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                {t('posMenuEmpty') || '메뉴가 없습니다.'}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {filtered.map((menu) => {
+                  const state = menuSaleState(menu)
+                  const busy = togglingId === menu.id
+                  return (
+                    <li
+                      key={menu.id}
+                      className={cn(
+                        'flex min-h-[72px] flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center',
+                        state === 'all'
+                          ? 'border-red-200 bg-red-50'
+                          : state === 'store'
+                            ? 'border-amber-200 bg-amber-50'
+                            : 'border-slate-200 bg-white'
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-base font-semibold text-slate-900">
+                          {menu.name}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {menu.code}
+                          {menu.category ? ` · ${menu.category}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {busy ? (
+                          <Loader2 className="mx-2 h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : null}
+                        {stateOptions.map((opt) => {
+                          const active = state === opt.id
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              disabled={busy}
+                              aria-pressed={active}
+                              onClick={() => void handleSetState(menu, opt.id)}
+                              className={cn(
+                                'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
+                                'active:scale-[0.98] disabled:opacity-60',
+                                active
+                                  ? opt.activeCn
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </>
+        ) : loading ? (
           <div className="flex min-h-[30vh] items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : !storeCode ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
-            {t('posMenuEmpty') || '메뉴가 없습니다.'}
+            {t('posOptionPartSoldOutNeedStore') || '매장 코드가 필요합니다. POS에 매장으로 로그인해 주세요.'}
+          </p>
+        ) : filteredParts.length === 0 ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            {t('posOptionPartSoldOutEmpty') || '부위 옵션이 없습니다.'}
           </p>
         ) : (
           <ul className="space-y-2">
-            {filtered.map((menu) => {
-              const state = menuSaleState(menu)
-              const busy = togglingId === menu.id
+            {filteredParts.map((item) => {
+              const busy = togglingId === `${item.stepKey}:${item.stepValue}`
+              const label = partLabel(item.stepValue, t)
               return (
                 <li
-                  key={menu.id}
+                  key={`${item.stepKey}:${item.stepValue}`}
                   className={cn(
                     'flex min-h-[72px] flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center',
-                    state === 'all'
-                      ? 'border-red-200 bg-red-50'
-                      : state === 'store'
-                        ? 'border-amber-200 bg-amber-50'
-                        : 'border-slate-200 bg-white'
+                    item.soldOut ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'
                   )}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-base font-semibold text-slate-900">
-                      {menu.name}
-                    </div>
+                    <div className="truncate text-base font-semibold text-slate-900">{label}</div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {menu.code}
-                      {menu.category ? ` · ${menu.category}` : ''}
+                      {item.stepValue}
+                      {item.soldOut && item.soldOutDate
+                        ? ` · ${t('posMenuSoldOutTempOff') || '일시 판매중지'} ${item.soldOutDate}`
+                        : ''}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {busy ? (
                       <Loader2 className="mx-2 h-4 w-4 animate-spin text-muted-foreground" />
                     ) : null}
-                    {stateOptions.map((opt) => {
-                      const active = state === opt.id
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          disabled={busy}
-                          aria-pressed={active}
-                          onClick={() => void handleSetState(menu, opt.id)}
-                          className={cn(
-                            'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
-                            'active:scale-[0.98] disabled:opacity-60',
-                            active
-                              ? opt.activeCn
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      )
-                    })}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-pressed={!item.soldOut}
+                      onClick={() => void handlePartToggle(item, false)}
+                      className={cn(
+                        'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
+                        'active:scale-[0.98] disabled:opacity-60',
+                        !item.soldOut
+                          ? 'border-emerald-600 bg-emerald-600 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      )}
+                    >
+                      {t('posAvailable') || '판매'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-pressed={item.soldOut}
+                      onClick={() => void handlePartToggle(item, true)}
+                      className={cn(
+                        'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
+                        'active:scale-[0.98] disabled:opacity-60',
+                        item.soldOut
+                          ? 'border-amber-500 bg-amber-500 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      )}
+                    >
+                      {t('posMenuSoldOutScopeStore') || '매장만 중지'}
+                    </button>
                   </div>
                 </li>
               )

@@ -629,7 +629,7 @@ export default function PosOrderPage() {
     Promise.allSettled([
       getPosMenus({ storeCode: storeCode || undefined }),
       getPosMenuCategories(),
-      getPosMenuOptions({}),
+      getPosMenuOptions({ storeCode: storeCode || undefined }),
       getPosPromosWithItems({ storeCode: storeCode || undefined }),
     ])
       .then(([r0, r1, r2, r3]) => {

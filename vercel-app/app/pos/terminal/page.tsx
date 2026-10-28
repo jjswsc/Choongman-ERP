@@ -1653,7 +1653,7 @@ export default function PosTerminalPage() {
 
       try {
         const [rowsDefault, rowsCodeMap] = await Promise.all([
-          getPosMenuOptions({ fresh: true }),
+          getPosMenuOptions({ fresh: true, storeCode: currentStoreId || undefined }),
           getPosMenuOptions({ fresh: true, forCodeMap: true }),
         ])
         setMenuOptions(Array.isArray(rowsDefault) ? rowsDefault : [])
@@ -2178,10 +2178,11 @@ export default function PosTerminalPage() {
     setCatalogLoading(true)
     void Promise.allSettled([
       getPosMenus({ storeCode: requestStoreCode || undefined }),
+      getPosMenuOptions({ storeCode: requestStoreCode || undefined }),
       getPosMenuOptions({ forCodeMap: true }),
       getPosPromosWithItems({ includeInactive: true, storeCode: requestStoreCode || undefined }),
     ])
-      .then(([rMenus, rOpts, rPromos]) => {
+      .then(([rMenus, rOpts, rOptsMap, rPromos]) => {
         if (seq !== storeSettingsLoadSeqRef.current) return
         if (rMenus.status === 'fulfilled') {
           applyPosMenusList(rMenus.value)
@@ -2190,8 +2191,10 @@ export default function PosTerminalPage() {
           setMenuTargets({ byId: new Map(), byName: new Map() })
         }
         const opts = rOpts.status === 'fulfilled' && Array.isArray(rOpts.value) ? rOpts.value : []
+        const optsMap =
+          rOptsMap.status === 'fulfilled' && Array.isArray(rOptsMap.value) ? rOptsMap.value : opts
         setMenuOptions(opts)
-        setMenuOptionsForCodeMap(opts)
+        setMenuOptionsForCodeMap(optsMap)
         const promos = rPromos.status === 'fulfilled' && Array.isArray(rPromos.value) ? rPromos.value : []
         setPromosWithItems(promos)
       })

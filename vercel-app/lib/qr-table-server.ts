@@ -61,6 +61,7 @@ import {
 } from '@/lib/qr-table-promo'
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
+import { isOptionStepSoldOutForStore, loadStoreOptionStepSoldOut } from '@/lib/pos-option-step-store-sold-out-server'
 import { resolveKbankRuntimeForStoreCode, resolveTenantIdForStoreCode } from '@/lib/tenant-integration-resolve'
 import { loadMemberTenantId } from '@/lib/member-portal-tenant-scope'
 import { ensurePosOrderLoyaltyApplied } from '@/lib/members-server'
@@ -1208,6 +1209,21 @@ function parseOptionStepValues(raw: unknown): Record<string, string> | null {
   return Object.keys(out).length ? out : null
 }
 
+function filterHallOptionsByPartSoldOut(
+  optionsByMenuId: Map<number, QrGuestMenuOption[]>,
+  soldOutKeys: ReadonlySet<string>
+): Map<number, QrGuestMenuOption[]> {
+  if (!soldOutKeys.size) return optionsByMenuId
+  const out = new Map<number, QrGuestMenuOption[]>()
+  for (const [menuId, list] of optionsByMenuId.entries()) {
+    out.set(
+      menuId,
+      (list || []).filter((opt) => !isOptionStepSoldOutForStore(opt.optionStepValues, soldOutKeys))
+    )
+  }
+  return out
+}
+
 async function loadHallOptionsByMenuIds(menuIds: number[]): Promise<Map<number, QrGuestMenuOption[]>> {
   const ids = [...new Set(menuIds.map((n) => Math.floor(Number(n) || 0)).filter((n) => n > 0))]
   const out = new Map<number, QrGuestMenuOption[]>()
@@ -1933,7 +1949,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   menus.sort((a, b) => compareQrMenuDisplayOrder(a, b, tabOrder))
 
   const menuIds = menus.map((m) => Number(m.id || 0)).filter((id) => id > 0)
-  const [optionsByMenuId, flavorIdsByBanban, promoById] = await Promise.all([
+  const [optionsByMenuIdRaw, flavorIdsByBanban, promoById, optionStepSoldOut] = await Promise.all([
     loadHallOptionsByMenuIds(menuIds).catch((e) => {
       console.error('qr_table menus options load:', e)
       return new Map<number, QrGuestMenuOption[]>()
@@ -1943,7 +1959,17 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       console.error('qr_table menus promo load:', e)
       return new Map<string, QrGuestPromoCompose>()
     }),
+    loadStoreOptionStepSoldOut(session.storeCode, { channel: 'storefront' }).catch(() => ({
+      byKey: new Map<string, string>(),
+      scopeByKey: new Map(),
+      soldOutKeys: new Set<string>(),
+      schemaReady: false,
+    })),
   ])
+  const optionsByMenuId = filterHallOptionsByPartSoldOut(
+    optionsByMenuIdRaw,
+    optionStepSoldOut.soldOutKeys
+  )
 
   const includedMenus = []
   const extraMenus = []
@@ -2367,8 +2393,17 @@ export async function submitQrCart(params: {
     .filter((id) => id > 0)
   const optionLookupIds = [...requestedIds, ...flavorIds]
 
-  const [included, extraAllow, byId, optionsByMenuId, flavorIdsByBanban, orderRows, soldOutLoad, storeSettings] =
-    await Promise.all([
+  const [
+    included,
+    extraAllow,
+    byId,
+    optionsByMenuIdRaw,
+    flavorIdsByBanban,
+    orderRows,
+    soldOutLoad,
+    storeSettings,
+    optionStepSoldOut,
+  ] = await Promise.all([
     tierId > 0 ? loadIncludedMenuIdSet(tierId, requestedIds) : Promise.resolve(new Set<number>()),
     tierId > 0
       ? loadExtraMenuAllowForCart(tierId, requestedIds)
@@ -2407,7 +2442,17 @@ export async function submitQrCart(params: {
       schemaReady: false,
     })),
     loadQrOrderStoreSettings(session.storeCode),
+    loadStoreOptionStepSoldOut(session.storeCode, { channel: 'storefront' }).catch(() => ({
+      byKey: new Map<string, string>(),
+      scopeByKey: new Map(),
+      soldOutKeys: new Set<string>(),
+      schemaReady: false,
+    })),
   ])
+  const optionsByMenuId = filterHallOptionsByPartSoldOut(
+    optionsByMenuIdRaw,
+    optionStepSoldOut.soldOutKeys
+  )
   const hiddenMenuIds = new Set(storeSettings.hiddenMenuIds || [])
 
   let promoComposeById = new Map<string, QrGuestPromoCompose>()
