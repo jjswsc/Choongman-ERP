@@ -38,6 +38,7 @@ import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, translateTexts, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
 import { cn, compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList, Info } from "lucide-react"
@@ -45,7 +46,7 @@ import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return getBangkokTodayDateString()
 }
 
 function hasValidImage(url: string | undefined): boolean {
@@ -195,7 +196,7 @@ export function OrderTab({
   useEffect(() => {
     if (!effectiveStore) return
     setLoading(true)
-    getAppData(effectiveStore, { scope: 'order' })
+    getAppData(effectiveStore, { scope: 'order', asOfDate: getBangkokTodayDateString() })
       .then((r) => {
         setItems(r.items)
         setStock(r.stock || {})
@@ -551,7 +552,10 @@ export function OrderTab({
         if (receiveFileRef.current) receiveFileRef.current.value = ""
         loadHistory()
         if (effectiveStore) {
-          getAppData(effectiveStore, { scope: "order" }).then((r) => setStock(r.stock || {}))
+          getAppData(effectiveStore, {
+            scope: "order",
+            asOfDate: getBangkokTodayDateString(),
+          }).then((r) => setStock(r.stock || {}))
         }
         setReceivePhotoPreviews((p) => {
           p.forEach((u) => URL.revokeObjectURL(u))

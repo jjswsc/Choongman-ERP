@@ -181,7 +181,8 @@ export function UsageTab() {
   useEffect(() => {
     if (!effectiveStore) return
     setLoading(true)
-    getAppData(effectiveStore)
+    // 관리자 สถานะสต๊อก 와 동일: 방콕 오늘까지. 날짜 없으면 미래 입고가 사용 화면에 먼저 잡혀 숫자가 어긋남.
+    getAppData(effectiveStore, getBangkokTodayDateString())
       .then((r) => {
         setItems(r.items)
         setStock(r.stock || {})
@@ -300,7 +301,7 @@ export function UsageTab() {
         await appAlert(t('confirmUsage') + ' ✓')
         setCart([])
         loadHistory()
-        getAppData(effectiveStore).then((r) => setStock(r.stock || {}))
+        getAppData(effectiveStore, getBangkokTodayDateString()).then((r) => setStock(r.stock || {}))
       } else {
         await appAlert(translateApiMessage(res.message, t) || t('orderFail'))
       }
