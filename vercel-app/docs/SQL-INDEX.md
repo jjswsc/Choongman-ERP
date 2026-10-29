@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **802**개 · 접두어 그룹 **101**개
+- `sql/` 최상위: **806**개 · 접두어 그룹 **101**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -366,9 +366,10 @@
 
 </details>
 
-<details><summary><code>fix_*</code> (36)</summary>
+<details><summary><code>fix_*</code> (37)</summary>
 
 - [`fix_abc_company_1001_align_malatang01.sql`](../sql/fix_abc_company_1001_align_malatang01.sql) — apply
+- [`fix_banjoo_receipt_biz_from_hq.sql`](../sql/fix_banjoo_receipt_biz_from_hq.sql) — apply, log
 - [`fix_barbq_chicken_option_prices.sql`](../sql/fix_barbq_chicken_option_prices.sql) — apply
 - [`fix_channel_fee_rematch_sep2026_01_preview.sql`](../sql/fix_channel_fee_rematch_sep2026_01_preview.sql) — preview, apply
 - [`fix_channel_fee_rematch_sep2026_02_apply.sql`](../sql/fix_channel_fee_rematch_sep2026_02_apply.sql) — apply, log
@@ -818,6 +819,18 @@
 
 </details>
 
+<details><summary><code>diagnose_*</code> (7)</summary>
+
+- [`diagnose_banjoo_receipt_logo_biz_01.sql`](../sql/diagnose_banjoo_receipt_logo_biz_01.sql) — diagnose
+- [`diagnose_banjoo_receipt_logo_biz_02.sql`](../sql/diagnose_banjoo_receipt_logo_biz_02.sql) — diagnose
+- [`diagnose_banjoo_receipt_logo_biz_03_after.sql`](../sql/diagnose_banjoo_receipt_logo_biz_03_after.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
+
+</details>
+
 <details><summary><code>the_*</code> (7)</summary>
 
 - [`the_street_customer_display_01_settings.sql`](../sql/the_street_customer_display_01_settings.sql)
@@ -919,15 +932,6 @@
 - [`daily_plans_02_time_rpc.sql`](../sql/daily_plans_02_time_rpc.sql) — rpc
 - [`daily_plans_03_seed_sv_template.sql`](../sql/daily_plans_03_seed_sv_template.sql)
 - [`daily_plans_04_schedule_columns.sql`](../sql/daily_plans_04_schedule_columns.sql)
-
-</details>
-
-<details><summary><code>diagnose_*</code> (4)</summary>
-
-- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
 
 </details>
 
