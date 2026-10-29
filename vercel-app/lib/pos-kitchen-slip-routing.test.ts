@@ -209,20 +209,33 @@ describe('buildKitchenSlipGroups printer overlay', () => {
 })
 
 describe('buildPartialCancelKitchenSlips', () => {
-  it('only reprints active items on stations that had a cancellation', () => {
+  it('prints only cancelled lines — does not attach remaining items on the same station', () => {
     const cancelledSlips = [
-      { label: 'K1', station: 1 as const, items: [{ id: 'pepsi', name: 'Pepsi', qty: 1 }] },
+      { label: 'K1', station: 1 as const, items: [{ id: 'fries', name: 'Cajun Fries', qty: 1 }] },
     ]
     const activeSlips = [
-      { label: 'K1', station: 1 as const, items: [{ id: 'chicken', name: 'Banban Chicken', qty: 1 }] },
+      { label: 'K1', station: 1 as const, items: [{ id: 'chicken', name: 'Supreme Chicken', qty: 1 }] },
+      { label: 'K1', station: 1 as const, items: [{ id: 'ball', name: 'Mozzarella Cheese Ball', qty: 1 }] },
       { label: 'K2', station: 2 as const, items: [{ id: 'tteok', name: 'Tteokbokki', qty: 1 }] },
     ]
     const slips = buildPartialCancelKitchenSlips(cancelledSlips, activeSlips)
     expect(slips).toHaveLength(1)
     expect(slips[0]?.station).toBe(1)
-    expect(slips[0]?.items.map((it) => it.name)).toEqual(['Pepsi', 'Banban Chicken'])
+    expect(slips[0]?.items.map((it) => it.name)).toEqual(['Cajun Fries'])
     expect(slips[0]?.items[0]?.kitchenLineCancelled).toBe(true)
-    expect(slips[0]?.items[1]?.kitchenLineCancelled).toBeUndefined()
+  })
+
+  it('does not emit slips for stations that only have remaining (non-cancelled) items', () => {
+    const cancelledSlips = [
+      { label: 'K1', station: 1 as const, items: [{ id: 'pepsi', name: 'Pepsi', qty: 1 }] },
+    ]
+    const activeSlips = [
+      { label: 'K2', station: 2 as const, items: [{ id: 'tteok', name: 'Tteokbokki', qty: 1 }] },
+    ]
+    const slips = buildPartialCancelKitchenSlips(cancelledSlips, activeSlips)
+    expect(slips).toHaveLength(1)
+    expect(slips[0]?.station).toBe(1)
+    expect(slips[0]?.items.map((it) => it.name)).toEqual(['Pepsi'])
   })
 
   it('returns empty when there are no cancelled slips', () => {

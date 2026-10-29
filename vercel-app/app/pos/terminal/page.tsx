@@ -4863,15 +4863,12 @@ export default function PosTerminalPage() {
           const groupOpts = buildKitchenSlipGroupOpts(settings, menusForPrint, ki.kLabels)
           const removedLines = kitchenDetail?.removedKitchenLines ?? []
           if (!removedLines.length) return
+          // 부분 취소 주방 슬립: 취소된 줄만 출력 (잔여·이미 서빙된 메뉴는 붙이지 않음)
           const cancelledSlips = buildKitchenSlipGroups(
             kitchenItemsWithResolvedPromo(removedLines as Record<string, unknown>[]) as typeof removedLines,
             groupOpts
           )
-          const activeSlips = buildKitchenSlipGroups(
-            kitchenItemsWithResolvedPromo(itemsForKitchen as Record<string, unknown>[]) as typeof itemsForKitchen,
-            groupOpts
-          )
-          const slips = buildPartialCancelKitchenSlips(cancelledSlips, activeSlips)
+          const slips = buildPartialCancelKitchenSlips(cancelledSlips)
           if (!slips.length) return
           const slipDesign = resolveKitchenSlipDesign(settings)
           const memoLine = buildPosCustomerMemoLineForPrint(memo, ki.t, ki.lang)
