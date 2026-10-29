@@ -1,20 +1,20 @@
 {
-    "version":  "0.1.21",
-    "files":  [
-                  {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-                      "name":  "cm-pos-windows-latest-setup.exe",
-                      "sha256":  "631d01eb1ec5e259ad30e6e78b2fcd7a6506fecf4e064f1291f2480f95f3f185"
-                  },
-                  {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-0.1.21-setup.exe",
-                      "name":  "cm-pos-windows-0.1.21-setup.exe",
-                      "sha256":  "631d01eb1ec5e259ad30e6e78b2fcd7a6506fecf4e064f1291f2480f95f3f185"
-                  }
-              ],
-    "installerSha256":  "631d01eb1ec5e259ad30e6e78b2fcd7a6506fecf4e064f1291f2480f95f3f185",
-    "publishedAtUtc":  "2026-10-14T04:24:53.0701457Z",
-    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-latest-setup.exe",
-    "brand":  "omnifoodtech",
-    "notes":  "New Printer check option \u0027Send as image (ESC/POS)\u0027: fixes printers that output blank paper from POS while Notepad prints fine (0.1.21)."
+  "version": "0.1.22",
+  "files": [
+    {
+      "url": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-omni-v0.1.22/cm-pos-windows-latest-setup.exe",
+      "name": "cm-pos-windows-latest-setup.exe",
+      "sha256": "db5e6ffd50b44efd58b731720999365afdd16a5fb13878ceff744b1a54822f17"
+    },
+    {
+      "url": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-omni-v0.1.22/cm-pos-windows-0.1.22-setup.exe",
+      "name": "cm-pos-windows-0.1.22-setup.exe",
+      "sha256": "db5e6ffd50b44efd58b731720999365afdd16a5fb13878ceff744b1a54822f17"
+    }
+  ],
+  "installerSha256": "db5e6ffd50b44efd58b731720999365afdd16a5fb13878ceff744b1a54822f17",
+  "publishedAtUtc": "2026-10-29T08:20:36.4188068Z",
+  "installerUrl": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-omni-v0.1.22/cm-pos-windows-latest-setup.exe",
+  "brand": "omnifoodtech",
+  "notes": "0.1.22: cash drawer falls back to Windows default printer when receiptDeviceName is empty."
 }
