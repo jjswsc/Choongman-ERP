@@ -74,7 +74,7 @@
 
 - `sql/` 최상위: **802**개 · 접두어 그룹 **101**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **74**개
+- `sql/archive/` (진단 전용 등 보관): **76**개
 
 <details><summary><code>pos_*</code> (231)</summary>
 
@@ -1532,7 +1532,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (74)</summary>
+<details><summary><code>archive/</code> (76)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1590,6 +1590,8 @@
 - [`archive/diagnose/diagnose_pos_menus_store_1001_scope.sql`](../sql/archive/diagnose/diagnose_pos_menus_store_1001_scope.sql)
 - [`archive/diagnose/diagnose_pos_printer_final_price_01_shared_stores.sql`](../sql/archive/diagnose/diagnose_pos_printer_final_price_01_shared_stores.sql)
 - [`archive/diagnose/diagnose_pos_printer_final_price_02_pricing_rows.sql`](../sql/archive/diagnose/diagnose_pos_printer_final_price_02_pricing_rows.sql)
+- [`archive/diagnose/diagnose_pos_table_layout_banjoo_01_rows.sql`](../sql/archive/diagnose/diagnose_pos_table_layout_banjoo_01_rows.sql)
+- [`archive/diagnose/diagnose_pos_table_layout_banjoo_02_erp_stores.sql`](../sql/archive/diagnose/diagnose_pos_table_layout_banjoo_02_erp_stores.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql)

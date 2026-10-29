@@ -34,11 +34,26 @@ async function findExistingPosTableLayoutRow(
       continue
     }
   }
+  // 법인 스코프 없이 전체 조회하면 공유 store_code(예: banjoo·marubkk_01 → 1000)에서
+  // 다른 회사 행을 UPDATE 해 POS에 테이블이 안 보이는 원인이 된다.
   try {
-    const allRows = (await supabaseSelect('pos_table_layouts', {
-      limit: 50,
-      select: 'store_code,layout_json,updated_at',
-    })) as PosTableLayoutDbRow[] | null
+    const { appendSaasTenantFilter } = await import('@/lib/saas-tenant-scope')
+    const fallbackFilter = appendSaasTenantFilter(
+      'store_code=not.is.null',
+      tenantScope,
+      'pos_table_layouts'
+    )
+    const allRows = (
+      fallbackFilter
+        ? await supabaseSelectFilter('pos_table_layouts', fallbackFilter, {
+            limit: 50,
+            select: 'store_code,layout_json,updated_at',
+          })
+        : await supabaseSelect('pos_table_layouts', {
+            limit: 50,
+            select: 'store_code,layout_json,updated_at',
+          })
+    ) as PosTableLayoutDbRow[] | null
     return matchPosTableLayoutRow(storeCode, allRows)
   } catch {
     return null

@@ -779,7 +779,11 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
               floorLabels: cachedFloorLabelsFallback,
               storeCode: primary,
             })
-          : getPosTableLayout({ storeCode: primary }).catch(() => ({
+          : getPosTableLayout({
+              storeCode: primary,
+              // 메모리·IDB에 테이블이 없으면 서버를 기다림(관리자 저장 후 POS에 안 보이던 고착 방지)
+              forceNetwork: cachedLayoutFallback.length === 0,
+            }).catch(() => ({
               layout: cachedLayoutFallback,
               floorLabels: cachedFloorLabelsFallback,
               storeCode: primary,

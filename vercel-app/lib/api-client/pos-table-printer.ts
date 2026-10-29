@@ -30,7 +30,19 @@ export interface PosTableItem {
 export type PosFloorLabels = Partial<Record<number, string>>
 
 export function posTableLayoutCacheKey(storeCode: string): string {
-  return `erp:posTableLayout:${storeCode.trim()}`
+  const code = String(storeCode || '').trim()
+  let tenant = ''
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      tenant = String(sessionStorage.getItem('cm_tenant_id') || '')
+        .trim()
+        .toLowerCase()
+    }
+  } catch {
+    tenant = ''
+  }
+  const base = tenant ? `erp:posTableLayout:t:${tenant}` : 'erp:posTableLayout'
+  return code ? `${base}:${code}` : base
 }
 
 export async function getPosTableLayout(params: {
@@ -48,13 +60,28 @@ export async function getPosTableLayout(params: {
     floorCount: 3,
     storeCode: params.storeCode,
   }
+  /**
+   * 빈 레이아웃(테이블 0)을 IDB에 캐시해 두면, 관리자에서 배치를 저장한 뒤에도
+   * POS가 즉시 빈 캐시를 반환해 「테이블 없음」이 고착된다. 테이블이 없으면 서버를 기다린다.
+   */
+  let forceNetwork = Boolean(params.forceNetwork)
+  if (!forceNetwork) {
+    try {
+      const { getFromErpCache } = await import('@/lib/offline/cache')
+      const cached = await getFromErpCache<{ layout?: unknown[] }>(cacheKey)
+      const n = Array.isArray(cached?.layout) ? cached.layout.length : 0
+      if (!cached || n === 0) forceNetwork = true
+    } catch {
+      forceNetwork = true
+    }
+  }
   return fetchPosCatalogCached<{
     layout: PosTableItem[]
     floorLabels?: PosFloorLabels
     floorCount?: number
     storeCode: string
     isFallback?: boolean
-  }>(cacheKey, url, empty, { forceNetwork: Boolean(params.forceNetwork) })
+  }>(cacheKey, url, empty, { forceNetwork })
 }
 
 export interface PosPrinterSettings {
