@@ -3478,13 +3478,17 @@ if (!gotLock) {
         return { ok: false, reason: "forbidden" };
       }
       /**
-       * getPrintersAsync(기본 프린터 조회) 금지 — 네트워크 프린터 PC에서 수 초~10초 지연.
-       * runtime-config의 receiptDeviceName(또는 legacy deviceName), 이 PC에 없으면 캐시된 Windows 기본 프린터.
+       * 영수증 HTML 인쇄는 deviceName 없이도 Windows 기본으로 나갈 수 있지만,
+       * 드로어 킥(ESC/POS RAW)은 프린터 표시 이름이 필요함.
+       * receiptDeviceName·캐시 기본이 비어 있으면(앱 직후 등) 한 번만 getPrintersAsync로 기본 프린터를 채운다.
        */
-      const device =
+      let device =
         dropStalePrinterNameByCache(resolveThermalDeviceForHtmlPrintSync({ printRole: "receipt" })) ||
         printerListCache.defaultName ||
         "";
+      if (!device) {
+        device = (await getWindowsDefaultPrinterName()) || "";
+      }
       if (!device) {
         return { ok: false, reason: "no_printer" };
       }

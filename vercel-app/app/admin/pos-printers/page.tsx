@@ -34,6 +34,10 @@ import {
 } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT, tr as i18nTr } from "@/lib/i18n"
+import {
+  resolveDefaultReceiptLogoPath,
+  resolveDefaultReceiptLogoUrl,
+} from "@/lib/pos-receipt-default-logo"
 import { LINKPOS_FORCE_MANUAL_CARD } from "@/lib/linkpos-card-api-enabled"
 import {
   applyMembershipQrToAllStores,
@@ -1527,7 +1531,10 @@ export default function PosPrintersPage() {
 
   const buildReceiptHtml = React.useCallback(() => {
     const receiptLayout = resolvedPrintLayout.receipt
-    const logoUrl = fittedReceiptLogoSrc || receiptLogoImageUrl || `${window.location.origin}/company-stamp.png`
+    const logoUrl =
+      fittedReceiptLogoSrc ||
+      receiptLogoImageUrl ||
+      resolveDefaultReceiptLogoUrl(window.location.origin)
     const previewIsTaxInvoice = false
     const footerPrimary =
       receiptFooterPrimaryText.trim() ||
@@ -2936,8 +2943,15 @@ export default function PosPrintersPage() {
             >
                 <div className="font-mono text-xs">
                   <div className="text-center">
+                    {(fittedReceiptLogoSrc ||
+                      receiptLogoImageUrl ||
+                      resolveDefaultReceiptLogoPath()) && (
                     <img
-                      src={fittedReceiptLogoSrc || receiptLogoImageUrl || "/company-stamp.png"}
+                      src={
+                        fittedReceiptLogoSrc ||
+                        receiptLogoImageUrl ||
+                        resolveDefaultReceiptLogoPath()
+                      }
                       alt={t("posReceiptLogoAlt")}
                       className="mx-auto h-auto w-auto object-contain"
                       style={{
@@ -2945,6 +2959,7 @@ export default function PosPrintersPage() {
                         maxHeight: RECEIPT_LOGO_MAX_HEIGHT_PX[receiptLogoSize],
                       }}
                     />
+                    )}
                     <div className="mt-1 text-black">{previewData.storeCode}</div>
                   </div>
                   <div className="my-2 border-t border-dashed border-black" />

@@ -27,6 +27,7 @@ import { resolveKbankSkipApiForQrSetting } from '@/lib/kbank-qr-api-enabled'
 import { resolvePosQrDisplayModeForStore } from '@/lib/pos-qr-display-mode'
 import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { selectFilterOptionalTenant } from '@/lib/saas-store-conflict'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 
 type VendorBizInfo = {
   name?: string
@@ -51,6 +52,8 @@ function fillKbankMidFromChoongmanDefaults(
   storeCode: string,
   fields: { kbankMerchantId: string; kbankPartnerShopId: string; kbankTerminalId: string }
 ) {
+  /** Omni store_code 1000 등에 충만 KBank MID를 넣지 않음 */
+  if (!isLegacyChoongmanErpSupabase()) return fields
   const d = lookupChoongmanKbankStoreDefaults(storeCode)
   if (!d) return fields
   const hasSaved = Boolean(fields.kbankMerchantId || fields.kbankPartnerShopId || fields.kbankTerminalId)

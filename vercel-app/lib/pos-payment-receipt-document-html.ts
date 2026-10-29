@@ -36,6 +36,7 @@ import { posReceiptItemSkuForBarcode } from '@/lib/pos-receipt-barcode'
 import { lineNoteDuplicatesOptions, normalizePosLineNote } from '@/lib/pos-line-note'
 import { applyGuestBillBuffetPrint } from '@/lib/pos-guest-bill-buffet-print'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import { resolveDefaultReceiptLogoUrl } from '@/lib/pos-receipt-default-logo'
 import { resolvePosPrintLayoutCalibration } from '@/lib/pos-print-layout-calibration'
 import {
   buildReceiptVoidBannerHtml,
@@ -489,8 +490,9 @@ export async function buildPosPaymentReceiptDocumentHtmlAsync(
 ): Promise<string> {
   const d = resolvePaymentReceiptDesign(params.printerSettings, params.designOverride)
   const origin = params.origin
+  /** Omni: 미설정 시 충만 company-stamp.png 금지. 충만만 기본 로고. */
   const logoCandidate =
-    String(d.receiptLogoImageUrl || '').trim() || (origin ? `${origin.replace(/\/$/, '')}/company-stamp.png` : '')
+    String(d.receiptLogoImageUrl || '').trim() || resolveDefaultReceiptLogoUrl(origin)
   const stampCandidate = String(d.receiptStampImageUrl || '').trim()
   const membershipImageCandidate = resolveReceiptAssetUrl(
     String(d.receiptMembershipQrImageUrl || '').trim(),

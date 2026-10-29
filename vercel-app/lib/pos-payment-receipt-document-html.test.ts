@@ -314,6 +314,35 @@ describe('buildPosPaymentReceiptDocumentHtmlAsync — Windows hybrid logo', () =
     })
   })
 
+  it('does not fall back to company-stamp.png on Omni origin when logo unset', async () => {
+    const fetchSpy = vi.fn()
+    globalThis.fetch = fetchSpy as unknown as typeof fetch
+
+    const html = await buildPosPaymentReceiptDocumentHtmlAsync({
+      receiptData: {
+        orderNo: '100020261029002',
+        storeCode: '1000',
+        orderType: 'takeout',
+        items: [{ id: '1', name: 'Maesil Soju', price: 420, qty: 1 }],
+        subtotal: 420,
+        discountAmt: 0,
+        total: 420,
+        receiptAutoPrintContext: 'payment',
+      },
+      menus: [],
+      orderTypeLabels: { takeout: 'Takeout' },
+      t: (k) => k,
+      lang: 'en',
+      origin: 'https://app.omnifoodtech.com',
+      printerSettings: { logoPrint: true } as never,
+      designOverride: { receiptLogoImageUrl: '' },
+    })
+
+    expect(html).not.toContain('company-stamp.png')
+    expect(html).not.toMatch(/<img[^>]*class="[^"]*receipt-brand-logo/)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('inlines https logo as data URI on hybrid (does not drop Choongman logo)', async () => {
     const tinyPng = Uint8Array.from([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
