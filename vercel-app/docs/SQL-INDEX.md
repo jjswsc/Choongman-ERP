@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **798**개 · 접두어 그룹 **101**개
+- `sql/` 최상위: **801**개 · 접두어 그룹 **101**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **72**개
+- `sql/archive/` (진단 전용 등 보관): **74**개
 
-<details><summary><code>pos_*</code> (227)</summary>
+<details><summary><code>pos_*</code> (230)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -223,6 +223,8 @@
 - [`pos_open_1001_20260923_01_check.sql`](../sql/pos_open_1001_20260923_01_check.sql) — verify
 - [`pos_option_groups_group_code.sql`](../sql/pos_option_groups_group_code.sql)
 - [`pos_option_groups_master_and_menu_links.sql`](../sql/pos_option_groups_master_and_menu_links.sql)
+- [`pos_option_step_store_sold_out_01_create.sql`](../sql/pos_option_step_store_sold_out_01_create.sql) — log
+- [`pos_option_step_store_sold_out_02_verify.sql`](../sql/pos_option_step_store_sold_out_02_verify.sql) — verify
 - [`pos_order_audit_trail.sql`](../sql/pos_order_audit_trail.sql) — diagnose
 - [`pos_order_events.sql`](../sql/pos_order_events.sql)
 - [`pos_order_no_counter_rpc.sql`](../sql/pos_order_no_counter_rpc.sql) — rpc
@@ -265,6 +267,7 @@
 - [`pos_printer_settings_qr_display_mode.sql`](../sql/pos_printer_settings_qr_display_mode.sql)
 - [`pos_printer_settings_require_guest_count.sql`](../sql/pos_printer_settings_require_guest_count.sql)
 - [`pos_printer_settings_rls_policies.sql`](../sql/pos_printer_settings_rls_policies.sql) — rls
+- [`pos_printer_settings_tenant_pk_shared_ok.sql`](../sql/pos_printer_settings_tenant_pk_shared_ok.sql) — log
 - [`pos_promo_extensions.sql`](../sql/pos_promo_extensions.sql)
 - [`pos_promo_items_choice_group_columns.sql`](../sql/pos_promo_items_choice_group_columns.sql)
 - [`pos_promo_items_option_code_column.sql`](../sql/pos_promo_items_option_code_column.sql)
@@ -1528,7 +1531,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (72)</summary>
+<details><summary><code>archive/</code> (74)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1584,6 +1587,8 @@
 - [`archive/diagnose/diagnose_pos_main_device_ekkamai.sql`](../sql/archive/diagnose/diagnose_pos_main_device_ekkamai.sql)
 - [`archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql`](../sql/archive/diagnose/diagnose_pos_menus_hidden_but_code_exists.sql)
 - [`archive/diagnose/diagnose_pos_menus_store_1001_scope.sql`](../sql/archive/diagnose/diagnose_pos_menus_store_1001_scope.sql)
+- [`archive/diagnose/diagnose_pos_printer_final_price_01_shared_stores.sql`](../sql/archive/diagnose/diagnose_pos_printer_final_price_01_shared_stores.sql)
+- [`archive/diagnose/diagnose_pos_printer_final_price_02_pricing_rows.sql`](../sql/archive/diagnose/diagnose_pos_printer_final_price_02_pricing_rows.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_01_orders.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql)

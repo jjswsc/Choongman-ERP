@@ -25,6 +25,8 @@ import {
 } from '@/lib/kbank-store-merchant-defaults'
 import { resolveKbankSkipApiForQrSetting } from '@/lib/kbank-qr-api-enabled'
 import { resolvePosQrDisplayModeForStore } from '@/lib/pos-qr-display-mode'
+import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
+import { selectFilterOptionalTenant } from '@/lib/saas-store-conflict'
 
 type VendorBizInfo = {
   name?: string
@@ -304,9 +306,16 @@ export async function GET(request: NextRequest) {
   defaultRes.posQrDisplayMode = resolvePosQrDisplayModeForStore(storeCode, '')
 
   try {
-    const rows = (await supabaseSelectFilter(
+    // Omni: 같은 store_code 를 쓰는 다른 법인(예: banjoo·marubkk_01 → 1000) 설정을
+    // 읽지 않도록 tenant_id 로 한정. 저장(savePosPrinterSettings)과 동일 스코프.
+    const tenantScope = await resolveSaasTenantScope({
+      auth: { tenantId: authResult.auth.tenantId, company: authResult.auth.company },
+      storeCode,
+    })
+    const rows = (await selectFilterOptionalTenant(
       'pos_printer_settings',
       `store_code=eq.${encodeURIComponent(storeCode)}`,
+      tenantScope,
       { limit: 1 }
     )) as {
       store_code?: string
@@ -450,7 +459,10 @@ export async function GET(request: NextRequest) {
     })
     const fallback = await getStoreReceiptBizFallback(storeCode, inventoryScope)
 
-    const fromConnected = await listMainDeviceTokensForStore(storeCode)
+    const fromConnected = await listMainDeviceTokensForStore(
+      storeCode,
+      authResult.auth.tenantId || tenantScope.tenantId || null
+    )
     const legacy =
       raw?.main_device_token != null && String(raw.main_device_token).trim()
         ? String(raw.main_device_token).trim()
