@@ -251,6 +251,8 @@ export async function GET(request: NextRequest) {
     vatRate: 7,
     vatMode: 'included' as const,
     serviceRate: 0,
+    serviceRateTakeout: null as number | null,
+    serviceRateDelivery: null as number | null,
     serviceMode: 'separate' as const,
     cardRate: 0,
     cardMode: 'separate' as const,
@@ -399,6 +401,8 @@ export async function GET(request: NextRequest) {
       vat_rate?: number
       vat_mode?: string
       service_rate?: number
+      service_rate_takeout?: number | null
+      service_rate_delivery?: number | null
       service_mode?: string
       card_rate?: number
       card_mode?: string
@@ -623,6 +627,14 @@ export async function GET(request: NextRequest) {
       vatRate: Math.max(0, Number(raw?.vat_rate ?? 7)),
       vatMode: String(raw?.vat_mode || 'included') === 'separate' ? 'separate' : 'included',
       serviceRate: Math.max(0, Number(raw?.service_rate ?? 0)),
+      serviceRateTakeout:
+        raw?.service_rate_takeout == null
+          ? null
+          : Math.max(0, Number(raw.service_rate_takeout)),
+      serviceRateDelivery:
+        raw?.service_rate_delivery == null
+          ? null
+          : Math.max(0, Number(raw.service_rate_delivery)),
       serviceMode: String(raw?.service_mode || 'separate') === 'included' ? 'included' : 'separate',
       cardRate: Math.max(0, Number(raw?.card_rate ?? 0)),
       cardMode: String(raw?.card_mode || 'separate') === 'included' ? 'included' : 'separate',

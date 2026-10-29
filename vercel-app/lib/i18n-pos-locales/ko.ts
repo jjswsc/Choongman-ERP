@@ -411,6 +411,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posStoreFixedFeesSection: '배달·포장 정액 수수료',
     posStoreFixedFeesHint: '배달 주문에는 배달 수수료, 포장 주문에는 포장 수수료가 합계에 더해집니다.',
     posPricingAdjustmentsHint: '각 항목은 % 기준입니다. 포함: 최종금액에 이미 포함, 별도: 최종금액에 추가됩니다.',
+    posServiceFeeByOrderTypeHint:
+      '홀·포장·배달 %를 각각 설정합니다. 0이면 해당 유형에 서비스비를 붙이지 않습니다.',
     posFeeStackTitle: '별도 항목 적용 순서',
     posFeeStackHint:
       '병렬: 각각 기준금액에 독립 계산. 누적: 위에서 아래 순서로 직전 금액에 %를 적용합니다. 포함 항목은 순서에 영향 없습니다.',

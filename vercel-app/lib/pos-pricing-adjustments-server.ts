@@ -8,11 +8,13 @@ import { resolveSaasTenantScope } from '@/lib/saas-tenant-scope'
 import { storeRowFilter } from '@/lib/saas-store-conflict'
 
 const PRINTER_PRICING_SELECT =
-  'vat_rate,vat_mode,service_rate,service_mode,card_rate,card_mode,card_base_mode,other_rate,other_mode,fee_stack_mode,fee_stack_order,payment_total_rounding_mode,round_payment_total_to_whole_baht'
+  'vat_rate,vat_mode,service_rate,service_rate_takeout,service_rate_delivery,service_mode,card_rate,card_mode,card_base_mode,other_rate,other_mode,fee_stack_mode,fee_stack_order,payment_total_rounding_mode,round_payment_total_to_whole_baht'
 
 function adjustmentsLookConfigured(adj: PosPricingAdjustments): boolean {
   return (
     Math.max(0, Number(adj.serviceRate) || 0) > 0.0001 ||
+    Math.max(0, Number(adj.serviceRateTakeout) || 0) > 0.0001 ||
+    Math.max(0, Number(adj.serviceRateDelivery) || 0) > 0.0001 ||
     Math.max(0, Number(adj.vatRate) || 0) > 0.0001 ||
     Math.max(0, Number(adj.cardRate) || 0) > 0.0001 ||
     Math.max(0, Number(adj.otherRate) || 0) > 0.0001

@@ -134,6 +134,7 @@ import {
   normalizeFeeStackOrder,
   normalizePaymentTotalRoundingMode,
   receiptTaxDisplayFieldsFromPricing,
+  resolveServiceRateForOrderType,
   type PosPricingAdjustments,
 } from '@/lib/pos-pricing'
 import { newPosOrderClientRequestId } from '@/lib/pos-order-client-request-id'
@@ -1111,6 +1112,8 @@ export default function PosTerminalPage() {
   const [vatRate, setVatRate] = useState(7)
   const [vatMode, setVatMode] = useState<'included' | 'separate'>('included')
   const [serviceRate, setServiceRate] = useState(0)
+  const [serviceRateTakeout, setServiceRateTakeout] = useState<number | null>(null)
+  const [serviceRateDelivery, setServiceRateDelivery] = useState<number | null>(null)
   const [serviceMode, setServiceMode] = useState<'included' | 'separate'>('separate')
   const [cardRate, setCardRate] = useState(0)
   const [cardMode, setCardMode] = useState<'included' | 'separate'>('separate')
@@ -2055,6 +2058,12 @@ export default function PosTerminalPage() {
         setVatRate(Math.max(0, Number(s.vatRate ?? 7)))
         setVatMode(s.vatMode === 'separate' ? 'separate' : 'included')
         setServiceRate(Math.max(0, Number(s.serviceRate ?? 0)))
+        setServiceRateTakeout(
+          s.serviceRateTakeout == null ? null : Math.max(0, Number(s.serviceRateTakeout))
+        )
+        setServiceRateDelivery(
+          s.serviceRateDelivery == null ? null : Math.max(0, Number(s.serviceRateDelivery))
+        )
         setServiceMode(s.serviceMode === 'included' ? 'included' : 'separate')
         setCardRate(Math.max(0, Number(s.cardRate ?? 0)))
         setCardMode(s.cardMode === 'included' ? 'included' : 'separate')
@@ -2153,6 +2162,8 @@ export default function PosTerminalPage() {
         setVatRate(7)
         setVatMode('included')
         setServiceRate(0)
+        setServiceRateTakeout(null)
+        setServiceRateDelivery(null)
         setServiceMode('separate')
         setCardRate(0)
         setCardMode('separate')
@@ -2492,6 +2503,8 @@ export default function PosTerminalPage() {
     vatRate,
     vatMode,
     serviceRate,
+    serviceRateTakeout,
+    serviceRateDelivery,
     serviceMode,
     cardRate,
     cardMode,
@@ -2501,7 +2514,7 @@ export default function PosTerminalPage() {
     feeStackMode,
     feeStackOrder,
     paymentTotalRoundingMode,
-  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode, feeStackMode, feeStackOrder, paymentTotalRoundingMode])
+  }), [vatRate, vatMode, serviceRate, serviceRateTakeout, serviceRateDelivery, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode, feeStackMode, feeStackOrder, paymentTotalRoundingMode])
 
   const customerDisplayBreakdown = useMemo(() => {
     const subtotal = customerDisplayOrderTotal
@@ -2510,6 +2523,7 @@ export default function PosTerminalPage() {
       subtotal,
       discountAmt,
       cardPaymentAmount: 0,
+      orderType,
       adjustments: pricingAdjustments,
     })
     return {
@@ -2520,7 +2534,7 @@ export default function PosTerminalPage() {
       vatRate: pricingAdjustments.vatRate,
       vatMode: pricingAdjustments.vatMode,
       serviceFeeAmt: pricing.serviceFeeAmt,
-      serviceRate: pricingAdjustments.serviceRate,
+      serviceRate: resolveServiceRateForOrderType(pricingAdjustments, orderType),
       serviceMode: pricingAdjustments.serviceMode,
       cardFeeAmt: pricing.cardFeeAmt,
       cardRate: pricingAdjustments.cardRate,
@@ -2530,7 +2544,7 @@ export default function PosTerminalPage() {
       otherMode: pricingAdjustments.otherMode,
       total: pricing.finalTotal,
     }
-  }, [customerDisplayOrderTotal, pricingAdjustments])
+  }, [customerDisplayOrderTotal, pricingAdjustments, orderType])
   /** 1023px 이하(세로 태블릿/모바일)에서만 하단 카트로 전환 */
   const isNarrowViewport = useMediaQuery('(max-width: 920px)')
   const showSidePanel =

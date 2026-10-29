@@ -1808,6 +1808,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posReceiptOptionsHint: 'ตั้งค่าข้อมูลที่แสดงบนใบเสร็จ',
     posReceiptPerPayment: 'ต่อการชำระ',
     posReceiptPrintTiming: 'จังหวะพิมพ์ใบเสร็จ',
+    posServiceFeeByOrderTypeHint:
+      'ตั้ง % ค่าบริการแยก กินที่ร้าน / เทคอเอาท์ / เดลิเวอรี่ — ใส่ 0 หากไม่คิดในประเภทนั้น',
     posPricingAdjustmentsTitle: 'ตัวเลือกคำนวณราคาสุดท้าย (รายสาขา)',
     posPricingAdjustmentsHint: 'แต่ละรายการเป็น % รวม: อยู่ในยอดรวมแล้ว, แยก: บวกเพิ่มในยอดรวม',
     posFeeStackTitle: 'ลำดับการคิดรายการแยก',

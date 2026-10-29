@@ -14,10 +14,24 @@ export type PosPaymentTotalRoundingMode = 'round' | 'floor' | 'none'
 
 export const DEFAULT_FEE_STACK_ORDER: readonly PosFeeStackKey[] = ['service', 'vat', 'other'] as const
 
+/** 서비스비 채널 — POS orderType / 영수증 라벨 정규화 */
+export type PosServiceOrderType = 'dine_in' | 'takeout' | 'delivery'
+
 export interface PosPricingAdjustments {
   vatRate?: number
   vatMode?: PosFeeMode
+  /** 홀(매장) 서비스비 %. 채널별 미설정 시 포장·배달도 이 값을 씀(하위 호환). */
   serviceRate?: number
+  /**
+   * 포장 서비스비 %. `null`/미설정이면 `serviceRate`(홀)와 동일.
+   * `0`이면 포장에 서비스비 없음.
+   */
+  serviceRateTakeout?: number | null
+  /**
+   * 배달 서비스비 %. `null`/미설정이면 `serviceRate`(홀)와 동일.
+   * `0`이면 배달에 서비스비 없음.
+   */
+  serviceRateDelivery?: number | null
   serviceMode?: PosFeeMode
   cardRate?: number
   cardMode?: PosFeeMode
@@ -37,6 +51,62 @@ export interface PosPricingAdjustments {
    * @deprecated `paymentTotalRoundingMode` 사용. false면 none, true/미설정은 round.
    */
   roundPaymentTotalToWholeBaht?: boolean
+}
+
+/** dine-in / takeout / delivery / 배달앱 라벨 → 서비스비 채널 */
+export function normalizePosServiceOrderType(orderType?: string | null): PosServiceOrderType {
+  const s = String(orderType ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+  if (
+    s === 'takeout' ||
+    s === 'take_out' ||
+    s === 'packaging' ||
+    s === 'pickup' ||
+    s === 'to_go' ||
+    s === 'togo'
+  ) {
+    return 'takeout'
+  }
+  if (
+    s === 'delivery' ||
+    s === 'grab' ||
+    s === 'lineman' ||
+    s === 'line_man' ||
+    s === 'shopee' ||
+    s === 'shopeefood' ||
+    s === 'shopee_food'
+  ) {
+    return 'delivery'
+  }
+  return 'dine_in'
+}
+
+function channelServiceRateOrFallback(
+  channelRate: number | null | undefined,
+  dineInRate: number
+): number {
+  if (channelRate === null || channelRate === undefined) return dineInRate
+  const n = Number(channelRate)
+  if (!Number.isFinite(n)) return dineInRate
+  return Math.max(0, n)
+}
+
+/** 주문 유형에 맞는 서비스비 % (미설정 채널은 홀 요율로 폴백) */
+export function resolveServiceRateForOrderType(
+  adjustments: PosPricingAdjustments | null | undefined,
+  orderType?: string | null
+): number {
+  const dineIn = Math.max(0, Number(adjustments?.serviceRate ?? 0) || 0)
+  const channel = normalizePosServiceOrderType(orderType)
+  if (channel === 'takeout') {
+    return channelServiceRateOrFallback(adjustments?.serviceRateTakeout, dineIn)
+  }
+  if (channel === 'delivery') {
+    return channelServiceRateOrFallback(adjustments?.serviceRateDelivery, dineIn)
+  }
+  return dineIn
 }
 
 export interface PosPricingResult {
@@ -223,6 +293,13 @@ export function normalizeFeeStackMode(v: unknown): PosFeeStackMode {
   return String(v || 'parallel') === 'sequential' ? 'sequential' : 'parallel'
 }
 
+function optionalNonNegativeRate(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, n)
+}
+
 /** 프린터/매장 설정 → 결제·영수증 재인쇄용 요금 조정 (터미널·메인기기와 동일 규칙) */
 export function posPricingAdjustmentsFromPrinterSettings(
   settings:
@@ -230,6 +307,8 @@ export function posPricingAdjustmentsFromPrinterSettings(
         vatRate?: number | null
         vatMode?: string | null
         serviceRate?: number | null
+        serviceRateTakeout?: number | null
+        serviceRateDelivery?: number | null
         serviceMode?: string | null
         cardRate?: number | null
         cardMode?: string | null
@@ -250,6 +329,8 @@ export function posPricingAdjustmentsFromPrinterSettings(
     vatRate: Math.max(0, Number(s.vatRate ?? 7)),
     vatMode: s.vatMode === 'separate' ? 'separate' : 'included',
     serviceRate: Math.max(0, Number(s.serviceRate ?? 0)),
+    serviceRateTakeout: optionalNonNegativeRate(s.serviceRateTakeout),
+    serviceRateDelivery: optionalNonNegativeRate(s.serviceRateDelivery),
     serviceMode: s.serviceMode === 'included' ? 'included' : 'separate',
     cardRate: Math.max(0, Number(s.cardRate ?? 0)),
     cardMode: s.cardMode === 'included' ? 'included' : 'separate',
@@ -277,6 +358,8 @@ export function posPricingAdjustmentsFromPrinterSettingsDbRow(
         vat_rate?: number | null
         vat_mode?: string | null
         service_rate?: number | null
+        service_rate_takeout?: number | null
+        service_rate_delivery?: number | null
         service_mode?: string | null
         card_rate?: number | null
         card_mode?: string | null
@@ -296,6 +379,8 @@ export function posPricingAdjustmentsFromPrinterSettingsDbRow(
     vatRate: s.vat_rate,
     vatMode: s.vat_mode,
     serviceRate: s.service_rate,
+    serviceRateTakeout: s.service_rate_takeout,
+    serviceRateDelivery: s.service_rate_delivery,
     serviceMode: s.service_mode,
     cardRate: s.card_rate,
     cardMode: s.card_mode,
@@ -514,6 +599,8 @@ export function computePosPricing(params: {
   deliveryFee?: number
   packagingFee?: number
   cardPaymentAmount?: number
+  /** 있으면 홀/포장/배달 서비스비 요율을 채널별로 적용 */
+  orderType?: string | null
   adjustments?: PosPricingAdjustments
 }): PosPricingResult {
   const subtotal = toNonNegative(params.subtotal)
@@ -523,7 +610,10 @@ export function computePosPricing(params: {
   const baseTotal = round2(Math.max(0, subtotal - discountAmt) + deliveryFee + packagingFee)
 
   const vatRate = toNonNegative(params.adjustments?.vatRate)
-  const serviceRate = toNonNegative(params.adjustments?.serviceRate)
+  const serviceRate =
+    params.orderType != null && String(params.orderType).trim() !== ''
+      ? resolveServiceRateForOrderType(params.adjustments, params.orderType)
+      : toNonNegative(params.adjustments?.serviceRate)
   const cardRate = toNonNegative(params.adjustments?.cardRate)
   const otherRate = toNonNegative(params.adjustments?.otherRate)
   const vatMode = normalizeMode(params.adjustments?.vatMode)

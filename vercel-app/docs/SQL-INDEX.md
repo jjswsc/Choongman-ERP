@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **801**개 · 접두어 그룹 **101**개
+- `sql/` 최상위: **802**개 · 접두어 그룹 **101**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **74**개
 
-<details><summary><code>pos_*</code> (230)</summary>
+<details><summary><code>pos_*</code> (231)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -267,6 +267,7 @@
 - [`pos_printer_settings_qr_display_mode.sql`](../sql/pos_printer_settings_qr_display_mode.sql)
 - [`pos_printer_settings_require_guest_count.sql`](../sql/pos_printer_settings_require_guest_count.sql)
 - [`pos_printer_settings_rls_policies.sql`](../sql/pos_printer_settings_rls_policies.sql) — rls
+- [`pos_printer_settings_service_rate_by_order_type.sql`](../sql/pos_printer_settings_service_rate_by_order_type.sql) — log
 - [`pos_printer_settings_tenant_pk_shared_ok.sql`](../sql/pos_printer_settings_tenant_pk_shared_ok.sql) — log
 - [`pos_promo_extensions.sql`](../sql/pos_promo_extensions.sql)
 - [`pos_promo_items_choice_group_columns.sql`](../sql/pos_promo_items_choice_group_columns.sql)

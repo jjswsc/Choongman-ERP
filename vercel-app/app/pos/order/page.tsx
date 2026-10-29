@@ -142,6 +142,7 @@ import {
   filterOptionSelectionGroupsForAudience,
   filterPosOptionsForVisibleGroups,
   inferOptionSelectionGroupsFromOptions,
+  resolvePosOptionGroupRequired,
   resolveStepAudienceFromOrderType,
 } from "@/lib/pos-option-selection-groups"
 import type { PosDescriptionChannel } from "@/lib/pos-menu-display-description"
@@ -378,6 +379,8 @@ export default function PosOrderPage() {
   const [vatRate, setVatRate] = React.useState(7)
   const [vatMode, setVatMode] = React.useState<'included' | 'separate'>('included')
   const [serviceRate, setServiceRate] = React.useState(0)
+  const [serviceRateTakeout, setServiceRateTakeout] = React.useState<number | null>(null)
+  const [serviceRateDelivery, setServiceRateDelivery] = React.useState<number | null>(null)
   const [serviceMode, setServiceMode] = React.useState<'included' | 'separate'>('separate')
   const [cardRate, setCardRate] = React.useState(0)
   const [cardMode, setCardMode] = React.useState<'included' | 'separate'>('separate')
@@ -532,6 +535,12 @@ export default function PosOrderPage() {
         setVatRate(Math.max(0, Number(s.vatRate ?? 7)))
         setVatMode(s.vatMode === 'separate' ? 'separate' : 'included')
         setServiceRate(Math.max(0, Number(s.serviceRate ?? 0)))
+        setServiceRateTakeout(
+          s.serviceRateTakeout == null ? null : Math.max(0, Number(s.serviceRateTakeout))
+        )
+        setServiceRateDelivery(
+          s.serviceRateDelivery == null ? null : Math.max(0, Number(s.serviceRateDelivery))
+        )
         setServiceMode(s.serviceMode === 'included' ? 'included' : 'separate')
         setCardRate(Math.max(0, Number(s.cardRate ?? 0)))
         setCardMode(s.cardMode === 'included' ? 'included' : 'separate')
@@ -557,6 +566,8 @@ export default function PosOrderPage() {
         setVatRate(7)
         setVatMode('included')
         setServiceRate(0)
+        setServiceRateTakeout(null)
+        setServiceRateDelivery(null)
         setServiceMode('separate')
         setCardRate(0)
         setCardMode('separate')
@@ -1429,6 +1440,8 @@ export default function PosOrderPage() {
     vatRate,
     vatMode,
     serviceRate,
+    serviceRateTakeout,
+    serviceRateDelivery,
     serviceMode,
     cardRate,
     cardMode,
@@ -1444,6 +1457,7 @@ export default function PosOrderPage() {
     discountAmt,
     deliveryFee: deliveryFeeAmt,
     packagingFee: packagingFeeAmt,
+    orderType,
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
@@ -1453,6 +1467,7 @@ export default function PosOrderPage() {
     deliveryFee: deliveryFeeAmt,
     packagingFee: packagingFeeAmt,
     cardPaymentAmount: Number(payCard) || 0,
+    orderType,
     adjustments: pricingAdjustments,
   })
   const paymentPreviewTotal = paymentPreview.finalTotal
@@ -3062,7 +3077,7 @@ export default function PosOrderPage() {
             if (useMultiStep) {
               const groupKey = activeStepGroups[optionPickerStep]
               const groupCfg = groupConfigMap.get(groupKey)
-              const groupRequired = groupCfg?.required !== false
+              const groupRequired = resolvePosOptionGroupRequired(groupKey, groupCfg)
               const values = collectPosOptionPickerStepValues({
                 groupKey,
                 groups: activeStepGroups,

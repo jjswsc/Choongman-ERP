@@ -167,6 +167,10 @@ export interface PosPrinterSettings {
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
+  /** 포장 서비스비 %. null이면 홀(serviceRate)과 동일 */
+  serviceRateTakeout?: number | null
+  /** 배달 서비스비 %. null이면 홀(serviceRate)과 동일 */
+  serviceRateDelivery?: number | null
   serviceMode?: 'included' | 'separate'
   cardRate?: number
   cardMode?: 'included' | 'separate'
@@ -367,6 +371,8 @@ export async function savePosPrinterSettings(params: {
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
+  serviceRateTakeout?: number | null
+  serviceRateDelivery?: number | null
   serviceMode?: 'included' | 'separate'
   cardRate?: number
   cardMode?: 'included' | 'separate'

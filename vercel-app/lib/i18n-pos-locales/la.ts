@@ -1388,6 +1388,8 @@ export const I18N_POS_LA: Record<string, string> = {
     posTableZoneNamePh: 'e.g. Hall, Terrace, VIP',
     posFeeModeIncluded: 'Included',
     posFeeModeSeparate: 'Separate',
+    posServiceFeeByOrderTypeHint:
+      'Set hall / takeout / delivery % separately. Use 0 to skip service charge for that order type.',
     posPricingAdjustmentsTitle: 'Final price options (per store)',
     posServiceFeeLabel: 'Service fee',
     posVatLabel: 'VAT',

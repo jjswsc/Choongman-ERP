@@ -149,6 +149,7 @@ import {
   resolvePaymentTotalRoundingMode,
   resolveReceiptSubtotalPrintAmount,
   resolveReceiptVatPrintAmount,
+  resolveServiceRateForOrderType,
   roundSplitPaymentDuesToWholeBaht,
   type PosPricingAdjustments,
   type PosPricingResult,
@@ -1599,6 +1600,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     subtotal,
     discountAmt: discount + pointUsedNum,
     cardPaymentAmount: parseBahtAmount(payCard) || 0,
+    orderType,
     adjustments: pricingAdjustments,
   })
   const total = pricing.finalTotal
@@ -3659,6 +3661,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         subtotal: receiptSubtotal,
         discountAmt: discountTotal,
         cardPaymentAmount: 0,
+        orderType,
         adjustments: pricingAdjustments,
       })
       await Promise.resolve(
@@ -3678,7 +3681,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           serviceFeeAmt: pricingSnapshot.serviceFeeAmt,
           serviceFeeMode: pricingSnapshot.serviceFeeMode,
           vatRate: Number(pricingAdjustments?.vatRate ?? 0) || undefined,
-          serviceRate: Number(pricingAdjustments?.serviceRate ?? 0) || undefined,
+          serviceRate: resolveServiceRateForOrderType(pricingAdjustments, orderType) || undefined,
           cardFeeAmt: pricingSnapshot.cardFeeAmt,
           cardFeeMode: pricingSnapshot.cardFeeMode,
           otherFeeAmt: pricingSnapshot.otherFeeAmt,

@@ -102,6 +102,8 @@ ALTER TABLE public.pos_printer_settings
   ADD COLUMN IF NOT EXISTS vat_rate numeric DEFAULT 7,
   ADD COLUMN IF NOT EXISTS vat_mode text DEFAULT 'included',
   ADD COLUMN IF NOT EXISTS service_rate numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS service_rate_takeout numeric,
+  ADD COLUMN IF NOT EXISTS service_rate_delivery numeric,
   ADD COLUMN IF NOT EXISTS service_mode text DEFAULT 'separate',
   ADD COLUMN IF NOT EXISTS card_rate numeric DEFAULT 0,
   ADD COLUMN IF NOT EXISTS card_mode text DEFAULT 'separate',

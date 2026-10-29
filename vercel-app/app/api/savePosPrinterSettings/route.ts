@@ -330,6 +330,14 @@ export async function POST(req: NextRequest) {
     const vatRate = Math.max(0, Number(body?.vatRate ?? 7))
     const vatMode = String(body?.vatMode || 'included') === 'separate' ? 'separate' : 'included'
     const serviceRate = Math.max(0, Number(body?.serviceRate ?? 0))
+    const parseOptionalServiceRate = (v: unknown): number | null => {
+      if (v === null || v === undefined || v === '') return null
+      const n = Number(v)
+      if (!Number.isFinite(n)) return null
+      return Math.max(0, n)
+    }
+    const serviceRateTakeout = parseOptionalServiceRate(body?.serviceRateTakeout)
+    const serviceRateDelivery = parseOptionalServiceRate(body?.serviceRateDelivery)
     const serviceMode = String(body?.serviceMode || 'separate') === 'included' ? 'included' : 'separate'
     const cardRate = Math.max(0, Number(body?.cardRate ?? 0))
     const cardMode = String(body?.cardMode || 'separate') === 'included' ? 'included' : 'separate'
@@ -536,6 +544,8 @@ export async function POST(req: NextRequest) {
       vat_rate: vatRate,
       vat_mode: vatMode,
       service_rate: serviceRate,
+      service_rate_takeout: serviceRateTakeout,
+      service_rate_delivery: serviceRateDelivery,
       service_mode: serviceMode,
       card_rate: cardRate,
       card_mode: cardMode,

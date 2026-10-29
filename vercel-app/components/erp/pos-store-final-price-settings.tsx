@@ -15,9 +15,11 @@ import {
   normalizeFeeStackMode,
   normalizeFeeStackOrder,
   normalizePaymentTotalRoundingMode,
+  resolveServiceRateForOrderType,
   type PosFeeStackKey,
   type PosFeeStackMode,
   type PosPaymentTotalRoundingMode,
+  type PosServiceOrderType,
 } from "@/lib/pos-pricing"
 
 type FeeStackPreset = "parallel" | "service_vat" | "vat_service" | "custom"
@@ -45,6 +47,8 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
   const [vatRate, setVatRate] = React.useState("7")
   const [vatMode, setVatMode] = React.useState<"included" | "separate">("included")
   const [serviceRate, setServiceRate] = React.useState("0")
+  const [serviceRateTakeout, setServiceRateTakeout] = React.useState("0")
+  const [serviceRateDelivery, setServiceRateDelivery] = React.useState("0")
   const [serviceMode, setServiceMode] = React.useState<"included" | "separate">("separate")
   const [cardRate, setCardRate] = React.useState("0")
   const [cardMode, setCardMode] = React.useState<"included" | "separate">("separate")
@@ -61,6 +65,7 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
   const [packagingFee, setPackagingFee] = React.useState("0")
   const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
   const [previewBase, setPreviewBase] = React.useState("1000")
+  const [previewOrderType, setPreviewOrderType] = React.useState<PosServiceOrderType>("dine_in")
 
   const load = React.useCallback(() => {
     const s = String(storeCode || "").trim()
@@ -70,7 +75,20 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
       .then((settings) => {
         setVatRate(String(settings.vatRate ?? 7))
         setVatMode(settings.vatMode === "separate" ? "separate" : "included")
-        setServiceRate(String(settings.serviceRate ?? 0))
+        const hallSvc = Math.max(0, Number(settings.serviceRate ?? 0))
+        setServiceRate(String(hallSvc))
+        setServiceRateTakeout(
+          String(
+            settings.serviceRateTakeout == null ? hallSvc : Math.max(0, Number(settings.serviceRateTakeout))
+          )
+        )
+        setServiceRateDelivery(
+          String(
+            settings.serviceRateDelivery == null
+              ? hallSvc
+              : Math.max(0, Number(settings.serviceRateDelivery))
+          )
+        )
         setServiceMode(settings.serviceMode === "included" ? "included" : "separate")
         setCardRate(String(settings.cardRate ?? 0))
         setCardMode(settings.cardMode === "included" ? "included" : "separate")
@@ -139,9 +157,21 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
     return otherMode
   }
 
+  const serviceAdjustments = React.useMemo(
+    () => ({
+      serviceRate: Number(serviceRate) || 0,
+      serviceRateTakeout: Number(serviceRateTakeout) || 0,
+      serviceRateDelivery: Number(serviceRateDelivery) || 0,
+      serviceMode,
+    }),
+    [serviceRate, serviceRateTakeout, serviceRateDelivery, serviceMode]
+  )
+
   const feeRateOf = (key: PosFeeStackKey) => {
     if (key === "vat") return Number(vatRate) || 0
-    if (key === "service") return Number(serviceRate) || 0
+    if (key === "service") {
+      return resolveServiceRateForOrderType(serviceAdjustments, previewOrderType)
+    }
     return Number(otherRate) || 0
   }
 
@@ -149,11 +179,11 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
     const base = Math.max(0, Number(previewBase) || 0)
     return computePosPricing({
       subtotal: base,
+      orderType: previewOrderType,
       adjustments: {
         vatRate: Number(vatRate) || 0,
         vatMode,
-        serviceRate: Number(serviceRate) || 0,
-        serviceMode,
+        ...serviceAdjustments,
         cardRate: 0,
         cardMode: "separate",
         otherRate: Number(otherRate) || 0,
@@ -165,10 +195,10 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
     })
   }, [
     previewBase,
+    previewOrderType,
     vatRate,
     vatMode,
-    serviceRate,
-    serviceMode,
+    serviceAdjustments,
     otherRate,
     otherMode,
     feeStackMode,
@@ -213,7 +243,6 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
     }
     steps.push(`${t("posFeeStackPreviewFinal") || "최종"} ${formatBaht(previewPricing.finalTotal)}฿`)
     return steps
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- labels via t/feeLabel are stable enough for preview
   }, [
     previewPricing,
     feeStackMode,
@@ -240,6 +269,8 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         vatRate: Number(vatRate) || 0,
         vatMode,
         serviceRate: Number(serviceRate) || 0,
+        serviceRateTakeout: Number(serviceRateTakeout) || 0,
+        serviceRateDelivery: Number(serviceRateDelivery) || 0,
         serviceMode,
         cardRate: Number(cardRate) || 0,
         cardMode,
@@ -360,14 +391,6 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
             {(
               [
                 { key: "vat", label: t("posVatLabel") || "부가세", rate: vatRate, setRate: setVatRate, mode: vatMode, setMode: setVatMode },
-                {
-                  key: "service",
-                  label: t("posServiceFeeLabel") || "서비스비",
-                  rate: serviceRate,
-                  setRate: setServiceRate,
-                  mode: serviceMode,
-                  setMode: setServiceMode,
-                },
                 { key: "card", label: t("posCardFeeLabel") || "카드비", rate: cardRate, setRate: setCardRate, mode: cardMode, setMode: setCardMode },
                 { key: "other", label: t("posOtherFeeLabel") || "기타", rate: otherRate, setRate: setOtherRate, mode: otherMode, setMode: setOtherMode },
               ] as const
@@ -416,6 +439,81 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
                 )}
               </div>
             ))}
+
+            <div className="space-y-2 rounded-md border border-dashed bg-muted/10 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{t("posServiceFeeLabel") || "서비스비"}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {t("posServiceFeeByOrderTypeHint") ||
+                      "홀·포장·배달 %를 각각 설정합니다. 0이면 해당 유형에 서비스비를 붙이지 않습니다."}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setServiceMode("included")}
+                    className={cn(
+                      "rounded-md border px-3 py-1.5 text-sm",
+                      serviceMode === "included"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-muted bg-muted/30"
+                    )}
+                  >
+                    {t("posFeeModeIncluded") || "포함"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setServiceMode("separate")}
+                    className={cn(
+                      "rounded-md border px-3 py-1.5 text-sm",
+                      serviceMode === "separate"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-muted bg-muted/30"
+                    )}
+                  >
+                    {t("posFeeModeSeparate") || "별도"}
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    {
+                      key: "dine_in",
+                      label: t("posOrderTypeDineIn") || "홀",
+                      rate: serviceRate,
+                      setRate: setServiceRate,
+                    },
+                    {
+                      key: "takeout",
+                      label: t("posOrderTypeTakeout") || "포장",
+                      rate: serviceRateTakeout,
+                      setRate: setServiceRateTakeout,
+                    },
+                    {
+                      key: "delivery",
+                      label: t("posOrderTypeDelivery") || "배달",
+                      rate: serviceRateDelivery,
+                      setRate: setServiceRateDelivery,
+                    },
+                  ] as const
+                ).map((ch) => (
+                  <div key={ch.key}>
+                    <label className="text-xs font-medium text-muted-foreground">{ch.label} %</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={ch.rate}
+                      onChange={(e) => ch.setRate(e.target.value)}
+                      className="mt-1 h-9"
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="rounded-md border bg-muted/20 p-3 space-y-3">
@@ -510,6 +608,29 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
                     onChange={(e) => setPreviewBase(e.target.value)}
                     className="mt-1 h-8"
                   />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ["dine_in", t("posOrderTypeDineIn") || "홀"],
+                      ["takeout", t("posOrderTypeTakeout") || "포장"],
+                      ["delivery", t("posOrderTypeDelivery") || "배달"],
+                    ] as const
+                  ).map(([ot, label]) => (
+                    <button
+                      type="button"
+                      key={ot}
+                      onClick={() => setPreviewOrderType(ot)}
+                      className={cn(
+                        "rounded-md border px-2.5 py-1 text-xs",
+                        previewOrderType === ot
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               </div>
               <ol className="space-y-0.5 text-xs text-muted-foreground">

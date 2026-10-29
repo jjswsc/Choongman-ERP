@@ -186,6 +186,10 @@ export function posPrinterSettingsToSaveParams(
     vatRate: Math.max(0, Number(s.vatRate ?? 7)),
     vatMode: (String(s.vatMode || "included") === "separate" ? "separate" : "included") as "included" | "separate",
     serviceRate: Math.max(0, Number(s.serviceRate ?? 0)),
+    serviceRateTakeout:
+      s.serviceRateTakeout == null ? null : Math.max(0, Number(s.serviceRateTakeout)),
+    serviceRateDelivery:
+      s.serviceRateDelivery == null ? null : Math.max(0, Number(s.serviceRateDelivery)),
     serviceMode: (String(s.serviceMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",
     cardRate: Math.max(0, Number(s.cardRate ?? 0)),
     cardMode: (String(s.cardMode || "separate") === "included" ? "included" : "separate") as "included" | "separate",

@@ -429,6 +429,7 @@ export async function POST(req: NextRequest) {
       deliveryFee,
       packagingFee,
       cardPaymentAmount: paymentCard,
+      orderType,
       adjustments: pricingAdjustments,
     })
     const vat = pricing.vatFeeAmt

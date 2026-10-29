@@ -750,6 +750,7 @@ export function receiptModalDataFromPosOrderForPayment(
     deliveryFee: order.deliveryFee ?? 0,
     packagingFee: order.packagingFee ?? 0,
     cardPaymentAmount: order.paymentCard ?? 0,
+    orderType: order.orderType,
     adjustments,
   })
   const total = resolvePosOrderReceiptPrintTotal({
@@ -894,6 +895,7 @@ export function hallOrderReceiptPayloadFromPosOrder(
     deliveryFee: order.deliveryFee ?? 0,
     packagingFee: order.packagingFee ?? 0,
     cardPaymentAmount: Math.max(0, Number(order.paymentCard ?? 0) || 0),
+    orderType: order.orderType,
     adjustments,
   })
   const total = resolvePosOrderReceiptPrintTotal({
@@ -985,6 +987,7 @@ export function hallOrderReceiptPayloadFromOrderFields(
     deliveryFee: fields.deliveryFee ?? 0,
     packagingFee: fields.packagingFee ?? 0,
     cardPaymentAmount: Math.max(0, Number(fields.paymentCard) || 0),
+    orderType: fields.orderType,
     adjustments,
   })
   const paymentSum = posOrderPaymentSumFromAmounts({
@@ -1138,6 +1141,7 @@ export function buildCheckoutPaymentReceiptModalData(params: {
     deliveryFee: Math.max(0, Number(params.deliveryFee ?? 0) || 0),
     packagingFee: Math.max(0, Number(params.packagingFee ?? 0) || 0),
     cardPaymentAmount: Math.max(0, Number(params.cardPaymentAmount ?? 0) || 0),
+    orderType: params.orderType,
     adjustments: params.adjustments,
   })
   const paymentSum = Math.max(0, Number(params.paymentSum ?? 0) || 0)

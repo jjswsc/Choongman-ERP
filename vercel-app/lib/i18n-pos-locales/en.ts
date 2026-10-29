@@ -476,6 +476,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posReceiptOptionsHint: 'Receipt options',
     posReceiptPerPayment: 'Per payment',
     posReceiptPrintTiming: 'Receipt print timing',
+    posServiceFeeByOrderTypeHint:
+      'Set hall / takeout / delivery % separately. Use 0 to skip service charge for that order type.',
     posPricingAdjustmentsTitle: 'Final price options (per store)',
     posStoreFixedFeesSection: 'Delivery & takeout flat fees',
     posStoreFixedFeesHint: 'Delivery orders add the delivery fee; takeout orders add the packaging fee to the total.',

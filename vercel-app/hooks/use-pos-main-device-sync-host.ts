@@ -788,6 +788,14 @@ export function usePosMainDeviceSyncHost(): void {
           vatRate: Math.max(0, Number(settings.vatRate ?? 7)),
           vatMode: settings.vatMode === 'separate' ? 'separate' : 'included',
           serviceRate: Math.max(0, Number(settings.serviceRate ?? 0)),
+          serviceRateTakeout:
+            settings.serviceRateTakeout == null
+              ? null
+              : Math.max(0, Number(settings.serviceRateTakeout)),
+          serviceRateDelivery:
+            settings.serviceRateDelivery == null
+              ? null
+              : Math.max(0, Number(settings.serviceRateDelivery)),
           serviceMode: settings.serviceMode === 'included' ? 'included' : 'separate',
           cardRate: Math.max(0, Number(settings.cardRate ?? 0)),
           cardMode: settings.cardMode === 'included' ? 'included' : 'separate',
