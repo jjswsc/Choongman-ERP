@@ -48,6 +48,7 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
   const [tasks, setTasks] = useState<TaskDraft[]>([])
   const [briefing, setBriefing] = useState("")
   const [q, setQ] = useState("")
+  const [bulkMinutes, setBulkMinutes] = useState(30)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -207,10 +208,20 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
     }
   }
 
+  /** 저장 API와 동일: 0·빈값 → 30분 */
+  const effectiveHqEst = (m: number) => Math.max(0, Math.round(Number(m)) || 30)
   const estTotal =
     (selectedPlan?.estMinutes || 0) -
     (selectedPlan?.hqTasks || []).filter((h) => h.status === "todo").reduce((s, h) => s + h.estMinutes, 0) +
-    tasks.reduce((s, x) => s + (Number(x.estMinutes) || 0), 0)
+    tasks.reduce((s, x) => s + effectiveHqEst(x.estMinutes), 0)
+  const hasZeroEst = tasks.some((x) => !(Number(x.estMinutes) > 0))
+  const shiftIn = String(selectedPlan?.shift_in || "").trim()
+  const shiftOut = String(selectedPlan?.shift_out || "").trim()
+  const shiftAnchorLabel = shiftIn
+    ? t("dp_shift_anchor")
+        .replace("{in}", shiftIn)
+        .replace("{out}", shiftOut ? t("dp_shift_out_suffix").replace("{out}", shiftOut) : "")
+    : t("dp_shift_anchor_default")
 
   return (
     <div className="space-y-3">
@@ -293,6 +304,7 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
                   <p className="text-sm font-semibold">
                     {selected.name} <span className="text-xs text-muted-foreground">({label.role(selected.planRole)})</span>
                   </p>
+                  <p className="text-[11px] text-muted-foreground">{shiftAnchorLabel}</p>
                   <p
                     className={cn(
                       "text-xs",
@@ -380,18 +392,46 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
                 ) : null}
 
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
                     <p className="text-xs font-semibold">{t("dp_hq_tasks")}</p>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs"
-                      onClick={() => setTasks((prev) => [...prev, { title: "", store: "", estMinutes: 30 }])}
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      {t("dp_add_task")}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {tasks.length > 0 ? (
+                        <>
+                          <span className="text-[11px] text-muted-foreground">{t("dp_apply_all_min")}</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={bulkMinutes}
+                            onChange={(e) => setBulkMinutes(Math.max(0, Number(e.target.value) || 0))}
+                            className="h-7 w-16 text-xs"
+                            title={t("dp_est_min")}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              const m = Math.max(1, Math.round(Number(bulkMinutes)) || 30)
+                              setBulkMinutes(m)
+                              setTasks((prev) => prev.map((x) => ({ ...x, estMinutes: m })))
+                            }}
+                          >
+                            {t("dp_apply_all_min_btn")}
+                          </Button>
+                        </>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={() => setTasks((prev) => [...prev, { title: "", store: "", estMinutes: 30 }])}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        {t("dp_add_task")}
+                      </Button>
+                    </div>
                   </div>
+                  {hasZeroEst ? <p className="text-[11px] text-amber-700 dark:text-amber-400">{t("dp_est_zero_hint")}</p> : null}
                   {tasks.length === 0 ? <p className="text-xs text-muted-foreground">{t("dp_no_tasks")}</p> : null}
                   {tasks.map((task, i) => (
                     <div key={i} className="flex flex-wrap items-center gap-1">

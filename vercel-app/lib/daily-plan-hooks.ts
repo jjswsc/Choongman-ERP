@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { getBangkokHmString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { addDaysYmdUtc, computeActualMinutes } from '@/lib/daily-plan-generate'
@@ -224,5 +224,35 @@ export async function syncDailyPlanOnStoreAction(params: {
     }
   } catch (e) {
     console.warn('syncDailyPlanOnStoreAction:', e instanceof Error ? e.message : e)
+  }
+}
+
+/**
+ * 출근 스캔 → 당일 일정표 타임라인 시작(shift_in)을 실제 출근 시각(방콕 HH:mm)으로 맞춤.
+ * 항목 시각은 DB에 고정되지 않고 shift_in 기준으로 계산되므로 shift_in만 갱신하면 됨.
+ * 일정표 없거나 마감이면 no-op. 출근 저장 자체는 실패시키지 않음.
+ */
+export async function syncDailyPlanOnClockIn(params: {
+  employeeId?: number | null
+  name?: string
+  logAt?: Date | string | null
+}): Promise<void> {
+  try {
+    const at = params.logAt instanceof Date ? params.logAt : params.logAt ? new Date(params.logAt) : new Date()
+    if (Number.isNaN(at.getTime())) return
+    const date = getBangkokTodayDateString(at)
+    const hm = getBangkokHmString(at)
+    if (!/^\d{2}:\d{2}$/.test(hm)) return
+    const plans = await findPlansForPerson(date, { name: params.name, employeeId: params.employeeId })
+    const nowIso = new Date().toISOString()
+    for (const plan of plans) {
+      if (String(plan.shift_in || '').trim() === hm) continue
+      await supabaseUpdateByFilter('daily_plans', `id=eq.${plan.id}&status=neq.closed`, {
+        shift_in: hm,
+        updated_at: nowIso,
+      })
+    }
+  } catch (e) {
+    console.warn('syncDailyPlanOnClockIn:', e instanceof Error ? e.message : e)
   }
 }

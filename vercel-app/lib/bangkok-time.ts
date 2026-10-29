@@ -104,6 +104,11 @@ export function getBangkokRequestDtIso(base: Date = new Date()): string {
   return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}+07:00`
 }
 
+/** 방콕 벽시계 `HH:mm` (일정표 shift_in·근무표 plan_in 포맷) */
+export function getBangkokHmString(base: Date = new Date()): string {
+  return getBangkokDateTimeString(base).slice(11, 16)
+}
+
 /** 방콕 기준 오늘 날짜 (YYYY-MM-DD) */
 export function getBangkokTodayDateString(base: Date = new Date()): string {
   return base.toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })

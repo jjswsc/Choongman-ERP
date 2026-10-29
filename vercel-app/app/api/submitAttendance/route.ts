@@ -28,6 +28,7 @@ import {
   stampSaasTenantId,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import { syncDailyPlanOnClockIn } from '@/lib/daily-plan-hooks'
 const TZ = 'Asia/Bangkok'
 
 function todayStr() {
@@ -688,6 +689,14 @@ export async function POST(request: NextRequest) {
         }
         throw e
       }
+    }
+
+    if (logType === '출근') {
+      await syncDailyPlanOnClockIn({
+        employeeId: empId > 0 ? empId : null,
+        name: empName,
+        logAt: nowTime,
+      })
     }
 
     if (needManagerApproval) {

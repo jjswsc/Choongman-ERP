@@ -32,6 +32,15 @@ describe("daily-plan-timeline", () => {
     expect(planDayStart("", [])).toBe(540)
   })
 
+  it("출근 스캔으로 shift_in이 바뀌면 상대 항목 타임라인이 따라 밀림", () => {
+    const items = [item(1, { estMinutes: 30 }), item(2, { estMinutes: 30 })]
+    const scheduled = computePlanTimeline(items, { shiftIn: "09:00", travelMinutes: 0 })
+    expect(scheduled.slots.get(1)).toMatchObject({ start: hmToMin("09:00"), end: hmToMin("09:30") })
+    const afterClockIn = computePlanTimeline(items, { shiftIn: "12:00", travelMinutes: 0 })
+    expect(afterClockIn.slots.get(1)).toMatchObject({ start: hmToMin("12:00"), end: hmToMin("12:30") })
+    expect(afterClockIn.slots.get(2)).toMatchObject({ start: hmToMin("12:30"), end: hmToMin("13:00") })
+  })
+
   it("고정 시각·이동 시간·방문 구간 배치", () => {
     const items = [
       item(1, { timeSlot: "09:00", estMinutes: 15 }),

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { parseBangkokWallClockToMs } from '@/lib/bangkok-time'
+import { getBangkokHmString, parseBangkokWallClockToMs } from '@/lib/bangkok-time'
+
+describe('getBangkokHmString', () => {
+  it('formats Asia/Bangkok HH:mm', () => {
+    expect(getBangkokHmString(new Date('2026-10-30T05:00:00.000Z'))).toBe('12:00')
+    expect(getBangkokHmString(new Date('2026-10-30T02:15:00.000Z'))).toBe('09:15')
+  })
+})
 
 describe('parseBangkokWallClockToMs', () => {
   it('reads naive Bangkok wall clock', () => {

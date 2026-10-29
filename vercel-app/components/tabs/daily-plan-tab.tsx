@@ -31,6 +31,9 @@ function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => 
         ) : null}
         <span className="ml-auto">{label.planStatus(plan.status)}</span>
       </div>
+      {plan.status !== "closed" ? (
+        <p className="text-[11px] text-muted-foreground">{t("dp_clockin_shifts_hint")}</p>
+      ) : null}
       <p className="text-sm font-medium">{route || plan.store_name}</p>
       <div className="h-2 overflow-hidden rounded bg-muted">
         <div className="h-full bg-emerald-500 transition-all" style={{ width: `${summary.doneRate}%` }} />
