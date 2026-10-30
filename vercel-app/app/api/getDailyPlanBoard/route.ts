@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     const list = plans.map((p) => {
       const items = itemsByPlan.get(p.id) || []
       const work = items.filter((i) => i.source !== 'visit')
-      const done = work.filter((i) => i.status === 'done')
+      const done = work.filter((i) => i.status === 'done' || i.status === 'delegated')
       const { slots } = computePlanTimeline(
         items.map((i) => ({ id: i.id, source: i.source, storeName: i.store_name, timeSlot: i.time_slot, estMinutes: i.est_minutes })),
         { shiftIn: p.shift_in, travelMinutes: travelMinutesOfPlan(p, travel) }

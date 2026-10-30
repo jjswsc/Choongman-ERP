@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Save, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowLeft, ArrowUp, Copy, Plus, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
+  copyRoutineTemplate,
   getRoutineTemplates,
   saveRoutineTemplate,
   useStoreList,
@@ -75,8 +76,15 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   const [showArchived, setShowArchived] = useState(false)
   const [roleFilter, setRoleFilter] = useState<string>("all")
   const [edit, setEdit] = useState<RoutineTemplateDto | null>(null)
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copyStores, setCopyStores] = useState<string[]>([])
+  const [copying, setCopying] = useState(false)
 
-  const goBackToList = () => setEdit(null)
+  const goBackToList = () => {
+    setCopyOpen(false)
+    setCopyStores([])
+    setEdit(null)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -127,6 +135,10 @@ export function DailyPlanTemplates({ t }: { t: T }) {
       await appAlert(t("dp_tpl_name_required"))
       return
     }
+    const titled = edit.items.filter((i) => i.title.trim())
+    if (titled.length > 0 && titled.every((i) => !(Number(i.estMinutes) > 0))) {
+      if (!(await appConfirm(t("dp_tpl_est_all_zero_confirm")))) return
+    }
     setSaving(true)
     try {
       const res = await saveRoutineTemplate({
@@ -138,7 +150,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         status: edit.status,
         note: edit.note,
         travelMinutes: edit.travelMinutes,
-        items: edit.items.filter((i) => i.title.trim()),
+        items: titled,
       })
       if (!res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
@@ -163,6 +175,57 @@ export function DailyPlanTemplates({ t }: { t: T }) {
     goBackToList()
     await load()
   }
+
+  const openCopy = () => {
+    if (!edit?.id) {
+      void appAlert(t("dp_tpl_copy_need_id"))
+      return
+    }
+    setCopyStores([])
+    setCopyOpen(true)
+  }
+
+  const toggleCopyStore = (store: string) =>
+    setCopyStores((prev) => (prev.includes(store) ? prev.filter((s) => s !== store) : [...prev, store]))
+
+  const runCopy = async () => {
+    if (!edit?.id) return
+    if (copyStores.length === 0) {
+      await appAlert(t("dp_tpl_copy_pick"))
+      return
+    }
+    setCopying(true)
+    try {
+      const res = await copyRoutineTemplate({ sourceId: edit.id, targetStoreNames: copyStores })
+      if (!res.success) {
+        await appAlert(translateApiMessage(res.message, t) || t("dp_save_fail"))
+        return
+      }
+      const created = Number(res.created || 0)
+      const skipped = Number(res.skipped || 0)
+      if (created === 0) {
+        await appAlert(t("dp_tpl_copy_none"))
+      } else {
+        await appAlert(
+          t("dp_tpl_copy_done").replace("{created}", String(created)).replace("{skipped}", String(skipped))
+        )
+      }
+      setCopyOpen(false)
+      setCopyStores([])
+      await load()
+    } finally {
+      setCopying(false)
+    }
+  }
+
+  const copyTargetStores = useMemo(
+    () =>
+      (storeList || [])
+        .map((s) => String(s || "").trim())
+        .filter((s) => s && s !== (edit?.storeName || "").trim())
+        .sort(),
+    [storeList, edit?.storeName]
+  )
 
   if (edit) {
     const fixed = fixedMinutes(edit)
@@ -226,22 +289,25 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                 </option>
               ))}
             </select>
-            <select
-              value={edit.storeName}
-              onChange={(e) => setEdit({ ...edit, storeName: e.target.value })}
-              className="h-9 rounded border bg-background px-2 text-sm lg:col-span-2"
-              disabled={!canEdit}
-            >
-              <option value="">{t("dp_tpl_all_stores")}</option>
-              {(storeList || [])
-                .filter((s) => s && String(s).trim())
-                .sort()
-                .map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-            </select>
+            <div className="space-y-1 lg:col-span-2">
+              <select
+                value={edit.storeName}
+                onChange={(e) => setEdit({ ...edit, storeName: e.target.value })}
+                className="h-9 w-full rounded border bg-background px-2 text-sm"
+                disabled={!canEdit}
+              >
+                <option value="">{t("dp_tpl_all_stores")}</option>
+                {(storeList || [])
+                  .filter((s) => s && String(s).trim())
+                  .sort()
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">{t("dp_tpl_store_hint")}</p>
+            </div>
             <Textarea
               value={edit.note}
               onChange={(e) => setEdit({ ...edit, note: e.target.value })}
@@ -296,8 +362,8 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                       <Input
                         value={it.timeSlot}
                         onChange={(e) => setItem(idx, { timeSlot: e.target.value })}
-                        placeholder="09:00"
-                        className="h-8 w-16"
+                        placeholder={t("dp_tpl_time_ph")}
+                        className="h-8 w-[5.5rem]"
                         disabled={!canEdit}
                       />
                     </td>
@@ -305,6 +371,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                       <Input
                         value={it.block}
                         onChange={(e) => setItem(idx, { block: e.target.value })}
+                        placeholder={t("dp_tpl_block_ph")}
                         className="h-8 w-20"
                         disabled={!canEdit}
                       />
@@ -344,9 +411,12 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                         min={0}
                         value={it.estMinutes}
                         onChange={(e) => setItem(idx, { estMinutes: Number(e.target.value) || 0 })}
-                        className="h-8 w-16"
+                        className={cn("h-8 w-16", !(Number(it.estMinutes) > 0) && it.title.trim() ? "border-amber-500" : "")}
                         disabled={!canEdit}
                       />
+                      {!(Number(it.estMinutes) > 0) && it.title.trim() ? (
+                        <p className="mt-0.5 max-w-[7rem] text-[10px] leading-tight text-amber-700">{t("dp_tpl_est_zero_row")}</p>
+                      ) : null}
                     </td>
                     <td className="p-1">
                       <div className="flex gap-0.5">
@@ -433,6 +503,50 @@ export function DailyPlanTemplates({ t }: { t: T }) {
 
           <p className="text-[11px] text-muted-foreground">{t("dp_tpl_per_store_hint")}</p>
 
+          {copyOpen && canEdit && edit.id ? (
+            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+              <p className="text-sm font-medium">{t("dp_tpl_copy_title")}</p>
+              {copyTargetStores.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("dp_tpl_empty")}</p>
+              ) : (
+                <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                  {copyTargetStores.map((store) => {
+                    const on = copyStores.includes(store)
+                    return (
+                      <label
+                        key={store}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs",
+                          on ? "border-primary bg-primary/10" : "bg-background"
+                        )}
+                      >
+                        <input type="checkbox" checked={on} onChange={() => toggleCopyStore(store)} />
+                        {store}
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={copying || copyStores.length === 0} onClick={() => void runCopy()}>
+                  <Copy className="mr-1 h-3.5 w-3.5" />
+                  {t("dp_tpl_copy_btn")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={copying}
+                  onClick={() => {
+                    setCopyOpen(false)
+                    setCopyStores([])
+                  }}
+                >
+                  {t("dp_tpl_copy_cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap gap-2">
             {canEdit ? (
               <>
@@ -444,6 +558,12 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                   <Save className="mr-1 h-4 w-4" />
                   {t("dp_save")}
                 </Button>
+                {edit.id ? (
+                  <Button variant="outline" disabled={copying} onClick={openCopy}>
+                    <Copy className="mr-1 h-4 w-4" />
+                    {t("dp_tpl_copy")}
+                  </Button>
+                ) : null}
                 {edit.id ? (
                   <Button variant="ghost" className="text-red-600" onClick={() => void archive()}>
                     {t("dp_tpl_archive")}

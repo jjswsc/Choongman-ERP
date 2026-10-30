@@ -381,13 +381,15 @@ export type PlanSummary = {
   doneRate: number
 }
 
-/** 방문(체류) 항목은 시간 합계에서 제외 */
+/** 방문(체류) 항목은 시간 합계에서 제외. delegated는 진행률상 완료와 동일 */
 export function summarizePlanItems(items: PlanItemLite[]): PlanSummary {
   const work = items.filter((i) => i.source !== "visit")
-  const done = work.filter((i) => i.status === "done")
+  const done = work.filter((i) => i.status === "done" || i.status === "delegated")
   const skipped = work.filter((i) => i.status === "skipped")
   const estTotal = work.reduce((s, i) => s + (Number(i.estMinutes) || 0), 0)
-  const actualTotal = done.reduce((s, i) => s + (Number(i.actualMinutes ?? i.estMinutes) || 0), 0)
+  const actualTotal = work
+    .filter((i) => i.status === "done")
+    .reduce((s, i) => s + (Number(i.actualMinutes ?? i.estMinutes) || 0), 0)
   return {
     total: work.length,
     done: done.length,

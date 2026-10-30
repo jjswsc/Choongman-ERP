@@ -8,8 +8,12 @@ import {
 } from '@/lib/supabase-server'
 import { computeActualMinutes } from '@/lib/daily-plan-generate'
 import {
+  canAssignDailyPlan,
   canViewDailyPlan,
+  dailyPlanRoleOf,
+  ensureDailyPlan,
   getDailyPlanById,
+  loadPlanEmployeeById,
   normalizePlanItemRow,
   resolveDailyPlanScope,
   touchDailyPlanProgress,
@@ -28,9 +32,10 @@ type Body = {
   storeName?: string
   category?: string
   timeSlot?: string
+  targetEmployeeId?: number | string
 }
 
-const ACTIONS = new Set(['start', 'done', 'skip', 'reopen', 'note', 'photo', 'add', 'remove'])
+const ACTIONS = new Set(['start', 'done', 'skip', 'reopen', 'note', 'photo', 'add', 'remove', 'delegate'])
 const MAX_PHOTOS = 6
 
 export async function POST(request: NextRequest) {
@@ -96,12 +101,151 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
     }
 
+    if (action === 'delegate') {
+      if (item.status !== 'todo' && item.status !== 'doing') {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_delegate_status', message: '대기·진행 중인 항목만 위임할 수 있습니다.' },
+          { status: 400 }
+        )
+      }
+      if (item.delegated_from_item_id || item.delegated_to_employee_id) {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_already_delegated', message: '이미 위임된 항목입니다.' },
+          { status: 400 }
+        )
+      }
+      if (item.source === 'visit') {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_delegate_visit', message: '방문 항목은 위임할 수 없습니다.' },
+          { status: 400 }
+        )
+      }
+      const targetEmp = await loadPlanEmployeeById(Number(body.targetEmployeeId || 0))
+      if (!targetEmp) {
+        return NextResponse.json({ success: false, message: '직원을 찾을 수 없습니다.' }, { status: 404 })
+      }
+      if (targetEmp.id === plan.employee_id) {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_delegate_self', message: '자기 자신에게는 위임할 수 없습니다.' },
+          { status: 400 }
+        )
+      }
+      const targetRole = dailyPlanRoleOf(targetEmp) || 'staff'
+      if (!canAssignDailyPlan(scope, { role: targetRole, store: targetEmp.store, employeeId: targetEmp.id })) {
+        return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+      }
+
+      const { plan: targetPlan } = await ensureDailyPlan({
+        date: plan.plan_date,
+        employee: targetEmp,
+        role: targetRole,
+        store: targetEmp.store,
+        position: targetRole === 'staff' ? 'all' : 'all',
+        actor: scope.actorName || plan.employee_name,
+        force: true,
+      })
+      if (!targetPlan) {
+        return NextResponse.json({ success: false, message: '대상 일정표를 만들 수 없습니다.' }, { status: 500 })
+      }
+      if (targetPlan.status === 'closed') {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_closed', message: '대상 일정표가 이미 마감되었습니다.' },
+          { status: 409 }
+        )
+      }
+
+      const last = (await supabaseSelectFilter('daily_plan_items', `plan_id=eq.${targetPlan.id}`, {
+        select: 'sort_order',
+        order: 'sort_order.desc',
+        limit: 1,
+      })) as { sort_order?: number }[]
+
+      let copyRow: Record<string, unknown> | null = null
+      try {
+        const inserted = (await supabaseInsert('daily_plan_items', {
+          plan_id: targetPlan.id,
+          source: item.source,
+          ref_id: item.ref_id,
+          store_name: item.store_name || targetPlan.store_name || targetEmp.store,
+          time_slot: item.time_slot,
+          block: item.block,
+          category: item.category,
+          title: item.title,
+          description: item.description,
+          est_minutes: item.est_minutes,
+          link_type: item.link_type,
+          photo_required: item.photo_required,
+          status: 'todo',
+          note: item.note,
+          sort_order: Number(last?.[0]?.sort_order || 0) + 10,
+          delegated_from_item_id: item.id,
+          delegated_by_name: (scope.actorName || plan.employee_name).slice(0, 120),
+          created_at: nowIso,
+          updated_at: nowIso,
+        })) as Record<string, unknown>[] | Record<string, unknown>
+        copyRow = Array.isArray(inserted) ? inserted[0] || null : inserted
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (/delegated_from_item_id|delegated_to_|42703/i.test(msg)) {
+          return NextResponse.json(
+            {
+              success: false,
+              messageKey: 'dp_err_delegate_schema',
+              message: '위임 기능 SQL이 아직 적용되지 않았습니다.',
+            },
+            { status: 503 }
+          )
+        }
+        throw e
+      }
+
+      let updatedSrc: Record<string, unknown>[] = []
+      try {
+        updatedSrc = (await supabaseUpdateByFilterReturning('daily_plan_items', `id=eq.${item.id}`, {
+          status: 'delegated',
+          delegated_to_employee_id: targetEmp.id,
+          delegated_to_name: (targetEmp.nick || targetEmp.name).slice(0, 120),
+          delegated_by_name: (scope.actorName || plan.employee_name).slice(0, 120),
+          finished_at: nowIso,
+          updated_at: nowIso,
+        })) as Record<string, unknown>[]
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (/delegated_to_|42703/i.test(msg)) {
+          return NextResponse.json(
+            {
+              success: false,
+              messageKey: 'dp_err_delegate_schema',
+              message: '위임 기능 SQL이 아직 적용되지 않았습니다.',
+            },
+            { status: 503 }
+          )
+        }
+        throw e
+      }
+
+      await Promise.all([touchDailyPlanProgress(plan.id), touchDailyPlanProgress(targetPlan.id)])
+      return NextResponse.json({
+        success: true,
+        item: updatedSrc?.[0] ? normalizePlanItemRow(updatedSrc[0]) : null,
+        delegatedItem: copyRow ? normalizePlanItemRow(copyRow) : null,
+        targetPlanId: targetPlan.id,
+      })
+    }
+
     if (action === 'remove') {
       if (item.source !== 'hq_task' || item.status !== 'todo') {
         return NextResponse.json({ success: false, message: '본사 과제(미착수)만 삭제할 수 있습니다.' }, { status: 400 })
       }
       await supabaseDeleteByFilter('daily_plan_items', `id=eq.${item.id}`)
       return NextResponse.json({ success: true, removed: item.id })
+    }
+
+    if (item.status === 'delegated' && action !== 'note' && action !== 'photo') {
+      return NextResponse.json(
+        { success: false, messageKey: 'dp_err_delegated_locked', message: '위임된 항목은 수정할 수 없습니다.' },
+        { status: 400 }
+      )
     }
 
     const photoUrl = String(body.photoUrl || '').trim()

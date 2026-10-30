@@ -11,18 +11,21 @@ import {
   PlusCircle,
   RotateCcw,
   SkipForward,
+  UserPlus,
   Wrench,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { appAlert, appPrompt } from "@/lib/app-message"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
+  delegateDailyPlanItem,
   updateDailyPlanItem,
   uploadStoreActionPhoto,
   type DailyPlan,
   type DailyPlanItem,
   type DailyPlanItemAction,
+  type DailyPlanTeamMember,
 } from "@/lib/api-client"
 import { getBangkokDateTimeString, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
@@ -42,6 +45,7 @@ const STATUS_CN: Record<string, string> = {
   doing: "border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20",
   done: "border-l-emerald-500 opacity-80",
   skipped: "border-l-amber-500 opacity-80",
+  delegated: "border-l-violet-500 opacity-90",
 }
 
 const DOT_CN: Record<string, string> = {
@@ -49,6 +53,7 @@ const DOT_CN: Record<string, string> = {
   doing: "bg-blue-500 border-blue-500",
   done: "bg-emerald-500 border-emerald-500",
   skipped: "bg-amber-500 border-amber-500",
+  delegated: "bg-violet-500 border-violet-500",
 }
 
 const SOURCE_CN: Record<string, string> = {
@@ -88,21 +93,26 @@ export function DailyPlanItems(props: {
   t: T
   travelMinutes?: number
   readOnly?: boolean
+  /** 본인 일정에서 매니저/SV가 직원에게 항목 위임 */
+  canDelegate?: boolean
+  delegateTargets?: DailyPlanTeamMember[]
   onChanged: () => void
   onLink?: (item: DailyPlanItem, kind: DailyPlanLinkKind) => void
 }) {
-  const { plan, items, t, travelMinutes, readOnly, onChanged, onLink } = props
+  const { plan, items, t, travelMinutes, readOnly, canDelegate, delegateTargets, onChanged, onLink } = props
   const label = dailyPlanLabelers(t)
   const fileRef = useRef<HTMLInputElement>(null)
   const [photoTarget, setPhotoTarget] = useState<DailyPlanItem | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [actionId, setActionId] = useState<number | null>(null)
+  const [delegateItem, setDelegateItem] = useState<DailyPlanItem | null>(null)
   const closed = plan.status === "closed"
   const editable = !readOnly && !closed
   /** 마감 후에도 사진·메모 소급 첨부 가능 (상태 변경은 editable만) */
   const canAttachEvidence = !readOnly
   const isToday = plan.plan_date === getBangkokTodayDateString()
   const [nowMin, setNowMin] = useState(bangkokNowMin)
+  const targets = (delegateTargets || []).filter((m) => m.employeeId !== plan.employee_id)
 
   useEffect(() => {
     if (!isToday) return
@@ -161,6 +171,29 @@ export function DailyPlanItems(props: {
   const onPickPhoto = (item: DailyPlanItem) => {
     setPhotoTarget(item)
     fileRef.current?.click()
+  }
+
+  const onDelegatePick = async (member: DailyPlanTeamMember) => {
+    const item = delegateItem
+    if (!item) return
+    const name = member.nick || member.name
+    const ok = await appConfirm(
+      t("dp_delegate_confirm").replace("{title}", dailyPlanItemTitle(item.title, t)).replace("{name}", name)
+    )
+    if (!ok) return
+    setBusyId(item.id)
+    try {
+      const res = await delegateDailyPlanItem(item.id, member.employeeId)
+      if (!res.success) {
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
+        return
+      }
+      setDelegateItem(null)
+      await appAlert(t("dp_delegate_done").replace("{name}", name))
+      onChanged()
+    } finally {
+      setBusyId(null)
+    }
   }
 
   const onPhotoFile = async (file: File | undefined) => {
@@ -289,6 +322,16 @@ export function DailyPlanItems(props: {
                     {t("dp_skip_reason")}: {it.skip_reason}
                   </p>
                 ) : null}
+                {it.status === "delegated" && it.delegated_to_name ? (
+                  <p className="mt-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                    {t("dp_delegated_to").replace("{name}", it.delegated_to_name)}
+                  </p>
+                ) : null}
+                {it.delegated_from_item_id && it.delegated_by_name ? (
+                  <p className="mt-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                    {t("dp_delegated_from").replace("{name}", it.delegated_by_name)}
+                  </p>
+                ) : null}
                 {it.note ? <p className="mt-0.5 text-[11px]">📝 {it.note}</p> : null}
                 {photos.length > 0 ? (
                   <div className="mt-1 flex gap-1 overflow-x-auto">
@@ -330,6 +373,22 @@ export function DailyPlanItems(props: {
                         {t("dp_btn_skip")}
                       </Button>
                     </>
+                  ) : null}
+                  {canDelegate &&
+                  editable &&
+                  !isVisit &&
+                  (it.status === "todo" || it.status === "doing") &&
+                  targets.length > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs"
+                      disabled={busy}
+                      onClick={() => setDelegateItem(it)}
+                    >
+                      <UserPlus className="mr-1 h-3 w-3" />
+                      {t("dp_btn_delegate")}
+                    </Button>
                   ) : null}
                   {editable && (it.status === "done" || it.status === "skipped") ? (
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void run(it, "reopen")}>
@@ -375,6 +434,35 @@ export function DailyPlanItems(props: {
             <span className="ml-1 font-semibold text-red-600">· {t("dp_over_shift")}</span>
           ) : null}
         </p>
+      ) : null}
+      {delegateItem ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+          <div className="max-h-[70vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-3 shadow-lg">
+            <p className="text-sm font-semibold">{t("dp_delegate_title")}</p>
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {dailyPlanItemTitle(delegateItem.title, t)}
+            </p>
+            <div className="mt-3 space-y-1.5">
+              {targets.map((m) => (
+                <button
+                  key={m.employeeId}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted/50"
+                  disabled={busyId === delegateItem.id}
+                  onClick={() => void onDelegatePick(m)}
+                >
+                  <span className="font-medium">{m.nick || m.name}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {m.store} · {label.role(m.planRole)}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <Button className="mt-3 w-full" variant="ghost" onClick={() => setDelegateItem(null)}>
+              {t("dp_back")}
+            </Button>
+          </div>
+        </div>
       ) : null}
       <DailyPlanActionSheet
         actionId={actionId}

@@ -3,7 +3,7 @@
 > 이 파일은 `npm run api:inventory`로 생성합니다. 직접 수정하지 마세요.
 > 신규 라우트 규칙: [`.cursor/rules/api-route-conventions.mdc`](../../.cursor/rules/api-route-conventions.mdc) · 검사: `npm run api:check`
 
-- 라우트 수: **911**
+- 라우트 수: **913**
 - 도메인 그룹 수: **177** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
 - 외부 호출(웹훅·크론): **22** — 경로 변경 금지
 
@@ -39,7 +39,7 @@
 - [pos](#pos) (137)
 - [member-portal](#member-portal) (56)
 - [interior](#interior) (41)
-- [store](#store) (26)
+- [store](#store) (28)
 - [marketing](#marketing) (25)
 - [qr-table](#qr-table) (24)
 - [bank](#bank) (20)
@@ -488,6 +488,8 @@
 | `/api/saveStoreActionItems` | POST |  |
 | `/api/saveStoreJobHeadcount` | POST |  |
 | `/api/saveStoreRepairTicket` | POST |  |
+| `/api/store/copy-routine-template` | POST |  |
+| `/api/store/daily-plan-team` | GET |  |
 | `/api/storeActionDailyPlan` | GET, POST |  |
 | `/api/storeTaxFilingProfiles` | GET, POST |  |
 | `/api/submitStoreVisit` | POST |  |

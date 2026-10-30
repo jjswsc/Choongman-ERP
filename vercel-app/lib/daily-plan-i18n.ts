@@ -17,6 +17,7 @@ const ITEM_STATUS_KEYS: Record<string, string> = {
   doing: "dp_item_doing",
   done: "dp_item_done",
   skipped: "dp_item_skipped",
+  delegated: "dp_item_delegated",
 }
 
 const PLAN_STATUS_KEYS: Record<string, string> = {

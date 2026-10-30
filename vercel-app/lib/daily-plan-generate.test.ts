@@ -177,6 +177,17 @@ describe("summary and work log", () => {
       doneRate: 33,
     })
   })
+  it("counts delegated as done for progress", () => {
+    const withDelegated = [
+      ...items,
+      { source: "hq_task", status: "delegated", title: "위임", storeName: "", estMinutes: 10, actualMinutes: null, skipReason: "" },
+    ]
+    const s = summarizePlanItems(withDelegated)
+    expect(s.total).toBe(4)
+    expect(s.done).toBe(2)
+    expect(s.open).toBe(1)
+    expect(s.doneRate).toBe(50)
+  })
   it("lists unfinished items with reasons", () => {
     const text = buildDailyPlanWorkLogContent({ dateYmd: "2026-10-08", items, auto: true })
     expect(text).toContain("완료 · เสร็จ 1/3 (33%)")

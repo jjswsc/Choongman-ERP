@@ -48,6 +48,10 @@ export type DailyPlanItem = {
   photo_urls: string[] | null
   note: string
   sort_order: number
+  delegated_to_employee_id?: number | null
+  delegated_to_name?: string
+  delegated_from_item_id?: number | null
+  delegated_by_name?: string
 }
 
 export type DailyPlanSummary = {
@@ -85,7 +89,16 @@ export async function getMyDailyPlan(params: { date?: string; planId?: number } 
   return (await res.json()) as MyDailyPlanResponse
 }
 
-export type DailyPlanItemAction = "start" | "done" | "skip" | "reopen" | "note" | "photo" | "add" | "remove"
+export type DailyPlanItemAction =
+  | "start"
+  | "done"
+  | "skip"
+  | "reopen"
+  | "note"
+  | "photo"
+  | "add"
+  | "remove"
+  | "delegate"
 
 export async function updateDailyPlanItem(data: {
   action: DailyPlanItemAction
@@ -100,13 +113,57 @@ export async function updateDailyPlanItem(data: {
   storeName?: string
   category?: string
   timeSlot?: string
+  targetEmployeeId?: number
 }) {
   const res = await apiFetch("/api/updateDailyPlanItem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   })
-  return (await res.json()) as { success?: boolean; message?: string; messageKey?: string; item?: DailyPlanItem | null }
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    messageKey?: string
+    item?: DailyPlanItem | null
+    delegatedItem?: DailyPlanItem | null
+    targetPlanId?: number
+  }
+}
+
+export type DailyPlanTeamMember = {
+  employeeId: number
+  name: string
+  nick: string
+  store: string
+  job: string
+  planRole: string
+  planId: number | null
+  planStatus: string | null
+  published: boolean
+  total: number
+  done: number
+  open: number
+  late: number
+  doneRate: number
+}
+
+export async function getDailyPlanTeam(date?: string) {
+  const q = new URLSearchParams()
+  if (date) q.set("date", date)
+  const res = await apiFetchWithOffline(`/api/store/daily-plan-team?${q}`)
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    date?: string
+    canManageTeam?: boolean
+    mePlanId?: number | null
+    members?: DailyPlanTeamMember[]
+    notReady?: boolean
+  }
+}
+
+export async function delegateDailyPlanItem(itemId: number, targetEmployeeId: number) {
+  return updateDailyPlanItem({ action: "delegate", itemId, targetEmployeeId })
 }
 
 export type CloseDailyPlanResult = {
@@ -261,6 +318,23 @@ export async function applyRoutineEstimate(data: { roleScope: string; title: str
     body: JSON.stringify({ applyEstimate: data }),
   })
   return (await res.json()) as { success?: boolean; message?: string; updated?: number; templates?: number }
+}
+
+/** 루틴 템플릿을 다른 매장(들)으로 복제 (초안, 같은 직급·구역·매장 충돌 시 건너뜀) */
+export async function copyRoutineTemplate(data: { sourceId: number; targetStoreNames: string[] }) {
+  const res = await apiFetch("/api/store/copy-routine-template", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    created?: number
+    skipped?: number
+    createdList?: { id: number; storeName: string; name: string }[]
+    skippedList?: { storeName: string; reason: string }[]
+  }
 }
 
 export type DailyPlanWeekCell = {

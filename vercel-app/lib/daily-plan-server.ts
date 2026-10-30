@@ -91,6 +91,10 @@ export type DailyPlanItemRow = {
   photo_urls: string[] | null
   note: string
   sort_order: number
+  delegated_to_employee_id: number | null
+  delegated_to_name: string
+  delegated_from_item_id: number | null
+  delegated_by_name: string
 }
 
 export type PlanEmployee = {
@@ -453,6 +457,10 @@ export function normalizePlanRow(r: Record<string, unknown>): DailyPlanRow {
 }
 
 export function normalizePlanItemRow(r: Record<string, unknown>): DailyPlanItemRow {
+  const toId = (v: unknown) => {
+    const n = Number(v || 0)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
   return {
     id: Number(r.id || 0),
     plan_id: Number(r.plan_id || 0),
@@ -475,6 +483,10 @@ export function normalizePlanItemRow(r: Record<string, unknown>): DailyPlanItemR
     photo_urls: Array.isArray(r.photo_urls) ? (r.photo_urls as unknown[]).map(String) : [],
     note: String(r.note || ''),
     sort_order: Number(r.sort_order || 0),
+    delegated_to_employee_id: toId(r.delegated_to_employee_id),
+    delegated_to_name: String(r.delegated_to_name || ''),
+    delegated_from_item_id: toId(r.delegated_from_item_id),
+    delegated_by_name: String(r.delegated_by_name || ''),
   }
 }
 

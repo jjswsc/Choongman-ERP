@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **806**개 · 접두어 그룹 **101**개
+- `sql/` 최상위: **809**개 · 접두어 그룹 **101**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -221,8 +221,8 @@
 - [`pos_menus_sell_member.sql`](../sql/pos_menus_sell_member.sql)
 - [`pos_multi_coupon.sql`](../sql/pos_multi_coupon.sql)
 - [`pos_open_1001_20260923_01_check.sql`](../sql/pos_open_1001_20260923_01_check.sql) — verify
-- [`pos_option_groups_group_code.sql`](../sql/pos_option_groups_group_code.sql)
-- [`pos_option_groups_master_and_menu_links.sql`](../sql/pos_option_groups_master_and_menu_links.sql)
+- [`pos_option_groups_group_code.sql`](../sql/pos_option_groups_group_code.sql) — log
+- [`pos_option_groups_master_and_menu_links.sql`](../sql/pos_option_groups_master_and_menu_links.sql) — log
 - [`pos_option_step_store_sold_out_01_create.sql`](../sql/pos_option_step_store_sold_out_01_create.sql) — log
 - [`pos_option_step_store_sold_out_02_verify.sql`](../sql/pos_option_step_store_sold_out_02_verify.sql) — verify
 - [`pos_order_audit_trail.sql`](../sql/pos_order_audit_trail.sql) — diagnose
@@ -708,6 +708,21 @@
 
 </details>
 
+<details><summary><code>diagnose_*</code> (10)</summary>
+
+- [`diagnose_banjoo_receipt_logo_biz_01.sql`](../sql/diagnose_banjoo_receipt_logo_biz_01.sql) — diagnose
+- [`diagnose_banjoo_receipt_logo_biz_02.sql`](../sql/diagnose_banjoo_receipt_logo_biz_02.sql) — diagnose
+- [`diagnose_banjoo_receipt_logo_biz_03_after.sql`](../sql/diagnose_banjoo_receipt_logo_biz_03_after.sql) — diagnose
+- [`diagnose_fk031_futurepark_01_by_location.sql`](../sql/diagnose_fk031_futurepark_01_by_location.sql) — diagnose
+- [`diagnose_fk031_futurepark_02_asof_compare.sql`](../sql/diagnose_fk031_futurepark_02_asof_compare.sql) — diagnose
+- [`diagnose_fk031_futurepark_03_recent_logs.sql`](../sql/diagnose_fk031_futurepark_03_recent_logs.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
+
+</details>
+
 <details><summary><code>receivable_*</code> (10)</summary>
 
 - [`receivable_b2b_bank_link_backfill_2026.sql`](../sql/receivable_b2b_bank_link_backfill_2026.sql) — backfill
@@ -816,18 +831,6 @@
 - [`expense_document_no_pv_pp.sql`](../sql/expense_document_no_pv_pp.sql)
 - [`expense_document_type.sql`](../sql/expense_document_type.sql)
 - [`expense_payee_bank_transfer_fields.sql`](../sql/expense_payee_bank_transfer_fields.sql)
-
-</details>
-
-<details><summary><code>diagnose_*</code> (7)</summary>
-
-- [`diagnose_banjoo_receipt_logo_biz_01.sql`](../sql/diagnose_banjoo_receipt_logo_biz_01.sql) — diagnose
-- [`diagnose_banjoo_receipt_logo_biz_02.sql`](../sql/diagnose_banjoo_receipt_logo_biz_02.sql) — diagnose
-- [`diagnose_banjoo_receipt_logo_biz_03_after.sql`](../sql/diagnose_banjoo_receipt_logo_biz_03_after.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
 
 </details>
 
