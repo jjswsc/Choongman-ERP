@@ -576,17 +576,25 @@ export function ExpenseManagementTab() {
     [allFilteredPlans]
   )
 
-  /** 조회 기간(API) + 화면 매장·구분 필터 기준 합계 — 잔액 KPI는 지급대기(approved·잔액>0)와 동일 */
+  /** 조회 기간(API) + 화면 매장·구분 필터 기준 합계 — 지급 잔액 KPI는 지급대기(approved·잔액>0)와 동일 */
   const filteredPlanTotals = React.useMemo(() => {
     const payableRemaining = (rows: ExpenseAccrualPlanItem[]) =>
       rows.reduce((s, r) => {
         if (r.status !== "approved" || (r.remainingAmount || 0) <= 0) return s
         return s + (r.remainingAmount || 0)
       }, 0)
+    /** 승인대기+지급대기 미지급 합계 (지급예정 카드용) */
+    const openRemaining = (rows: ExpenseAccrualPlanItem[]) =>
+      rows.reduce((s, r) => {
+        if (r.status !== "planned" && r.status !== "approved") return s
+        return s + (r.remainingAmount || 0)
+      }, 0)
     return {
       expensePlanned: filteredExpensePlans.reduce((s, r) => s + (r.plannedAmount || 0), 0),
       expenseRemaining: payableRemaining(filteredExpensePlans),
       logisticsRemaining: payableRemaining(filteredPurchasePlans),
+      expenseOpen: openRemaining(filteredExpensePlans),
+      logisticsOpen: openRemaining(filteredPurchasePlans),
     }
   }, [filteredExpensePlans, filteredPurchasePlans])
 
@@ -614,14 +622,17 @@ export function ExpenseManagementTab() {
     )
   }, [allFilteredPlans, canApproveByPolicy])
 
-  /** KPI 카드용 — 유형 필터와 무관하게 기간·매장·용도만 반영 */
-  const kpiApprovePendingCount = React.useMemo(
-    () =>
-      [...filteredExpensePlans, ...filteredPurchasePlans].filter(
-        (r) => r.status === "planned" && canApproveByPolicy(r)
-      ).length,
-    [filteredExpensePlans, filteredPurchasePlans, canApproveByPolicy]
-  )
+  /** KPI 카드용 — 유형 필터와 무관하게 기간·매장·용도만 반영 (승인 가능 건 금액·건수) */
+  const kpiApprovePending = React.useMemo(() => {
+    const rows = [...filteredExpensePlans, ...filteredPurchasePlans].filter(
+      (r) => r.status === "planned" && canApproveByPolicy(r)
+    )
+    return {
+      count: rows.length,
+      amount: rows.reduce((s, r) => s + (r.remainingAmount || r.plannedAmount || 0), 0),
+    }
+  }, [filteredExpensePlans, filteredPurchasePlans, canApproveByPolicy])
+  const kpiApprovePendingCount = kpiApprovePending.count
 
   const applyPlanKpi = React.useCallback(
     (kind: "__all__" | "general" | "logistics", segment: "approve" | "pay" | "all") => {
@@ -1149,7 +1160,11 @@ export function ExpenseManagementTab() {
                   size="sm"
                   variant={kpiApprovePendingCount > 0 ? "warning" : "default"}
                   label={t("acct_kpi_expense_approve_pending")}
-                  value={String(kpiApprovePendingCount)}
+                  value={`฿${kpiApprovePending.amount.toLocaleString()}`}
+                  subLabel={tt("pettySummaryRows", "{n}건").replace(
+                    "{n}",
+                    String(kpiApprovePendingCount)
+                  )}
                 />
               </button>
               <button
@@ -1165,6 +1180,7 @@ export function ExpenseManagementTab() {
                   variant="primary"
                   label={t("acct_kpi_expense_remaining")}
                   value={`฿${filteredPlanTotals.expenseRemaining.toLocaleString()}`}
+                  subLabel={tt("expensePlanSegPay", "To Pay")}
                 />
               </button>
               <button
@@ -1179,22 +1195,24 @@ export function ExpenseManagementTab() {
                   size="sm"
                   label={t("acct_kpi_logistics_remaining")}
                   value={`฿${filteredPlanTotals.logisticsRemaining.toLocaleString()}`}
+                  subLabel={tt("expensePlanSegPay", "To Pay")}
                 />
               </button>
               <button
                 type="button"
                 className={cn(
                   "min-w-0 rounded-xl text-left ring-offset-background transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  planSegment === "pay" && planKindFilter === "__all__" && "ring-2 ring-primary"
+                  planSegment === "all" && planKindFilter === "__all__" && "ring-2 ring-primary"
                 )}
-                onClick={() => applyPlanKpi("__all__", "pay")}
+                onClick={() => applyPlanKpi("__all__", "all")}
               >
                 <MetricCard
                   size="sm"
                   label={tt("expensePlanTab", "Payment Plan")}
                   value={`฿${(
-                    filteredPlanTotals.expenseRemaining + filteredPlanTotals.logisticsRemaining
+                    filteredPlanTotals.expenseOpen + filteredPlanTotals.logisticsOpen
                   ).toLocaleString()}`}
+                  subLabel={tt("expensePlanSegAll", "All")}
                 />
               </button>
             </div>
