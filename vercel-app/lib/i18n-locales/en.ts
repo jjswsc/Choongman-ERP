@@ -1839,7 +1839,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_payroll:
     'Calculate and save payroll, view statements, salary change history, holidays, rules, and help in one place. HQ, accounting, and supervisors only—store managers and franchisees cannot open this menu.',
   helpHow_admin_payroll:
-    '① Payroll calc: pick the month (work period and pay date show below) → Calculate → review → Save to DB. Change the cycle in Payroll rules (default: 1st–last day, 5th of next month). P&L salary follows this month.\n② Records: view saved payroll (name and nickname), notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).\n⑤ Access: HQ (Director/Officer etc.), accounting, and supervisors only. Store Manager accounts can still do till withdrawals with Manager PIN, but payroll and employee salary fields stay hidden.',
+    '① Payroll calc: pick the month (work period and pay date show below) → Calculate → review → Save to DB. Change the cycle in Payroll rules (default: 1st–last day, 5th of next month). P&L salary follows this month.\n② Records: view saved payroll (name and nickname), notify staff, export Excel. First publish needs [Announce] once; already announced rows keep the slip after edit and re-confirm (draft / Unpublish hides).\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).\n⑤ Access: HQ (Director/Officer etc.), accounting, and supervisors only. Store Manager accounts can still do till withdrawals with Manager PIN, but payroll and employee salary fields stay hidden.',
   adminHrCalendar: 'HR calendar',
   hrCalHint:
     'Shows birthdays, hire milestones (Year 1, 2, 3…), hire dates in the join year, and resignations by month. Labels use nickname; hover a cell for the full text.',
@@ -2468,7 +2468,8 @@ Only matters the employee must handle personally on a working day:
   pay_send_notice: '📢 Payroll Ready Notice',
   pay_send_selected: '📧 Send Selected by Email',
   pay_sending_count: 'Sending… (N)',
-  pay_delivery_hint: 'Employees can only see their slip after [Announce] is sent.',
+  pay_delivery_hint:
+    'Staff see the slip only after the first [Announce]. Already announced slips stay visible after edit and re-confirm (draft save or Unpublish hides them).',
   pay_notice_select_hint: 'Check rows to send notice, then click the button.',
   pay_allowance_sum: 'Allowance',
   pay_ot_sum: 'OT Total',

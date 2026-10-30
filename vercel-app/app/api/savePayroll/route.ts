@@ -418,8 +418,8 @@ export async function POST(request: NextRequest) {
       period_start: cyclePeriod.start || null,
       period_end: cyclePeriod.end || null,
       pay_date: cyclePeriod.payYmd || null,
-      // 저장·임시저장 시 직원 앱 공개 해제 → แจ้งประกาศ 다시 눌러야 보임
-      published_at: null,
+      // 임시저장만 공개 해제. 확정 재저장은 published_at 미포함 → 이미 공지된 슬립 유지
+      ...(isDraft ? { published_at: null } : {}),
     })).map((r) => stampSaasTenantId(r, tenantScope, 'payroll_records'))
 
     for (let j = 0; j < rows.length; j += CHUNK) {
