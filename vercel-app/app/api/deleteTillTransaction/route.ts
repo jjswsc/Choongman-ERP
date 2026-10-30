@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { isPosTillCashStoreScoped } from '@/lib/permissions'
+import { forbidUnlessPosTillCash } from '@/lib/pos-till-cash-gate'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
 
@@ -17,13 +18,15 @@ export async function POST(request: NextRequest) {
   headers.set('Content-Type', 'application/json')
 
   try {
-    const authResult = await requireAuth(request, 'manager')
+    const authResult = await requireAuth(request, 'any')
     if (authResult.errorResponse) {
       authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
       authResult.errorResponse.headers.set('Content-Type', 'application/json')
       return authResult.errorResponse
     }
     const auth = authResult.auth
+    const tillGate = forbidUnlessPosTillCash(auth.role, headers)
+    if (tillGate) return tillGate
     const body = await request.json()
     const rawId = body.id ?? body.transactionId
     const id = Math.floor(Number(rawId))
@@ -32,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userStore = String(auth.store || '').trim()
-    const userRole = String(auth.role || '').toLowerCase()
+    const userRole = String(auth.role || '')
     const allowedStores =
       (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
         .map((s) => String(s || '').trim())
@@ -61,11 +64,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '매장 정보가 없습니다.' }, { status: 400, headers })
     }
 
-    const isScopedRole =
-      !isOfficeRole(userRole) &&
-      !isAccountingRole(userRole) &&
-      (userRole.includes('manager') || userRole.includes('franchisee'))
-    if (isScopedRole) {
+    if (isPosTillCashStoreScoped(userRole)) {
       const allowed = allowedStores.some((s) => storesMatchForGradeLookup(s, storeCode))
       if (!allowed) {
         return NextResponse.json({ success: false, message: '해당 매장만 삭제할 수 있습니다.' }, { status: 403, headers })

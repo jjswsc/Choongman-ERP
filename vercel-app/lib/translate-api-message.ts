@@ -345,6 +345,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "전체 문서 조회 권한이 없습니다.": "companyHybridErrListAllForbidden",
   "본사 권한이 필요합니다.": "msg_office_permission_required",
   "매니저 이상 권한이 필요합니다.": "msg_manager_or_higher_required",
+  "시재 입출금 권한이 없습니다.": "msg_pos_till_cash_forbidden",
   "발주 일시중지 설정은 본사·물류 권한이 필요합니다.": "msg_order_pause_permission_required",
 
   "카드대금 연동 대기열에 등록되었습니다.": "expenseRegisterCardBillQueued",

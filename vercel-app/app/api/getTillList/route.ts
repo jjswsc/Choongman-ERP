@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { extractPgrstMissingColumn } from '@/lib/supabase-pgrst204-retry'
 import { requireAuth } from '@/lib/verify-auth'
-import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { isPosTillCashStoreScoped } from '@/lib/permissions'
+import { forbidUnlessPosTillCash } from '@/lib/pos-till-cash-gate'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 function toDateStr(val: string | Date | null | undefined): string {
@@ -40,18 +41,20 @@ type TillRowDb = {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
-  const authResult = await requireAuth(request, 'manager')
+  const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) {
     authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const tillGate = forbidUnlessPosTillCash(auth.role, headers)
+  if (tillGate) return tillGate
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const userStore = String(auth.store || '').trim()
-  const userRole = String(auth.role || '').toLowerCase()
+  const userRole = String(auth.role || '')
   const allowedStores =
     (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
       .map((s) => String(s || '').trim())
@@ -61,8 +64,7 @@ export async function GET(request: NextRequest) {
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
-  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
-  if (!isOffice) {
+  if (isPosTillCashStoreScoped(userRole)) {
     if (!storeFilter || storeFilter === 'All' || storeFilter === '전체') {
       const fallbackStore = String(allowedStores[0] || '').trim()
       if (!fallbackStore) return NextResponse.json([], { status: 403, headers })

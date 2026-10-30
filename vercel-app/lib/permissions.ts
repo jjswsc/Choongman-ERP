@@ -439,6 +439,24 @@ export function canAccessPosSettlement(role: string): boolean {
 }
 
 /**
+ * POS 시재(금전등록기) 입·출금·매출액 출금.
+ * Manager 계정 공유를 줄이기 위해 Staff/주문·결산 직원도 허용 (본인 매장 한정은 API에서 강제).
+ */
+export function canManagePosTillCash(role: string): boolean {
+  return (
+    canAccessPosSettlement(role) ||
+    canAccessPosOrder(role) ||
+    isAccountingRole(role) ||
+    isSupervisorRole(role)
+  )
+}
+
+/** 시재 API에서 자기 매장만 강제할지 — 본사·회계·순회 SV는 전 매장 */
+export function isPosTillCashStoreScoped(role: string): boolean {
+  return !isOfficeRole(role) && !isAccountingRole(role) && !isSupervisorRole(role)
+}
+
+/**
  * 결산 화면에서 주문·LinkPOS로 채워진 QR/배달앱/기타(AUTO) 상세 금액을 수동으로 바꿀 수 있는지.
  * 매장 직원이 숫자만 맞추는 식의 조작을 막기 위해 기본은 본사(Office)·회계만 허용.
  * 카드 브랜드별 입력(EDC 대사)은 별도 정책으로 계속 매장에서 편집 가능.

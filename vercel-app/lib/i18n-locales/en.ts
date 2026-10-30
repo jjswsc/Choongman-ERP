@@ -754,6 +754,7 @@ Only matters the employee must handle personally on a working day:
   invalidRequest: 'Invalid request.',
   msg_no_admin_permission: 'You do not have admin permission.',
   msg_manager_or_higher_required: 'Manager level or higher permission is required.',
+  msg_pos_till_cash_forbidden: 'You do not have permission for till cash in/out.',
   msg_resigned_account_blocked: 'This account has resigned and cannot be used.',
   selectApproveOrReject: 'Please select Approve or Reject.',
   leaveRequestNotFound: 'Leave request not found.',
@@ -4720,9 +4721,9 @@ Only matters the employee must handle personally on a working day:
   helpHow_admin_petty_cash:
     '① Choose a store and period, then search. A single store shows current balance at the top.\n② List and Monthly both include a running-balance column. Use Monthly to set account subjects and to edit/delete. The account chosen here is the debit on the tax book.\n③ HQ, accounting, and office-based staff can pick any store; store accounts see their store (plus extra stores if allowed).',
   helpSum_admin_pos_cash:
-    'Drawer/safe cash in/out and sales-cash withdrawals. Daily cash sales (and withdrawal reference) use the open/sale business day, including overnight open/pay.',
+    'Drawer/safe cash in/out and sales-cash withdrawals. Regular staff can register for their own store—no shared Manager login needed. Daily cash sales use the open/sale business day, including overnight open/pay.',
   helpHow_admin_pos_cash:
-    '① Set period and store, then query.\n② Daily cash sales uses open/sale business day. Click the card for the order list; overnight (opened yesterday, paid today) shows a banner. Withdraw against that amount (it may differ from till net).\n③ Register deposits/withdrawals and sales withdrawals, then reconcile to physical cash and bank deposits.',
+    '① Set period and store, then query.\n② Daily cash sales uses open/sale business day. Click the card for the order list; overnight (opened yesterday, paid today) shows a banner. Withdraw against that amount (it may differ from till net).\n③ Register deposits/withdrawals and sales withdrawals, then reconcile to physical cash and bank deposits.\n④ Access: Staff and settlement roles can do till in/out for their store. Use your own login instead of a shared Manager account.',
   helpSum_admin_pos_settlement:
     'Daily POS settlement. Order totals use the open/sale business day to align with sales and tax invoice dates. Bank: Sales collection; delivery/card fees: Expense Management monthly batch.',
   helpHow_admin_pos_settlement:

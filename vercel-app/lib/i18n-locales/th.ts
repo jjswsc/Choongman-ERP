@@ -636,6 +636,7 @@ export const I18N_BASE_TH = {
   invalidRequest: 'คำขอไม่ถูกต้อง',
   msg_no_admin_permission: 'คุณไม่มีสิทธิ์ผู้ดูแลระบบ',
   msg_manager_or_higher_required: 'ต้องมีสิทธิ์ระดับผู้จัดการขึ้นไป',
+  msg_pos_till_cash_forbidden: 'ไม่มีสิทธิ์บันทึกเงินเข้า-ออกลิ้นชักครับ',
   msg_resigned_account_blocked: 'บัญชีนี้พ้นจากหน้าที่แล้ว ไม่สามารถใช้งานได้',
   selectApproveOrReject: 'กรุณาเลือกอนุมัติหรือปฏิเสธ',
   leaveRequestNotFound: 'ไม่พบคำขอลางาน',
