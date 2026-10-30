@@ -477,7 +477,10 @@ export async function updatePosOrder(params: {
   paymentOtherBreakdown?: PosPaymentOtherBreakdown | null
   paymentDeliveryApp?: number
   deliveryPaymentChannel?: string | null
-  /** true면 미결제 QR 대기 취소 시 결제금액 0 덮어쓰기 (기존 결제 보존 가드 우회) */
+  /**
+   * true면 미결제 QR 대기 취소 시 결제금액 0 덮어쓰기 (기존 결제 보존 가드 우회).
+   * items 생략 가능 — 서버가 clearPaymentTender 전용 경로로 결제 필드만 갱신한다.
+   */
   clearPaymentTender?: boolean
   memberId?: number
   memberNo?: string

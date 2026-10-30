@@ -2313,6 +2313,10 @@ export const I18N_POS_EN: Record<string, string> = {
     posFullyPaidButOpenHint:
       'Payment is recorded but this table is still open. Close the bill below — do not create another QR.',
     posClosePaidBillButton: 'Close bill (paid)',
+    posClearPaymentTenderButton: 'Change payment method (QR unpaid)',
+    posClearPaymentTenderConfirm:
+      'Confirm only if the customer did not pay the QR and you want another payment method.\nDo not clear if the QR payment already succeeded.',
+    posClearPaymentTenderFail: 'Failed to clear payment amounts. Refresh and try again.',
     posTableLeave: 'Leave (clear table)',
     posTableMoveTitle: 'Move table',
     posTableMoveHint: 'Only empty tables. If the target already has an order, use merge instead.',

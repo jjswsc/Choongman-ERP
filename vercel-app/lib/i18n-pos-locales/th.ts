@@ -900,6 +900,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posFullyPaidButOpenHint:
       'ชำระเงินครบแล้ว แต่โต๊ะยังเปิดอยู่ครับ กดปุ่มด้านล่างเพื่อปิดบิล — ห้ามสร้าง QR ใหม่ครับ',
     posClosePaidBillButton: 'ปิดบิล (ชำระแล้ว)',
+    posClearPaymentTenderButton: 'เปลี่ยนช่องทางชำระ (ยังไม่จ่าย QR)',
+    posClearPaymentTenderConfirm:
+      'กดยืนยันเฉพาะเมื่อลูกค้ายังไม่ได้จ่ายผ่าน QR และต้องการเปลี่ยนเป็นช่องทางอื่นครับ\nถ้าสแกนจ่ายสำเร็จแล้ว ห้ามกดยกเลิกครับ',
+    posClearPaymentTenderFail: 'ล้างยอดชำระไม่สำเร็จ กรุณารีเฟรชแล้วลองใหม่ครับ',
     posTableLeave: 'ออกจากโต๊ะ (เคลียร์โต๊ะ)',
     posReceipt: 'ใบเสร็จ',
     posPrintBlocked: 'ป๊อปอัปถูกบล็อก โปรดอนุญาตป๊อปอัปเพื่อพิมพ์',

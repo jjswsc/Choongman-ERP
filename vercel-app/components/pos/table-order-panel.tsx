@@ -422,6 +422,7 @@ export function TableOrderPanel({
 
   const [cancelling, setCancelling] = useState(false)
   const [closingPaidBill, setClosingPaidBill] = useState(false)
+  const [clearingPaymentTender, setClearingPaymentTender] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
   const [moveTargetName, setMoveTargetName] = useState('')
@@ -622,7 +623,7 @@ export function TableOrderPanel({
 
   /** QR 등 전액 입금됐는데 status가 열린 채 남은 주문 — 원탭 마감 (이중 QR 방지) */
   const handleCloseFullyPaidBill = async () => {
-    if (!order || closingPaidBill) return
+    if (!order || closingPaidBill || clearingPaymentTender) return
     const id = Number(order.id)
     if (!(id > 0)) return
     const orderTypeKey =
@@ -661,6 +662,64 @@ export function TableOrderPanel({
       await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
     } finally {
       setClosingPaidBill(false)
+    }
+  }
+
+  /**
+   * QR 생성 후 취소했는데 payment_qr 가 남아 fullyPaidButOpen 으로 고착된 경우 —
+   * 실제 은행 승인이 없을 때만 결제액을 지우고 카드 등 다른 수단으로 다시 결제.
+   */
+  const handleClearPaymentTenderForMethodChange = async () => {
+    if (!order || clearingPaymentTender || closingPaidBill) return
+    const id = Number(order.id)
+    if (!(id > 0)) return
+    const confirmed = await appConfirm(
+      t('posClearPaymentTenderConfirm') ||
+        '고객이 QR을 결제하지 않았고, 다른 결제수단으로 바꾸려면 확인하세요.\n이미 스캔 결제가 완료됐다면 취소하지 마세요.'
+    )
+    if (!confirmed) return
+    setClearingPaymentTender(true)
+    try {
+      if (isDemo && onDemoOrderReplace) {
+        onDemoOrderReplace({
+          ...order,
+          paymentCash: 0,
+          paymentCard: 0,
+          paymentQr: 0,
+          paymentOther: 0,
+          paymentDeliveryApp: 0,
+          paidAt: undefined,
+        })
+        onServed?.()
+        return
+      }
+      const res = await updatePosOrder({
+        id,
+        terminalStoreCode: storeCode || undefined,
+        paymentCash: 0,
+        paymentCashTendered: 0,
+        paymentCard: 0,
+        paymentQr: 0,
+        paymentOther: 0,
+        paymentDeliveryApp: 0,
+        clearPaymentTender: true,
+      })
+      if (!res.success) {
+        await appAlert(
+          localizeApiMessage(
+            res.message,
+            t,
+            t('posClearPaymentTenderFail') || '결제금액 초기화에 실패했습니다. 새로고침 후 다시 시도해 주세요.',
+            lang
+          )
+        )
+        return
+      }
+      onServed?.()
+    } catch (e) {
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setClearingPaymentTender(false)
     }
   }
 
@@ -1149,7 +1208,7 @@ export function TableOrderPanel({
               {renderTotalRow()}
               <Button
                 className="h-11 w-full text-base font-semibold"
-                disabled={closingPaidBill || cancelling}
+                disabled={closingPaidBill || clearingPaymentTender || cancelling}
                 onClick={() => {
                   void handleCloseFullyPaidBill()
                 }}
@@ -1158,13 +1217,26 @@ export function TableOrderPanel({
                   ? t('posPaymentProcessing') || '처리 중…'
                   : t('posClosePaidBillButton') || '결제 완료 · 테이블 닫기'}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full text-sm"
+                disabled={closingPaidBill || clearingPaymentTender || cancelling}
+                onClick={() => {
+                  void handleClearPaymentTenderForMethodChange()
+                }}
+              >
+                {clearingPaymentTender
+                  ? t('posPaymentProcessing') || '처리 중…'
+                  : t('posClearPaymentTenderButton') || '결제수단 변경 (QR 미결제)'}
+              </Button>
               {canCancel && !listExpanded ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="h-8 w-full text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
-                  disabled={cancelling || closingPaidBill || removingItemId !== null}
+                  disabled={cancelling || closingPaidBill || clearingPaymentTender || removingItemId !== null}
                   onClick={handleCancelOrder}
                 >
                   {t('posOrderCancelFull') || tDefault('posOrderCancelFull')}

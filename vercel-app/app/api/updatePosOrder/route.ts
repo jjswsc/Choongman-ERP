@@ -67,6 +67,7 @@ import {
 import { preserveGrabDeliveryMemoAnchor } from '@/lib/grab-order-memo'
 import { resolveManualDiscountNetForOrderSave } from '@/lib/pos-order-save-discount'
 import { settlePosOrderPaymentFast } from '@/lib/settle-pos-order-payment-fast'
+import { shouldUseClearPaymentTenderOnlyPath } from '@/lib/pos-order-clear-payment-tender-path'
 import { createServerTiming } from '@/lib/server-timing'
 import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 
@@ -128,6 +129,21 @@ export async function POST(req: NextRequest) {
 
     if (body.guestCountOnly === true || String(body.guestCountOnly ?? '') === '1') {
       return await updatePosOrderGuestCountOnly({ auth, body, id, fromOfflineQueueSync, headers })
+    }
+
+    /**
+     * QR 대기 취소 등: 결제액만 0으로 되돌림.
+     * 클라이언트가 items 없이 clearPaymentTender 를 보내므로, 아래 items 필수 검사보다 먼저 처리한다.
+     * (미처리 시 payment_qr 가 남아 fullyPaidButOpen 으로 고착됨)
+     */
+    if (shouldUseClearPaymentTenderOnlyPath(body) && id && !Number.isNaN(id)) {
+      return await updatePosOrderClearPaymentTenderOnly({
+        auth,
+        body,
+        id,
+        fromOfflineQueueSync,
+        headers,
+      })
     }
 
     const itemsRaw = Array.isArray(body?.items) ? body.items : []
@@ -1055,6 +1071,179 @@ export async function POST(req: NextRequest) {
       { headers }
     )
   }
+}
+
+/**
+ * 미결제(열린) 주문의 payment_* 만 초기화 — items 불필요.
+ * KBank QR 생성 시 미리 올려 둔 payment_qr 를 취소 후 되돌릴 때 사용.
+ * 이미 paid/completed 인 주문은 거부(실제 승인 건을 지우지 않음).
+ */
+async function updatePosOrderClearPaymentTenderOnly(params: {
+  auth: NonNullable<Awaited<ReturnType<typeof requireAuth>>['auth']>
+  body: Record<string, unknown>
+  id: number
+  fromOfflineQueueSync: boolean
+  headers: Headers
+}): Promise<NextResponse> {
+  const { auth, body, id, fromOfflineQueueSync, headers } = params
+  if (!id || Number.isNaN(id)) {
+    return NextResponse.json({ success: false, message: 'id required' }, { headers })
+  }
+
+  const rows = (await supabaseSelectFilterStrippingUnknownColumns(
+    'pos_orders',
+    `id=eq.${id}`,
+    {
+      limit: 1,
+      select:
+        'id,order_no,store_code,status,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,payment_crypto,payment_cash_tendered,paid_at',
+    },
+    'updatePosOrder:clearPaymentTender'
+  )) as {
+    id?: number
+    order_no?: string
+    store_code?: string
+    status?: string
+    payment_cash?: number
+    payment_card?: number
+    payment_qr?: number
+    payment_other?: number
+    payment_delivery_app?: number
+    payment_crypto?: number
+    payment_cash_tendered?: number
+    paid_at?: string | null
+  }[] | null
+  const current = rows?.[0]
+  if (!current) {
+    return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+  }
+  if (!(await authCanAccessPosStoreWrite(auth, String(current.store_code ?? '')))) {
+    return NextResponse.json(
+      { success: false, message: '해당 매장에 대한 권한이 없습니다.' },
+      { status: 403, headers }
+    )
+  }
+
+  const status = String(current.status ?? '').trim().toLowerCase()
+  if (!EDITABLE_STATUSES.includes(status)) {
+    if (fromOfflineQueueSync) {
+      return NextResponse.json(
+        { success: true, noop: true, message: 'skip_stale_order_update_replay' },
+        { headers }
+      )
+    }
+    return NextResponse.json(
+      { success: false, message: '이미 취소·환불된 주문입니다. 목록을 새로고침해 주세요.' },
+      { headers }
+    )
+  }
+  /** 이미 마감된 결제 건은 clear 금지 — 잘못 눌러도 매출·영수증을 지우지 않음 */
+  if (status === 'paid' || status === 'completed') {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          '이미 결제 마감된 주문입니다. 결제수단을 바꾸려면 환불·취소 후 다시 주문해 주세요.',
+      },
+      { headers }
+    )
+  }
+
+  const paymentQrType = String(body?.paymentQrType ?? body?.payment_qr_type ?? '').trim()
+  const normalizedTender = normalizePosPaymentTender({
+    paymentCard: Number(body?.paymentCard ?? 0),
+    paymentQr: Number(body?.paymentQr ?? 0),
+    paymentQrType,
+  })
+  const paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
+  const paymentCashTendered = Math.max(
+    0,
+    Number(body?.paymentCashTendered ?? body?.payment_cash_tendered ?? 0)
+  )
+  const paymentCard = normalizedTender.paymentCard
+  const paymentQr = normalizedTender.paymentQr
+  const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
+  const paymentDeliveryApp = Math.max(
+    0,
+    Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0)
+  )
+  const paymentCrypto = Math.max(0, Number(body?.paymentCrypto ?? body?.payment_crypto ?? 0))
+
+  const patch: Record<string, unknown> = {
+    payment_cash: paymentCash,
+    payment_card: paymentCard,
+    payment_qr: paymentQr,
+    payment_other: paymentOther,
+    payment_delivery_app: paymentDeliveryApp,
+    payment_crypto: paymentCrypto,
+    payment_other_breakdown: null,
+    paid_at: null,
+  }
+  if (
+    body?.paymentCashTendered != null ||
+    body?.payment_cash_tendered != null ||
+    Number(current.payment_cash_tendered ?? 0) > 0.005
+  ) {
+    patch.payment_cash_tendered = paymentCashTendered
+  }
+
+  try {
+    await supabaseUpdateByFilterWithPgrst204Fallback(
+      'pos_orders',
+      `id=eq.${id}`,
+      patch,
+      'updatePosOrder:clearPaymentTender'
+    )
+  } catch (e) {
+    console.error('updatePosOrder clearPaymentTender:', e)
+    return NextResponse.json(
+      {
+        success: false,
+        message: e instanceof Error ? e.message.slice(0, 500) : String(e).slice(0, 500),
+        retryAfterQueue: true,
+      },
+      { headers }
+    )
+  }
+
+  await writePosOrderAuditTrail({
+    orderId: id,
+    orderNo: current.order_no || null,
+    storeCode: current.store_code || null,
+    actionType: 'update_order',
+    source: fromOfflineQueueSync ? 'offline_queue' : 'api',
+    actor: {
+      name: String(auth?.name || body?.updatedBy || '').trim() || null,
+      role: String(auth?.role || '').trim() || null,
+      store: String(auth?.store || '').trim() || null,
+      employeeCode: String(auth?.employeeCode || '').trim() || null,
+      employeeId:
+        auth?.employeeId != null && Number.isFinite(Number(auth.employeeId))
+          ? Math.floor(Number(auth.employeeId))
+          : null,
+    },
+    before: {
+      payment_cash: current.payment_cash ?? 0,
+      payment_card: current.payment_card ?? 0,
+      payment_qr: current.payment_qr ?? 0,
+      payment_other: current.payment_other ?? 0,
+      payment_delivery_app: current.payment_delivery_app ?? 0,
+      payment_crypto: current.payment_crypto ?? 0,
+      paid_at: current.paid_at ?? null,
+    },
+    after: {
+      payment_cash: paymentCash,
+      payment_card: paymentCard,
+      payment_qr: paymentQr,
+      payment_other: paymentOther,
+      payment_delivery_app: paymentDeliveryApp,
+      payment_crypto: paymentCrypto,
+      paid_at: null,
+    },
+    reason: 'clear_payment_tender',
+  }).catch((e) => console.error('updatePosOrder clearPaymentTender audit:', e))
+
+  return NextResponse.json({ success: true }, { headers })
 }
 
 /** 손님 수만 변경 — 품목이 0개인 홀 주문도 허용, 금액·결제·주방 재처리 없음 */

@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **809**개 · 접두어 그룹 **101**개
+- `sql/` 최상위: **810**개 · 접두어 그룹 **101**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -909,6 +909,16 @@
 
 </details>
 
+<details><summary><code>daily_*</code> (5)</summary>
+
+- [`daily_plans_01_schema.sql`](../sql/daily_plans_01_schema.sql)
+- [`daily_plans_02_time_rpc.sql`](../sql/daily_plans_02_time_rpc.sql) — rpc
+- [`daily_plans_03_seed_sv_template.sql`](../sql/daily_plans_03_seed_sv_template.sql)
+- [`daily_plans_04_schedule_columns.sql`](../sql/daily_plans_04_schedule_columns.sql)
+- [`daily_plans_05_item_delegate.sql`](../sql/daily_plans_05_item_delegate.sql) — log
+
+</details>
+
 <details><summary><code>hr_*</code> (5)</summary>
 
 - [`hr_attendance_payroll_tenant_id.sql`](../sql/hr_attendance_payroll_tenant_id.sql)
@@ -926,15 +936,6 @@
 - [`stock_logs_reference_no.sql`](../sql/stock_logs_reference_no.sql)
 - [`stock_logs_soft_delete_outbound.sql`](../sql/stock_logs_soft_delete_outbound.sql) — apply
 - [`stock_logs_supabase_ram_indexes.sql`](../sql/stock_logs_supabase_ram_indexes.sql)
-
-</details>
-
-<details><summary><code>daily_*</code> (4)</summary>
-
-- [`daily_plans_01_schema.sql`](../sql/daily_plans_01_schema.sql)
-- [`daily_plans_02_time_rpc.sql`](../sql/daily_plans_02_time_rpc.sql) — rpc
-- [`daily_plans_03_seed_sv_template.sql`](../sql/daily_plans_03_seed_sv_template.sql)
-- [`daily_plans_04_schedule_columns.sql`](../sql/daily_plans_04_schedule_columns.sql)
 
 </details>
 

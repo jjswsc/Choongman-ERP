@@ -2303,6 +2303,10 @@ export const I18N_POS_KO: Record<string, string> = {
     posFullyPaidButOpenHint:
       '결제는 완료됐지만 테이블이 아직 열려 있습니다. 아래 버튼으로 마감하세요. QR을 다시 만들지 마세요.',
     posClosePaidBillButton: '결제 완료 · 테이블 닫기',
+    posClearPaymentTenderButton: '결제수단 변경 (QR 미결제)',
+    posClearPaymentTenderConfirm:
+      '고객이 QR을 결제하지 않았고 다른 결제수단으로 바꾸려면 확인하세요.\n이미 스캔 결제가 완료됐다면 취소하지 마세요.',
+    posClearPaymentTenderFail: '결제금액 초기화에 실패했습니다. 새로고침 후 다시 시도해 주세요.',
     posTableLeave: '퇴장 (테이블 비우기)',
     posTableMoveTitle: '테이블 이동',
     posTableMoveHint: '빈 테이블로만 이동할 수 있습니다. 이미 주문이 있는 테이블은 합석을 사용하세요.',
