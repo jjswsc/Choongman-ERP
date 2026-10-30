@@ -8,6 +8,7 @@ import {
   ATTENDANCE_LOG_PAYROLL_COLS_NO_CODE,
 } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import {
   breakdownPayrollPnd1Withholding,
   clockOutCountsForPayroll,
@@ -747,6 +748,8 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
+  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  if (payrollGate) return payrollGate
   const tenantScope = await resolveSaasTenantScope({ auth })
   if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
     return NextResponse.json({ success: true, list: [] }, { headers })

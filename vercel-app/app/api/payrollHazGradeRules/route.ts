@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpsert } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
 import { DEFAULT_PAYROLL_HAZ_EVAL_RULES, EVAL_LETTER_GRADES, parseEvalLetterGrade } from '@/lib/payroll-haz-eval-grade'
@@ -19,6 +20,8 @@ export async function GET(req: NextRequest) {
 
   const authResult = await requireAuth(req, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
+  const payrollGate = forbidUnlessAdminPayroll(authResult.auth.role, headers)
+  if (payrollGate) return payrollGate
 
   try {
     const rules = await loadPayrollHazEvalGradeRules()
@@ -52,6 +55,8 @@ export async function POST(req: NextRequest) {
 
   const authResult = await requireAuth(req, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
+  const payrollGate = forbidUnlessAdminPayroll(authResult.auth.role, headers)
+  if (payrollGate) return payrollGate
   if (!canEditPayrollRules(authResult.auth.role || '')) {
     return NextResponse.json({ success: false, message: '본사 또는 회계 권한이 필요합니다.' }, { status: 403, headers })
   }

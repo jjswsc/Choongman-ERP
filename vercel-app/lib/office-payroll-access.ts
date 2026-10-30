@@ -91,22 +91,21 @@ export function redactOfficeEmployeePayrollIfNeeded<T extends OfficeEmployeePayr
   return { ...row, ...redactedOfficeEmployeePayrollFields() }
 }
 
-/** 저장 요청 payload에서 오피스 급여 필드를 기존 DB 값으로 되돌림 */
-export function preserveOfficeEmployeePayrollOnSave(
+type EmployeePayrollExisting = {
+  sal_type?: unknown
+  sal_amt?: unknown
+  position_allowance?: unknown
+  haz_allow?: unknown
+  attendance_allowance?: unknown
+  bank_name?: unknown
+  account_number?: unknown
+} | null
+
+/** 급여·계좌 필드를 기존 DB 값(또는 빈 값)으로 고정 — 비권한자 저장 시 변조 방지 */
+export function restoreEmployeePayrollFieldsOnSave(
   payload: Record<string, unknown>,
-  auth: OfficePayrollAuth,
-  employeeStore: string,
-  existing?: {
-    sal_type?: unknown
-    sal_amt?: unknown
-    position_allowance?: unknown
-    haz_allow?: unknown
-    attendance_allowance?: unknown
-    bank_name?: unknown
-    account_number?: unknown
-  } | null
+  existing?: EmployeePayrollExisting
 ): void {
-  if (canViewOfficeEmployeePayroll(auth, employeeStore)) return
   const redacted = redactedOfficeEmployeePayrollFields()
   payload.sal_type = existing?.sal_type != null ? String(existing.sal_type).trim() || 'Monthly' : redacted.salType || 'Monthly'
   payload.sal_amt = existing?.sal_amt != null ? Number(existing.sal_amt) || 0 : 0
@@ -121,4 +120,15 @@ export function preserveOfficeEmployeePayrollOnSave(
   }
   payload.bank_name = existing?.bank_name != null ? String(existing.bank_name).trim() : ''
   payload.account_number = existing?.account_number != null ? String(existing.account_number).trim() : ''
+}
+
+/** 저장 요청 payload에서 오피스 급여 필드를 기존 DB 값으로 되돌림 */
+export function preserveOfficeEmployeePayrollOnSave(
+  payload: Record<string, unknown>,
+  auth: OfficePayrollAuth,
+  employeeStore: string,
+  existing?: EmployeePayrollExisting
+): void {
+  if (canViewOfficeEmployeePayroll(auth, employeeStore)) return
+  restoreEmployeePayrollFieldsOnSave(payload, existing)
 }

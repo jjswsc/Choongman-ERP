@@ -1843,9 +1843,9 @@ export const I18N_BASE_KO = {
   helpHow_admin_hr_calendar:
     '① 월·매장·유형 필터로 일정을 좁힙니다.\n② 상단 [생일: 오피스·매니저·점주만] 버튼을 켜면 생일은 오피스 소속·매니저급 이상(권한 또는 직무가 Manager·Supervisor·Officer·Director 등)·가맹점주만 보입니다. 입사·N년·퇴사에는 영향이 없고, 설정은 이 브라우저에 기억됩니다.\n③ 캘린더·목록에서 행을 클릭하면 직원 관리로 이동합니다.\n④ 생일·입사기념 등을 매장 운영 일정과 함께 활용합니다.',
   helpSum_admin_payroll:
-    '급여 계산·DB 저장, 명세서 조회·공지, 급여 변경 이력, 공휴일·규칙, 도움말을 한 화면에서 다룹니다.',
+    '급여 계산·DB 저장, 명세서 조회·공지, 급여 변경 이력, 공휴일·규칙, 도움말을 한 화면에서 다룹니다. 본사·회계·슈퍼바이저만 접근하며 매장 매니저·가맹점주는 볼 수 없습니다.',
   helpHow_admin_payroll:
-    '① [급여 계산]: 월을 고르면 근무기간·지급일이 아래에 보입니다 → 계산 실행 → 확인 후 DB 저장. 기간·지급일은 [급여 규칙]에서 바꿀 수 있습니다(기본 1일~말일, 다음 달 5일). 손익 인건비는 이 월 기준입니다.\n② [명세서]: 저장된 급여 조회(이름·닉네임)·직원 공지·엑셀 내보내기.\n③ [도움말] 탭에서 지각·조퇴·OT·공휴일 반영 규칙을 확인합니다.\n④ 오피스(본사) 급여를 확정 저장하면 지출관리에는 직원별이 아니라 매장·월 합산 1건만 올라갑니다(개인 명세는 급여 화면·오피스 급여 담당만).',
+    '① [급여 계산]: 월을 고르면 근무기간·지급일이 아래에 보입니다 → 계산 실행 → 확인 후 DB 저장. 기간·지급일은 [급여 규칙]에서 바꿀 수 있습니다(기본 1일~말일, 다음 달 5일). 손익 인건비는 이 월 기준입니다.\n② [명세서]: 저장된 급여 조회(이름·닉네임)·직원 공지·엑셀 내보내기.\n③ [도움말] 탭에서 지각·조퇴·OT·공휴일 반영 규칙을 확인합니다.\n④ 오피스(본사) 급여를 확정 저장하면 지출관리에는 직원별이 아니라 매장·월 합산 1건만 올라갑니다(개인 명세는 급여 화면·오피스 급여 담당만).\n⑤ 권한: 본사(Director/Officer 등)·회계·슈퍼바이저만. 매장 Manager 계정으로는 시재 출금 등은 가능해도 급여 메뉴·직원 급여란은 막혀 있습니다.',
   adminHrCalendar: '인사 캘린더',
   hrCalHint:
     '재직 직원의 생일·입사 N년(1년, 2년, 3년…)·당해 입사일, 퇴사일을 월별로 표시합니다. 이름은 닉네임 기준이며, 칸에 마우스를 올리면 전체 문구를 볼 수 있습니다.',
@@ -1901,6 +1901,7 @@ export const I18N_BASE_KO = {
   emp_can_manage_office_payroll_label: '오피스 급여 담당',
   emp_can_manage_office_payroll_hint: '체크한 직원만 본사(오피스) 급여 조회·계산·확정과 본사 지출 승인·삭제가 가능합니다. Director는 항상 접근·지정할 수 있습니다.',
   emp_office_payroll_hidden_hint: '오피스(본사) 직원의 급여·계좌 정보는 급여 담당자 또는 Director만 조회·수정할 수 있습니다.',
+  emp_store_payroll_hidden_hint: '급여·계좌 정보는 본사·회계·슈퍼바이저만 조회·수정할 수 있습니다.',
   emp_section_basic: '기본 정보',
   emp_section_id_card: 'ID·신분증',
   emp_section_accounting: '회계·급여',
@@ -2296,7 +2297,7 @@ export const I18N_BASE_KO = {
   adminPayroll: '급여 관리',
   adminPayrollSub: '급여 계산·명세·공휴일·규칙을 관리합니다.',
   adminPayrollDirectorOnly: '급여 조회는 Director만 가능합니다.',
-  adminPayrollAccessDenied: '급여 관리는 본사·매장 관리자·가맹점주 권한이 필요합니다.',
+  adminPayrollAccessDenied: '급여 관리는 본사·회계·슈퍼바이저만 가능합니다. 매장 매니저·가맹점주는 접근할 수 없습니다.',
   pay_month: '급여 귀속월',
   pay_db_setup: '🛠️ DB 시트 생성 (최초 1회)',
   pay_db_setup_confirm: '급여 데이터를 저장할 [급여_DB]를 준비하시겠습니까?\n(이미 있으면 준비 완료 메시지가 표시됩니다)',
@@ -6138,7 +6139,7 @@ export const I18N_BASE_KO = {
   settings_perm_role_officer: '2. Officer (오피서)',
   settings_perm_role_officer_desc: 'Director급을 제외한 대부분 이용 가능. 단, 급여·직원 관리에서 본사(Office)는 검색 불가.',
   settings_perm_role_manager: '3. Manager (매장 매니저)',
-  settings_perm_role_manager_desc: '충만: 자기 매장만 조회·수정. 품목/거래처/설정/강제출고 메뉴 접근 불가. 직원관리는 권한(role) 수정 불가. 급여 공휴일·미수금 입력은 조회만. 컴플레인은 입력=자기 매장, 조회=전 매장. Omni: Manager가 Officer와 같은 ERP 권한(품목·거래처·설정 포함). SaaS 본사 콘솔은 불가. 아래 표를 참고하세요.',
+  settings_perm_role_manager_desc: '충만: 자기 매장만 조회·수정. 품목/거래처/설정/급여/강제출고 메뉴 접근 불가. 직원관리는 권한(role)·급여·계좌 수정 불가. 미수금 입력은 조회만. 컴플레인은 입력=자기 매장, 조회=전 매장. Omni: Manager가 Officer와 같은 ERP 권한(품목·거래처·설정 포함). SaaS 본사 콘솔은 불가. 아래 표를 참고하세요.',
   settings_perm_role_franchisee: '4. Franchisee (가맹점주)',
   settings_perm_role_franchisee_desc:
     '기본 권한은 매장 매니저와 동일합니다. 시스템 설정 → 가맹점주 탭에서 복수 매장을 켠 뒤, 같은 화면 목록에서 추가 매장을 지정하면 로그인 시 허용 매장이 JWT에 포함되고 ERP 상단에서 매장을 전환하며 조회할 수 있습니다.',
@@ -6156,7 +6157,7 @@ export const I18N_BASE_KO = {
   adminEmployeeEval: '직원 평가',
   settings_perm_mgr_eval_list_only: '평가 목록 조회만 (등록/수정 불가)',
   settings_perm_mgr_employees_note: '자기 매장만 조회/수정 (단, 직원 권한 수정 불가)',
-  settings_perm_mgr_payroll_note: '조회·계산 가능 (단, 공휴일 관리 조회만)',
+  settings_perm_mgr_payroll_note: '접근 불가 (본사·회계·슈퍼바이저만)',
   settings_perm_mgr_receivable_note: '조회만 (수령 입력 불가)',
   settings_perm_mgr_complaints_note: '입력=자기 매장만, 조회=전 매장',
   adminWelcome: '환영합니다',

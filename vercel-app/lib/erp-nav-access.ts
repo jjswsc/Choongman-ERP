@@ -1,4 +1,5 @@
 import {
+  canAccessAdminPayroll,
   canAccessAiCenter,
   canViewMobileStoreSales,
   canAccessPosCostAnalysis,
@@ -26,7 +27,11 @@ import {
 } from "@/lib/erp-nav-registry"
 
 /** 충만 매장 매니저·가맹점주에게 숨길 메뉴. Omni Manager는 Officer로 승격되어 이 필터를 타지 않음 */
-export const ERP_NAV_MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
+export const ERP_NAV_MANAGER_HIDDEN_HREFS = new Set([
+  "/admin/items",
+  "/admin/vendors",
+  "/admin/payroll",
+])
 
 /** POS 메뉴별 href → 권한 체크 함수 */
 export const ERP_NAV_POS_MENU_ACCESS: Record<string, (role: string, store?: string) => boolean> = {
@@ -62,6 +67,9 @@ export function isErpNavHrefAccessible(href: string, ctx: ErpNavAccessContext): 
   }
   if (href === "/admin/settings") {
     return canAccessSettings(role, brandKey)
+  }
+  if (href === "/admin/payroll" || href.startsWith("/admin/payroll/")) {
+    return canAccessAdminPayroll(role, brandKey)
   }
   return true
 }

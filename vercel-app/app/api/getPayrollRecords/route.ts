@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import { isOfficeStore } from '@/lib/permissions'
 import { filterPayrollRowsHidingOffice } from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
@@ -57,6 +58,8 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
+  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  if (payrollGate) return payrollGate
 
   const tenantScope = await resolveSaasTenantScope({ auth })
   if (isSaasTenantQueryBlocked(tenantScope, 'payroll_records')) {

@@ -1836,9 +1836,9 @@ Only matters the employee must handle personally on a working day:
   helpHow_admin_hr_calendar:
     '① Filter by month, store, and event type.\n② Turn on [Birthdays: office, managers & franchisees] at the top to show only birthdays of office staff, franchisees, and manager-level employees (role or job such as Manager, Supervisor, Officer, Director). Hire, anniversary, and resignation events are unaffected; the setting is remembered in this browser.\n③ Click a calendar chip or list row to open the employee profile.\n④ Use birthdays and anniversaries alongside store operations.',
   helpSum_admin_payroll:
-    'Calculate and save payroll, view statements, salary change history, holidays, rules, and help in one place.',
+    'Calculate and save payroll, view statements, salary change history, holidays, rules, and help in one place. HQ, accounting, and supervisors only—store managers and franchisees cannot open this menu.',
   helpHow_admin_payroll:
-    '① Payroll calc: pick the month (work period and pay date show below) → Calculate → review → Save to DB. Change the cycle in Payroll rules (default: 1st–last day, 5th of next month). P&L salary follows this month.\n② Records: view saved payroll (name and nickname), notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).',
+    '① Payroll calc: pick the month (work period and pay date show below) → Calculate → review → Save to DB. Change the cycle in Payroll rules (default: 1st–last day, 5th of next month). P&L salary follows this month.\n② Records: view saved payroll (name and nickname), notify staff, export Excel.\n③ Help tab: late, early, OT, and holiday rules.\n④ Confirming office (HQ) payroll posts one store/month total to Expense Management—not per-employee lines (individual detail stays in Payroll for office payroll managers).\n⑤ Access: HQ (Director/Officer etc.), accounting, and supervisors only. Store Manager accounts can still do till withdrawals with Manager PIN, but payroll and employee salary fields stay hidden.',
   adminHrCalendar: 'HR calendar',
   hrCalHint:
     'Shows birthdays, hire milestones (Year 1, 2, 3…), hire dates in the join year, and resignations by month. Labels use nickname; hover a cell for the full text.',
@@ -1894,6 +1894,7 @@ Only matters the employee must handle personally on a working day:
   emp_can_manage_office_payroll_label: 'Office payroll manager',
   emp_can_manage_office_payroll_hint: 'Only checked staff can view, calculate, and confirm HQ (office) payroll, and approve or delete HQ expenses. Directors can always access and assign this.',
   emp_office_payroll_hidden_hint: 'Payroll and bank details for HQ (office) staff can only be viewed or edited by payroll managers or Directors.',
+  emp_store_payroll_hidden_hint: 'Salary and bank details can only be viewed or edited by HQ, accounting, or supervisors.',
   emp_section_basic: 'Basic Info',
   emp_section_id_card: 'ID & Documents',
   emp_section_accounting: 'Accounting & Payroll',
@@ -2290,7 +2291,7 @@ Only matters the employee must handle personally on a working day:
   adminPayroll: 'Payroll',
   adminPayrollSub: 'Calculate payroll, statements, holidays, and rules.',
   adminPayrollDirectorOnly: 'Only Directors can view payroll.',
-  adminPayrollAccessDenied: 'Payroll requires head office, store manager, or franchisee access.',
+  adminPayrollAccessDenied: 'Payroll is limited to head office, accounting, or supervisors. Store managers and franchisees cannot access it.',
   pay_month: 'Payroll Month',
   pay_db_setup: '🛠️ DB Setup (once)',
   pay_db_setup_confirm: 'Prepare [Payroll DB] for saving payroll data?\n(If already exists, a confirmation will be shown)',
@@ -6134,7 +6135,7 @@ Only matters the employee must handle personally on a working day:
   settings_perm_role_officer: '2. Officer',
   settings_perm_role_officer_desc: 'Most access except Director-level. Office is hidden in Payroll and Employee search.',
   settings_perm_role_manager: '3. Manager (Store Manager)',
-  settings_perm_role_manager_desc: 'Choongman: own store only. Items, Vendors, Settings, Force Outbound denied. Cannot edit employee role. Payroll holiday & receivable: view only. Complaints: input=own store, view=all stores. Omni: Manager has the same ERP access as Officer (including Items, Vendors, Settings). SaaS control-plane console stays denied. See table below.',
+  settings_perm_role_manager_desc: 'Choongman: own store only. Items, Vendors, Settings, Payroll, Force Outbound denied. Cannot edit employee role, salary, or bank fields. Receivable: view only. Complaints: input=own store, view=all stores. Omni: Manager has the same ERP access as Officer (including Items, Vendors, Settings). SaaS control-plane console stays denied. See table below.',
   settings_perm_role_franchisee: '4. Franchisee',
   settings_perm_role_franchisee_desc:
     'Same baseline as store manager. Enable multi-store under Settings → Franchisee, assign extra stores in the roster list; after re-login the ERP header lists allowed stores to switch.',
@@ -6151,7 +6152,7 @@ Only matters the employee must handle personally on a working day:
   adminEmployeeEval: 'Employee Eval',
   settings_perm_mgr_eval_list_only: 'View list only (no register/edit)',
   settings_perm_mgr_employees_note: 'Own store: view/edit (cannot edit employee role)',
-  settings_perm_mgr_payroll_note: 'View/calc (holiday mgmt: view only)',
+  settings_perm_mgr_payroll_note: 'Denied (HQ / accounting / supervisor only)',
   settings_perm_mgr_receivable_note: 'View only (no receive input)',
   settings_perm_mgr_complaints_note: 'Input: own store, View: all stores',
   adminWelcome: 'Welcome',

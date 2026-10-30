@@ -5,6 +5,7 @@ import { supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { buildTaxMonthPostgrestFilter, filingPeriodFromSearchParams } from '@/lib/thai-tax-period'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 
 type WhtRow = {
@@ -43,6 +44,8 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  if (payrollGate) return payrollGate
 
   const { searchParams } = new URL(request.url)
   const userRole = String(auth.role || '').trim()

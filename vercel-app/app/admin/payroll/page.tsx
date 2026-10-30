@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
-import { isOfficeRole, isManagerRole, isFranchiseeRole } from "@/lib/permissions"
+import { canAccessAdminPayroll } from "@/lib/permissions"
 import { PayrollHelpContent } from "@/components/admin/payroll-help-content"
 import { HrPageShell } from "@/components/hr/hr-page-shell"
 
@@ -39,7 +39,7 @@ function PayrollPageInner() {
   const { auth } = useAuth()
   const t = useT(useLang().lang)
   const searchParams = useSearchParams()
-  const canAccessPayroll = isOfficeRole(auth?.role || "") || isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
+  const canAccessPayroll = canAccessAdminPayroll(auth?.role || "")
 
   /** 탭은 URL과 분리. keep-alive 중 다른 메뉴 ?tab=으로 덮지 않음. */
   const [tabValue, setTabValue] = useState<PayrollTab>("calc")
@@ -104,7 +104,7 @@ function PayrollPageInner() {
             <AdminPayrollSalaryHistory />
           </TabsContent>
           <TabsContent value="holidays" className={adminTabsContentCn}>
-            <AdminPayrollHolidays readOnly={isManagerRole(auth?.role || "")} />
+            <AdminPayrollHolidays readOnly={false} />
           </TabsContent>
           <TabsContent value="rules" className={adminTabsContentCn}>
             <AdminPayrollRules />

@@ -11,6 +11,7 @@ import {
   isFranchiseeRole,
   canAssignEmployeeDirectorRole,
   canAssignEmployeeOfficerRole,
+  canViewEmployeePayrollFields,
   employeeRoleChangeTouchesDirector,
   employeeRoleChangeTouchesOfficer,
 } from '@/lib/permissions'
@@ -36,7 +37,11 @@ import {
   sanitizeEmployeeAuditRow,
   writeEmployeeAudit,
 } from '@/lib/employee-audit'
-import { isEmployeeOfficePayrollManagerFlag, preserveOfficeEmployeePayrollOnSave } from '@/lib/office-payroll-access'
+import {
+  isEmployeeOfficePayrollManagerFlag,
+  preserveOfficeEmployeePayrollOnSave,
+  restoreEmployeePayrollFieldsOnSave,
+} from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import {
   appendSaasTenantFilter,
@@ -489,7 +494,11 @@ export async function POST(req: NextRequest) {
           )
         }
       }
-      preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, null)
+      if (!canViewEmployeePayrollFields(String(auth.role || ''))) {
+        restoreEmployeePayrollFieldsOnSave(payload, null)
+      } else {
+        preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, null)
+      }
       payload.password = passwordValue || ''
       if (!codeRaw) {
         payload.employee_code = await buildNextEmployeeCodeForStore(newStore, tenantScope)
@@ -620,7 +629,11 @@ export async function POST(req: NextRequest) {
         )
       }
     }
-    preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, old)
+    if (!canViewEmployeePayrollFields(String(auth.role || ''))) {
+      restoreEmployeePayrollFieldsOnSave(payload, old)
+    } else {
+      preserveOfficeEmployeePayrollOnSave(payload, payrollAuth, newStore, old)
+    }
     const oldStore = old ? String(old.store || '').trim() : ''
     const oldName = old ? String(old.name || '').trim() : ''
     const oldCode = old ? String(old.employee_code || '').trim() : ''

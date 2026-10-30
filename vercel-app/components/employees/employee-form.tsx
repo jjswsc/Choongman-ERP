@@ -268,6 +268,8 @@ interface EmployeeFormProps {
   embedded?: boolean
   /** 오피스(본사) 직원 급여·계좌 편집 권한 */
   officePayrollAuth?: OfficePayrollAuth
+  /** false면 매장 매니저 등 — 급여·계좌 섹션 숨김 (기본 true) */
+  canViewPayrollFields?: boolean
 }
 
 const DEFAULT_JOB_OPTIONS = ["Service", "Kitchen", "Franchise", "Officer", "Director", "Logistic"]
@@ -292,6 +294,7 @@ export function EmployeeForm({
   franchiseeMultiMaxStores = 5,
   embedded = false,
   officePayrollAuth,
+  canViewPayrollFields = true,
 }: EmployeeFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -330,6 +333,10 @@ export function EmployeeForm({
     !!officePayrollAuth &&
     isOfficeStore(String(form.store || "").trim()) &&
     !canViewOfficeEmployeePayroll(officePayrollAuth, String(form.store || ""))
+  const hidePayrollFields = !canViewPayrollFields || hideOfficePayrollFields
+  const payrollHiddenHint = !canViewPayrollFields
+    ? t("emp_store_payroll_hidden_hint")
+    : t("emp_office_payroll_hidden_hint")
 
   const toggleExtraStore = (storeName: string) => {
     const s = String(storeName || "").trim()
@@ -786,9 +793,9 @@ export function EmployeeForm({
                 {t("emp_section_accounting")}
               </AccordionTrigger>
               <AccordionContent className="pb-3">
-                {hideOfficePayrollFields ? (
+                {hidePayrollFields ? (
                   <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
-                    {t("emp_office_payroll_hidden_hint")}
+                    {payrollHiddenHint}
                   </div>
                 ) : (
                 <div className="grid grid-cols-1 gap-x-1.5 gap-y-2 sm:grid-cols-2">

@@ -28,6 +28,7 @@ import {
   hasOfficeStaffScope,
   canAssignEmployeeOfficerRole,
   canAssignEmployeeDirectorRole,
+  canViewEmployeePayrollFields,
   canonicalEmployeeFormRole,
 } from "@/lib/permissions"
 import {
@@ -537,7 +538,10 @@ export default function EmployeesPage() {
       void appAlert(t("emp_csv_export_empty"))
       return
     }
-    downloadEmployeeListCsv(filteredRows, t, { officePayrollAuth })
+    downloadEmployeeListCsv(filteredRows, t, {
+      officePayrollAuth,
+      canViewPayrollFields: canViewEmployeePayrollFields(userRole),
+    })
   }
 
   const handleEdit = (idx: number) => {
@@ -581,6 +585,7 @@ export default function EmployeesPage() {
   const isManager = isManagerRole(userRole)
   const isManagerOrFranchisee = isManager || isFranchiseeRole(userRole)
   const isOffice = hasOfficeStaffScope(userRole, userStore)
+  const canViewPayroll = canViewEmployeePayrollFields(userRole)
   const showEvalAnalyticsTab = isOffice || isManagerOrFranchisee
   const showEmployeeEvalTab = isOffice || isManagerOrFranchisee
   const showEmployeeInputHistoryTab = isOffice || isAccountingRole(userRole) || isManagerOrFranchisee
@@ -753,6 +758,7 @@ export default function EmployeesPage() {
                   statusFilter={statusFilter}
                   selectedRowId={form.row}
                   officePayrollAuth={officePayrollAuth}
+                  canViewPayrollFields={canViewPayroll}
                 />
               )}
             </div>
@@ -792,6 +798,7 @@ export default function EmployeesPage() {
                     canAssignDirectorRole={canAssignEmployeeDirectorRole(userRole)}
                     canAssignOfficePayrollManager={canAssignEmployeeDirectorRole(userRole)}
                     officePayrollAuth={officePayrollAuth}
+                    canViewPayrollFields={canViewPayroll}
                     franchiseeMultiEnabled={!!franchiseeMulti?.enabled}
                     canEditFranchiseeExtraStores={isOffice}
                     allStoresForFranchiseePick={storesForFilter}

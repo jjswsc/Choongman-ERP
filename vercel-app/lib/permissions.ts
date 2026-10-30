@@ -366,11 +366,26 @@ export function canAccessSettings(role: string, brandKey?: PermissionBrandKey): 
   return isOfficeRole(role, brandKey)
 }
 
+/**
+ * 관리자 「급여 관리」 메뉴·API 접근.
+ * 본사(Office)·회계·슈퍼바이저만. 매장 Manager·가맹점주는 불가(시재 출금 등 Manager PIN과 분리).
+ * Omni Manager는 Officer 승격으로 isOfficeRole=true → 허용.
+ */
+export function canAccessAdminPayroll(role: string, brandKey?: PermissionBrandKey): boolean {
+  return isOfficeRole(role, brandKey) || isAccountingRole(role) || isSupervisorRole(role)
+}
+
+/** 직원 카드의 급여·수당·급여계좌 열람 — 관리자 급여와 동일 기준 */
+export function canViewEmployeePayrollFields(role: string, brandKey?: PermissionBrandKey): boolean {
+  return canAccessAdminPayroll(role, brandKey)
+}
+
 /** 해당 경로에 매니저 접근 불가 여부 */
 const MANAGER_DENIED_PATHS = [
   "/admin/items",
   "/admin/vendors",
   "/admin/settings",
+  "/admin/payroll",
 ]
 
 /** 매니저·가맹점주가 해당 경로에 접근할 수 있는지 */

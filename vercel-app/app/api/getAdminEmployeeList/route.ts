@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectPageCap } from '@/lib/supabase-server'
 import { supabaseSelectFilterStrippingUnknownColumns } from '@/lib/supabase-pgrst204-retry'
-import { isOfficeStore, OFFICE_STORES, isAccountingRole, isFranchiseeRole } from '@/lib/permissions'
+import {
+  isOfficeStore,
+  OFFICE_STORES,
+  isAccountingRole,
+  isFranchiseeRole,
+  canViewEmployeePayrollFields,
+} from '@/lib/permissions'
 import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 import { requireAuth } from '@/lib/verify-auth'
 import {
@@ -15,7 +21,11 @@ import {
   mergeJobOptionsFromCatalogAndEmployees,
 } from '@/lib/employee-job-catalog'
 import { loadEmployeeJobCatalog } from '@/lib/employee-job-catalog-server'
-import { isEmployeeOfficePayrollManagerFlag, redactOfficeEmployeePayrollIfNeeded } from '@/lib/office-payroll-access'
+import {
+  isEmployeeOfficePayrollManagerFlag,
+  redactOfficeEmployeePayrollIfNeeded,
+  redactedOfficeEmployeePayrollFields,
+} from '@/lib/office-payroll-access'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
 import {
   appendSaasTenantFilter,
@@ -152,49 +162,51 @@ export async function GET(req: NextRequest) {
         const haystack = [normName || rawName, nick, employeeCode, phone].join(' ').toLowerCase()
         if (!haystack.includes(rawSearch)) continue
       }
-      list.push(
-        redactOfficeEmployeePayrollIfNeeded(
-          {
-            row: r.id,
-            store: empStore,
-            name: normName || rawName,
-            nameTitle: normTitle,
-            employeeCode,
-            nick,
-            phone,
-            job,
-            birth: toDateStr(r.birth),
-            nation: r.nation || '',
-            join: toDateStr(r.join_date),
-            resign: toDateStr(r.resign_date),
-            salType: String(r.sal_type || 'Monthly'),
-            salAmt: Number(r.sal_amt) || 0,
-            pw: '', // 비밀번호는 클라이언트에 전달하지 않음 (변경 시에만 입력)
-            role: r.role || 'Staff',
-            email: r.email || '',
-            idNumber: r.id_number != null ? String(r.id_number).trim() : '',
-            idCardPhoto: '',
-            taxId: r.tax_id != null ? String(r.tax_id).trim() : '',
-            ssoNumber: r.sso_number != null ? String(r.sso_number).trim() : '',
-            ssoExempt: r.sso_exempt === true || r.sso_exempt === 'true' || r.sso_exempt === 1,
-            canManageOfficePayroll: isEmployeeOfficePayrollManagerFlag(r.can_manage_office_payroll),
-            address: r.address != null ? String(r.address).trim() : '',
-            bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
-            accountNumber: r.account_number != null ? String(r.account_number).trim() : '',
-            positionAllowance: r.position_allowance != null ? Number(r.position_allowance) : 0,
-            riskAllowance: r.haz_allow != null ? Number(r.haz_allow) : 0,
-            attendanceAllowance:
-              r.attendance_allowance != null && r.attendance_allowance !== ''
-                ? Number(r.attendance_allowance)
-                : 500,
-            grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
-            photo: '',
-            extraStores: parseExtraStoresColumn(r.extra_stores),
-            employmentStatus,
-          },
-          payrollAuth
-        )
+      let empRow = redactOfficeEmployeePayrollIfNeeded(
+        {
+          row: r.id,
+          store: empStore,
+          name: normName || rawName,
+          nameTitle: normTitle,
+          employeeCode,
+          nick,
+          phone,
+          job,
+          birth: toDateStr(r.birth),
+          nation: r.nation || '',
+          join: toDateStr(r.join_date),
+          resign: toDateStr(r.resign_date),
+          salType: String(r.sal_type || 'Monthly'),
+          salAmt: Number(r.sal_amt) || 0,
+          pw: '', // 비밀번호는 클라이언트에 전달하지 않음 (변경 시에만 입력)
+          role: r.role || 'Staff',
+          email: r.email || '',
+          idNumber: r.id_number != null ? String(r.id_number).trim() : '',
+          idCardPhoto: '',
+          taxId: r.tax_id != null ? String(r.tax_id).trim() : '',
+          ssoNumber: r.sso_number != null ? String(r.sso_number).trim() : '',
+          ssoExempt: r.sso_exempt === true || r.sso_exempt === 'true' || r.sso_exempt === 1,
+          canManageOfficePayroll: isEmployeeOfficePayrollManagerFlag(r.can_manage_office_payroll),
+          address: r.address != null ? String(r.address).trim() : '',
+          bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
+          accountNumber: r.account_number != null ? String(r.account_number).trim() : '',
+          positionAllowance: r.position_allowance != null ? Number(r.position_allowance) : 0,
+          riskAllowance: r.haz_allow != null ? Number(r.haz_allow) : 0,
+          attendanceAllowance:
+            r.attendance_allowance != null && r.attendance_allowance !== ''
+              ? Number(r.attendance_allowance)
+              : 500,
+          grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
+          photo: '',
+          extraStores: parseExtraStoresColumn(r.extra_stores),
+          employmentStatus,
+        },
+        payrollAuth
       )
+      if (!canViewEmployeePayrollFields(role)) {
+        empRow = { ...empRow, ...redactedOfficeEmployeePayrollFields() }
+      }
+      list.push(empRow)
     }
 
     const jobSet = new Set<string>()

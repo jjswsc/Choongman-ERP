@@ -15,6 +15,7 @@ import {
 import { hazAllowEligibleWithEvalGrade } from '@/lib/payroll-haz-eval-grade'
 import { loadPayrollHazEvalGradeRules } from '@/lib/payroll-haz-eval-grade-settings'
 import { requireAuth } from '@/lib/verify-auth'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { isOfficePayrollStoreFilter } from '@/lib/office-payroll-access'
@@ -273,6 +274,8 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const auth = authResult.auth
+  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  if (payrollGate) return payrollGate
   const tenantScope = await resolveSaasTenantScope({ auth })
   if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
     return NextResponse.json({ success: true, list: [] }, { headers })

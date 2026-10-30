@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import { isAccountingRole, isOfficeRole, isOfficeStore } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { resolveCanManageOfficePayrollAuth } from '@/lib/office-payroll-auth-server'
@@ -120,6 +121,8 @@ export async function POST(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
+  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  if (payrollGate) return payrollGate
 
   const tenantScope = await resolveSaasTenantScope({ auth })
   const tenantWriteErr = assertSaasTenantWritable(tenantScope, {

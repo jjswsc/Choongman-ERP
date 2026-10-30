@@ -73,10 +73,11 @@ describe("Omni vs Choongman manager logistics nav", () => {
     }
   }
 
-  it("hides items and vendors for Choongman manager", () => {
+  it("hides items, vendors, and payroll for Choongman manager", () => {
     const hrefs = getAccessibleErpNavHrefs(managerCtx("choongman"))
     expect(hrefs).not.toContain("/admin/items")
     expect(hrefs).not.toContain("/admin/vendors")
+    expect(hrefs).not.toContain("/admin/payroll")
     expect(hrefs).toContain("/admin/inbound")
     expect(hrefs).not.toContain("/admin/settings")
   })

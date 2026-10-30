@@ -66,8 +66,10 @@ export function employeeListGradeCell(row: EmployeeListCsvRow): string {
 export function employeeListSalaryCell(
   row: EmployeeListCsvRow,
   t: (k: string) => string,
-  officePayrollAuth?: OfficePayrollAuth
+  officePayrollAuth?: OfficePayrollAuth,
+  canViewPayrollFields = true
 ): string {
+  if (!canViewPayrollFields) return ''
   const officePayrollHidden =
     !!officePayrollAuth &&
     isOfficeStore(String(row.store || '')) &&
@@ -82,9 +84,14 @@ export function employeeListSalaryCell(
 export function buildEmployeeListCsvRows(
   rows: EmployeeListCsvRow[],
   t: (k: string) => string,
-  options?: { officePayrollAuth?: OfficePayrollAuth; asOfYear?: number }
+  options?: {
+    officePayrollAuth?: OfficePayrollAuth
+    asOfYear?: number
+    canViewPayrollFields?: boolean
+  }
 ): { headers: string[]; data: (string | number)[][] } {
   const asOfYear = options?.asOfYear ?? Number(getBangkokTodayDateString().slice(0, 4))
+  const canViewPayrollFields = options?.canViewPayrollFields !== false
   const headers = [
     t('emp_label_store'),
     t('emp_grade'),
@@ -109,7 +116,7 @@ export function buildEmployeeListCsvRows(
     employeeListAgeYears(String(e.birth || ''), asOfYear),
     displayLabelShort(e.role) || String(e.role || '').trim(),
     String(e.join || '').trim().slice(0, 10),
-    employeeListSalaryCell(e, t, options?.officePayrollAuth),
+    employeeListSalaryCell(e, t, options?.officePayrollAuth, canViewPayrollFields),
   ])
   return { headers, data }
 }
@@ -117,7 +124,11 @@ export function buildEmployeeListCsvRows(
 export function downloadEmployeeListCsv(
   rows: EmployeeListCsvRow[],
   t: (k: string) => string,
-  options?: { officePayrollAuth?: OfficePayrollAuth; asOfYear?: number }
+  options?: {
+    officePayrollAuth?: OfficePayrollAuth
+    asOfYear?: number
+    canViewPayrollFields?: boolean
+  }
 ): void {
   const { headers, data } = buildEmployeeListCsvRows(rows, t, options)
   const ymd = getBangkokTodayDateString()

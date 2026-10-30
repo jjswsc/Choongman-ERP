@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getAdminDashboardStats, getAdminEmployeeList } from "@/lib/api-client"
 import { buildHrCalendarEvents } from "@/lib/hr-calendar-events"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { isOfficeRole, isManagerRole, isFranchiseeRole } from "@/lib/permissions"
+import { canAccessAdminPayroll } from "@/lib/permissions"
 
 export function AdminHrHub() {
   const { auth } = useAuth()
@@ -22,10 +22,7 @@ export function AdminHrHub() {
   const [attPending, setAttPending] = useState(0)
   const [weekEvents, setWeekEvents] = useState(0)
 
-  const canAccessPayroll =
-    isOfficeRole(auth?.role || "") ||
-    isManagerRole(auth?.role || "") ||
-    isFranchiseeRole(auth?.role || "")
+  const canAccessPayroll = canAccessAdminPayroll(auth?.role || "")
 
   const weekRangeLabel = useMemo(() => {
     const today = getBangkokTodayDateString()

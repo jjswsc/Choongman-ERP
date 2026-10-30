@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
+import { forbidUnlessAdminPayroll } from '@/lib/payroll-admin-gate'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
@@ -99,6 +100,8 @@ export async function GET(req: NextRequest) {
 
   const authResult = await requireAuth(req, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
+  const payrollGate = forbidUnlessAdminPayroll(authResult.auth.role, headers)
+  if (payrollGate) return payrollGate
 
   const tenantScope = await resolveSaasTenantScope({ auth: authResult.auth })
   const { searchParams } = new URL(req.url)
@@ -130,6 +133,8 @@ export async function POST(req: NextRequest) {
 
   const authResult = await requireAuth(req, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
+  const payrollGate = forbidUnlessAdminPayroll(authResult.auth.role, headers)
+  if (payrollGate) return payrollGate
   if (!canEditPayrollRules(authResult.auth.role || '')) {
     return NextResponse.json({ success: false, message: '본사 또는 회계 권한이 필요합니다.' }, { status: 403, headers })
   }

@@ -115,6 +115,8 @@ interface EmployeeTableProps {
   selectedRowId?: number
   /** 오피스(본사) 직원 급여 열람 권한 — 미지정 시 전체 허용 */
   officePayrollAuth?: OfficePayrollAuth
+  /** false면 급여 열·급여 바로가기 숨김 (매장 매니저 등) */
+  canViewPayrollFields?: boolean
 }
 
 export function EmployeeTable({
@@ -125,6 +127,7 @@ export function EmployeeTable({
   statusFilter,
   selectedRowId = 0,
   officePayrollAuth,
+  canViewPayrollFields = true,
 }: EmployeeTableProps) {
   const todayStr = bangkokTodayYmd()
   const hasNewHireRows = rows.some(
@@ -204,7 +207,8 @@ export function EmployeeTable({
                   !!officePayrollAuth &&
                   isOfficeStore(String(e.store || "")) &&
                   !canViewOfficeEmployeePayroll(officePayrollAuth, String(e.store || ""))
-                const salDisplay = officePayrollHidden ? "—" : salAmt > 0 ? salAmt.toLocaleString() : "—"
+                const payrollHidden = !canViewPayrollFields || officePayrollHidden
+                const salDisplay = payrollHidden ? "—" : salAmt > 0 ? salAmt.toLocaleString() : "—"
                 const nick = displayLabelShort(e.nick) || "—"
                 const zebra = idx % 2 === 1 ? "bg-muted/20" : "bg-card"
 
@@ -266,11 +270,12 @@ export function EmployeeTable({
                     <td className="px-3 py-2.5 text-right">
                       <div className="font-semibold tabular-nums text-card-foreground">{salDisplay}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {officePayrollHidden ? "—" : salTypeShort(e.salType, t)}
+                        {payrollHidden ? "—" : salTypeShort(e.salType, t)}
                       </div>
                     </td>
                     <td className="px-3 py-2.5 text-center" onClick={(ev) => ev.stopPropagation()}>
                       <div className="flex items-center justify-center gap-0.5">
+                        {canViewPayrollFields ? (
                         <Link
                           href="/admin/payroll?tab=calc"
                           title={t("emp_quick_payroll")}
@@ -279,6 +284,7 @@ export function EmployeeTable({
                         >
                           <Wallet className="h-3.5 w-3.5" />
                         </Link>
+                        ) : null}
                         <Link
                           href="/admin/leave"
                           title={t("emp_quick_leave")}
