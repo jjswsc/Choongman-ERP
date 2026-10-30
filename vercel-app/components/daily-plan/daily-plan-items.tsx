@@ -99,6 +99,8 @@ export function DailyPlanItems(props: {
   const [actionId, setActionId] = useState<number | null>(null)
   const closed = plan.status === "closed"
   const editable = !readOnly && !closed
+  /** 마감 후에도 사진·메모 소급 첨부 가능 (상태 변경은 editable만) */
+  const canAttachEvidence = !readOnly
   const isToday = plan.plan_date === getBangkokTodayDateString()
   const [nowMin, setNowMin] = useState(bangkokNowMin)
 
@@ -195,7 +197,6 @@ export function DailyPlanItems(props: {
         ref={fileRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => void onPhotoFile(e.target.files?.[0])}
       />
@@ -336,7 +337,7 @@ export function DailyPlanItems(props: {
                       {t("dp_btn_reopen")}
                     </Button>
                   ) : null}
-                  {editable ? (
+                  {canAttachEvidence ? (
                     <>
                       <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={busy} onClick={() => onPickPhoto(it)}>
                         <Camera className="mr-1 h-3 w-3" />
