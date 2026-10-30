@@ -222,9 +222,11 @@ export default function AdminLiveStoreSalesPage() {
 
   useEffect(() => {
     if (!showBranchRealtime) return
-    if (!stores.some((s) => s.id === effectiveStoreCode)) return
-    setCurrentStoreId(effectiveStoreCode)
-  }, [showBranchRealtime, effectiveStoreCode, stores, setCurrentStoreId])
+    const code = String(effectiveStoreCode || "").trim()
+    if (!code) return
+    /** 스냅샷 유무와 무관히 선택 — 미로드면 usePosStore lazy fetch가 채움 */
+    setCurrentStoreId(code)
+  }, [showBranchRealtime, effectiveStoreCode, setCurrentStoreId])
 
   const liveSalesSubtitle = useMemo(() => {
     if (isOfficeSelector) {

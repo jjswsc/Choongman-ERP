@@ -30,13 +30,16 @@ export function isDineInOrderTypeForGuestCount(raw: string | undefined | null): 
   return k === 'dine_in' || k === ''
 }
 
-/** 테이블 바닥도 점유: DB order_type 우선(목록 API의 memo 추론 delivery 제외) */
+/**
+ * 테이블 바닥도 점유: DB order_type 우선(목록 API의 memo 추론 delivery 제외).
+ * 구데이터(order_type 빈값)는 홀과 동일 — getPosOpenTableTotals / guest_count 규칙과 맞춤.
+ */
 export function isDineInOrderForTableDisplay(
   orderType: string | undefined | null,
   dbOrderType?: string | undefined | null
 ): boolean {
   const k = normalizePosOrderTypeKey(dbOrderType ?? orderType)
-  return k === 'dine_in'
+  return k === 'dine_in' || k === ''
 }
 
 /**

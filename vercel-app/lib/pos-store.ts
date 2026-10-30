@@ -994,7 +994,13 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     )
   }, [effectiveStoreCodes, currentStoreId, canonicalAuthStore])
 
-  const currentStore = stores.find((s) => s.id === currentStoreId) || stores[0]
+  /**
+   * 선택 매장 스냅샷이 아직 없으면 undefined.
+   * stores[0] 폴백은 본사「타 매장」선택 시 다른 매장 테이블·금액 0이 섞여 보이는 원인이 됨.
+   */
+  const currentStore = currentStoreId
+    ? stores.find((s) => s.id === currentStoreId)
+    : stores[0]
 
   const setCurrentStoreIdAndPersist = useCallback((id: string) => {
     setCurrentStoreId(id)
@@ -1147,36 +1153,39 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
       setStores((prev) => {
         const hydrate = (store: Store) =>
           hydrateStoreTablesFromActiveOrders(store, nextOrdersByStore[store.id] ?? [])
+        const mergeFetched = (code: string, prevStore: Store | undefined): Store | null => {
+          const next = resultStoreMap.get(code)
+          const orders = nextOrdersByStore[code] ?? []
+          if (!next) return prevStore ? hydrate(prevStore) : null
+          return hydrate(
+            mergeStoreTablesWithLocalOrders(
+              next,
+              forceFullRefresh ? undefined : prevStore,
+              orders
+            )
+          )
+        }
         if (
           okCodes.length === effectiveStoreCodes.length &&
           targetStoreCodes.length === effectiveStoreCodes.length
         ) {
           return effectiveStoreCodes
-            .map((code) => {
-              const next = resultStoreMap.get(code)
-              if (!next) {
-                const keep = prev.find((p) => p.id === code)
-                return keep ? hydrate(keep) : null
-              }
-              const orders = nextOrdersByStore[code] ?? []
-              return hydrate(
-                mergeStoreTablesWithLocalOrders(
-                  next,
-                  forceFullRefresh ? undefined : prev.find((p) => p.id === code),
-                  orders
-                )
-              )
-            })
+            .map((code) => mergeFetched(code, prev.find((p) => p.id === code)))
             .filter(Boolean) as Store[]
         }
-        return prev.map((store) => {
+        /** 1매장 lazy/검색: 기존 행 갱신 + 아직 없던 매장 스냅샷은 반드시 추가(이전엔 prev.map만 해서 유실) */
+        const prevIds = new Set(prev.map((s) => s.id))
+        const updated = prev.map((store) => {
           const next = resultStoreMap.get(store.id)
-          const orders = nextOrdersByStore[store.id] ?? []
           if (!next) return hydrate(store)
-          return hydrate(
-            mergeStoreTablesWithLocalOrders(next, forceFullRefresh ? undefined : store, orders)
-          )
+          return mergeFetched(store.id, forceFullRefresh ? undefined : store) ?? hydrate(store)
         })
+        for (const code of okCodes) {
+          if (prevIds.has(code)) continue
+          const added = mergeFetched(code, undefined)
+          if (added) updated.push(added)
+        }
+        return updated
       })
       setLayoutByStoreId((prev) => {
         const next = { ...prev }
@@ -1222,7 +1231,12 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     if (loading) return
     const storeCode = String(currentStoreId || '').trim()
     if (!storeCode || !effectiveStoreCodes.includes(storeCode)) return
-    if (loadedPosStoreIdsRef.current.has(storeCode)) return
+    const alreadyInStores = stores.some((s) => s.id === storeCode)
+    if (loadedPosStoreIdsRef.current.has(storeCode)) {
+      /** 예전에 로드 표시만 되고 stores에 안 들어간 경우 재시도 */
+      if (alreadyInStores) return
+      loadedPosStoreIdsRef.current.delete(storeCode)
+    }
     void refetchStoresImmediate({ scope: 'current', storeCode })
   }, [
     initialLoadScope,
@@ -1230,6 +1244,7 @@ export function usePosStoreInternal(options?: { initialLoadScope?: PosStoreIniti
     currentStoreId,
     effectiveStoreCodes.join(','),
     loading,
+    stores,
     refetchStoresImmediate,
   ])
 
