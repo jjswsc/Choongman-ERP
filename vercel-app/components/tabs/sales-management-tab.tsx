@@ -386,8 +386,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [forecastActualRows, setForecastActualRows] = React.useState<PosSalesPeriodRow[]>([])
   /** 연간 예상용: 해당 연 1/1~기준일 월별 합계(일별 YTD 대신) */
   const [forecastMonthActualTotal, setForecastMonthActualTotal] = React.useState<number | null>(null)
-  /** 동일 필터로 한 번 조회한 뒤 주제만 바꿀 때 자동 재조회용 */
-  const lastFetchedDataFilterKeyRef = React.useRef("")
   const [summaryCards, setSummaryCards] = React.useState<{
     current: number
     prevRange: number
@@ -1308,7 +1306,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setSalesQueryError("")
     setFetchedAnalyticsKey("")
-    lastFetchedDataFilterKeyRef.current = ""
     viewCacheRestoreKeyRef.current = null
   }, [dataFilterKey, pageActiveRef])
 
@@ -1395,17 +1392,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     )
     setSummaryCards(snap.summaryCards)
     setFetchedAnalyticsKey(snap.analyticsParamKey)
-    lastFetchedDataFilterKeyRef.current = [
-      snap.startStr,
-      snap.endStr,
-      (snap.selectedStores || []).join(","),
-      snap.periodGroup,
-      snap.orderTypesKey,
-      snap.dowsKey,
-      snap.compareStores ? "1" : "0",
-      String(snap.menuSearch || "").trim(),
-      snap.menuSearchAnd ? "1" : "0",
-    ].join("|")
     viewCacheRestoreKeyRef.current = snap.analyticsParamKey
   }, [pageActive, pageActiveRef])
 
@@ -2588,7 +2574,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       if (loadIdRef.current === id) {
         setLoading(false)
         setFetchedAnalyticsKey(keySnapshot)
-        lastFetchedDataFilterKeyRef.current = dataFilterKey
       }
     })
   }, [
@@ -2628,21 +2613,6 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
     prevOnlineRef.current = online
   }, [online, offlineAware, showSalesResults, loadAllAnalytics])
-
-  /** 필터는 같고 하위 메뉴·주제만 바꾼 경우 「조회」 없이 해당 리포트 재집계 */
-  React.useEffect(() => {
-    if (isHoursPanel) return
-    if (!lastFetchedDataFilterKeyRef.current) return
-    if (lastFetchedDataFilterKeyRef.current !== dataFilterKey) return
-    if (fetchedAnalyticsKey === analyticsParamKey) return
-    loadAllAnalytics()
-  }, [
-    isHoursPanel,
-    dataFilterKey,
-    analyticsParamKey,
-    fetchedAnalyticsKey,
-    loadAllAnalytics,
-  ])
 
   React.useEffect(() => {
     if (selectedView !== "forecast" || !showSalesResults) return

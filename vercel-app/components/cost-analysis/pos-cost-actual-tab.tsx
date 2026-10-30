@@ -212,7 +212,9 @@ export function PosCostActualTab({ rows, settings, listQueried, canEdit, onSetti
     return () => {
       cancelled = true
     }
-  }, [queryToken, startStr, endStr, storeFilter, channel, settings.misePercent, t])
+    // 기간·매장·채널 변경만으로는 재조회하지 않음 — 「조회」로 queryToken이 올라갈 때만
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: search-button gated
+  }, [queryToken])
 
   const runQuery = React.useCallback(() => {
     setQueryToken((n) => n + 1)

@@ -963,11 +963,14 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
     }
   }, [effectiveStore, historyRange, settleDate, offlineAware])
 
+  const loadHistoryRef = React.useRef(loadHistory)
+  loadHistoryRef.current = loadHistory
+  /** 이력 탭 진입 시에만 1회 — 7일/30일·기준일 변경은 「기간 조회」버튼으로만 */
   React.useEffect(() => {
     if (activeTab === 'history') {
-      loadHistory()
+      void loadHistoryRef.current()
     }
-  }, [activeTab, loadHistory])
+  }, [activeTab])
 
   /** 영업 시작: 단위별 합산 */
   const denomTotal = CASH_DENOMINATIONS.reduce(

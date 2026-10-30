@@ -1031,12 +1031,6 @@ export function AdminAccountingCompliance({
     void probeHqSupplyReconcile()
   }, [probeHqSupplyReconcile])
 
-  React.useEffect(() => {
-    if (!pp30Queried || tab !== "summary") return
-    if (hqSupplyReconcileApplicable === true) void loadIntercompanyVatRecon()
-    else if (hqSupplyReconcileApplicable === false) setIntercompanyVatRecon(null)
-  }, [pp30Queried, tab, hqSupplyReconcileApplicable, loadIntercompanyVatRecon])
-
   const loadVat = React.useCallback(async (opts?: { forceSync?: boolean }) => {
     if (!canUse) return
     const seq = ++vatLoadSeqRef.current
@@ -2164,23 +2158,31 @@ export function AdminAccountingCompliance({
     if (canUse && tab === "trial") void loadTrial()
   }, [canUse, tab, loadTrial])
 
-  React.useEffect(() => {
-    if (pp30FilterBootRef.current) {
-      pp30FilterBootRef.current = false
-      return
-    }
-    if (!pp30Queried) return
-    // summary 탭 재조회는 summaryEffect가 담당한다(중복 호출 방지).
-    if (tab === "summary") return
+  const clearPp30QueryResults = React.useCallback(() => {
     setPp30Queried(false)
     setVatRows([])
     setWhtRows([])
     setTaxSummary(null)
     setPnd91Summary(null)
+    setIntercompanyVatRecon(null)
+  }, [])
+
+  /** 월·매장·기간·하위보기 변경 시 결과 초기화 — 「검색」으로만 다시 조회 */
+  React.useEffect(() => {
+    if (pp30FilterBootRef.current) {
+      pp30FilterBootRef.current = false
+      return
+    }
+    clearPp30QueryResults()
   }, [
-    pp30Queried,
+    taxMonth,
+    periodType,
+    storeTb,
+    storeFilterForApi,
+    pp30SubView,
+    whtFocusMode,
     tab,
-    canUse,
+    clearPp30QueryResults,
   ])
 
   React.useEffect(() => {
@@ -2205,14 +2207,14 @@ export function AdminAccountingCompliance({
     return () => {
       cancelled = true
     }
-  }, [
-    canUse,
-    tab,
-    pp30Queried,
-    pp30SubView,
-    pp30SearchSeq,
-    whtFocusMode,
-  ])
+    // 하위보기·필터는 위 clear effect로 무효화. 검색(seq)·pp30Queried 확정 시에만 로드.
+  }, [canUse, tab, pp30Queried, pp30SearchSeq])
+
+  React.useEffect(() => {
+    if (!pp30Queried || tab !== "summary") return
+    if (hqSupplyReconcileApplicable === true) void loadIntercompanyVatRecon()
+    else if (hqSupplyReconcileApplicable === false) setIntercompanyVatRecon(null)
+  }, [pp30Queried, pp30SearchSeq, tab, hqSupplyReconcileApplicable, loadIntercompanyVatRecon])
 
   React.useEffect(() => {
     if (canUse && tab === "workflow") void loadWorkflow()
@@ -4057,17 +4059,8 @@ export function AdminAccountingCompliance({
   React.useEffect(() => {
     if (!canUse || tab !== "summary" || !pp30Queried || pp30SubView !== "wht" || !showPnd91Area) return
     void loadPnd91()
-  }, [
-    canUse,
-    tab,
-    pp30Queried,
-    pp30SubView,
-    showPnd91Area,
-    taxMonth,
-    storeFilterForApi,
-    pp30SearchSeq,
-    loadPnd91,
-  ])
+    // 월·매장·하위보기는 검색 시에만 — pp30SearchSeq / pp30Queried 확정 후 로드
+  }, [canUse, tab, pp30Queried, pp30SearchSeq, showPnd91Area, loadPnd91])
 
   const taxEntityScopeLabelMap = React.useMemo(() => {
     const out: Record<string, string> = {}

@@ -187,7 +187,9 @@ export function PosCostStoreNormalTab() {
     return () => {
       cancelled = true
     }
-  }, [queryToken, startStr, endStr, storeFilter, t])
+    // 기간·매장 변경만으로는 재조회하지 않음 — 「조회」로 queryToken이 올라갈 때만
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: search-button gated
+  }, [queryToken])
 
   const warningMessages = React.useMemo(() => {
     if (!result?.warnings?.length) return [] as string[]

@@ -715,13 +715,8 @@ export function TotalSalesTab() {
     searchParams,
   ])
 
-  const prevCompareChannelsRef = React.useRef(compareChannels)
-  React.useEffect(() => {
-    if (prevCompareChannelsRef.current === compareChannels) return
-    prevCompareChannelsRef.current = compareChannels
-    if (!hasQueried || !canQuery || !startStr || !endStr) return
-    void loadDataRef.current()
-  }, [compareChannels, hasQueried, canQuery, startStr, endStr])
+  /** 채널별 비교 ON인데 비교용 데이터가 없으면 「조회」 필요 (토글만으로 자동 재조회하지 않음) */
+  const resultsReady = hasQueried && (!compareChannels || byOrderTypeLevels != null)
 
   const activeRows = React.useMemo(() => {
     if (optionGroupMode) {
@@ -1156,7 +1151,7 @@ export function TotalSalesTab() {
             </p>
           ) : null}
 
-          {!hasQueried && !loading ? (
+          {!resultsReady && !loading ? (
             <p className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
               {canMultiStorePicker && selectedStores.length === 0
                 ? tr(
@@ -1170,7 +1165,7 @@ export function TotalSalesTab() {
             </p>
           ) : null}
 
-          {hasQueried || loading ? (
+          {resultsReady || loading ? (
           <>
           {snapshotToday && snapshotMonth ? (
             <div className="grid gap-3 sm:grid-cols-2">

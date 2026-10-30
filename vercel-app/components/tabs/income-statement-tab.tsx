@@ -1385,10 +1385,7 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
               variant={showExpenseDetails ? "default" : "outline"}
               onClick={() => {
                 setShowExpenseDetails((v) => !v)
-                // queryToken effect는 token만 보므로 토글 후 즉시 재조회
-                if ((props.queryToken ?? 0) > 0 || !props.hideControls) {
-                  window.setTimeout(() => runIncomeFetchRef.current(), 0)
-                }
+                // 표시 옵션만 바꿈 — 재조회는 「조회」버튼(또는 부모 검색)으로만
               }}
             >
               {showExpenseDetails ? t("pL_expenseDetailOn") : t("pL_expenseDetailOff")}

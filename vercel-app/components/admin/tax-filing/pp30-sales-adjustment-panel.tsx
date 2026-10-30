@@ -113,8 +113,22 @@ export function Pp30SalesAdjustmentPanel({
   const [channelData, setChannelData] = React.useState<{ totals: ChannelTotals; daily: DailySalesRow[] } | null>(null)
   const [showDaily, setShowDaily] = React.useState(false)
 
+  const fetchedAdjKeyRef = React.useRef("")
   React.useEffect(() => {
-    if (!taxMonth || !storeName || !pp30Queried) return
+    if (!taxMonth || !storeName || !pp30Queried) {
+      if (!pp30Queried) {
+        fetchedAdjKeyRef.current = ""
+        setChannelData(null)
+      }
+      return
+    }
+    const key = `${taxMonth}|${storeName}`
+    // 월·매장만 바뀐 채 pp30Queried가 남아 있으면 부모 clear 전 레이스 방지 — 키 변경 시 재조회하지 않음
+    if (fetchedAdjKeyRef.current && fetchedAdjKeyRef.current !== key) {
+      setChannelData(null)
+      return
+    }
+    if (fetchedAdjKeyRef.current === key) return
     let cancelled = false
     ;(async () => {
       setLoading(true)
@@ -151,6 +165,7 @@ export function Pp30SalesAdjustmentPanel({
           })
           setOpen(true)
         }
+        fetchedAdjKeyRef.current = key
       } catch {
         // ignore
       } finally {

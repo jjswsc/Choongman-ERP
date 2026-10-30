@@ -305,15 +305,19 @@ export function AdminComplaints() {
     listQ,
   ])
 
+  const [searchNonce, setSearchNonce] = useState(0)
   const runSearch = useCallback(() => {
-    const next = listQInput.trim()
-    if (next === listQ) void loadList()
-    else setListQ(next)
-  }, [listQInput, listQ, loadList])
+    setListQ(listQInput.trim())
+    setSearchNonce((n) => n + 1)
+  }, [listQInput])
 
+  // 탭·필터 변경만으로 자동 조회하지 않음 — 「검색」버튼으로만 조회
   useEffect(() => {
-    if (tab === "list" || tab === "dash" || tab === "process") void loadList()
-  }, [tab, loadList])
+    if (searchNonce < 1) return
+    if (tab !== "list" && tab !== "dash" && tab !== "process") return
+    void loadList()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search-button gated; loadList reads latest filters
+  }, [searchNonce])
 
   const periodPresetButtons = (
     <div className="flex flex-wrap gap-1">
