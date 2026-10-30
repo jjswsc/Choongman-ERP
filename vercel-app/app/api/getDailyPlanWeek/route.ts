@@ -3,7 +3,12 @@ import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { addDaysYmdUtc } from '@/lib/daily-plan-generate'
-import { dailyPlanScopeFilter, normalizePlanRow, resolveDailyPlanScope } from '@/lib/daily-plan-server'
+import {
+  canViewDailyPlan,
+  dailyPlanScopeFilter,
+  normalizePlanRow,
+  resolveDailyPlanScope,
+} from '@/lib/daily-plan-server'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
@@ -27,7 +32,9 @@ export async function GET(request: NextRequest) {
         order: 'plan_date.asc,employee_name.asc',
         limit: 5000,
       })) || []) as Record<string, unknown>[]
-    ).map(normalizePlanRow)
+    )
+      .map(normalizePlanRow)
+      .filter((p) => canViewDailyPlan(scope, p))
 
     const counts = new Map<number, { total: number; done: number }>()
     const ids = plans.map((p) => p.id)

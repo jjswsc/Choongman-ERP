@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { storeOpsStoreInScope } from '@/lib/store-ops-alert-utils'
 import {
+  canListDailyPlanCandidate,
+  canViewDailyPlan,
   dailyPlanRoleOf,
   dailyPlanScopeFilter,
   isOwnDailyPlan,
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
       )) as Record<string, unknown>[]
       if (own?.[0] && !planRows.some((r) => Number(r.id) === Number(own[0].id))) planRows = [...own, ...planRows]
     }
-    const plans = planRows.map(normalizePlanRow)
+    const plans = planRows.map(normalizePlanRow).filter((p) => canViewDailyPlan(scope, p))
 
     const itemsByPlan = new Map<number, DailyPlanItemRow[]>()
     const ids = plans.map((p) => p.id)
@@ -110,13 +111,18 @@ export async function GET(request: NextRequest) {
     if (sp.get('candidates') === '1') {
       const emps = await loadActivePlanEmployees()
       candidates = emps
-        .map((e) => ({ ...e, planRole: dailyPlanRoleOf(e) || '' }))
-        .filter((e) => {
-          if (!e.planRole) return false
-          if (scope.office) return true
-          if (scope.supervisor) return e.planRole !== 'supervisor' || e.id === scope.actorEmployeeId
-          return e.planRole === 'staff' && storeOpsStoreInScope(e.store, scope.stores, false)
+        .map((e) => {
+          const planRole = dailyPlanRoleOf(e)
+          return planRole ? { ...e, planRole } : null
         })
+        .filter((e): e is NonNullable<typeof e> => !!e)
+        .filter((e) =>
+          canListDailyPlanCandidate(scope, {
+            role: e.planRole,
+            store: e.store,
+            employeeId: e.id,
+          })
+        )
         .map(({ id, name, nick, store, job, planRole }) => ({ id, name, nick, store, job, planRole }))
     }
 

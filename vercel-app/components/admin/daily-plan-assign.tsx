@@ -78,29 +78,35 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
   const people = useMemo(() => {
     const map = new Map<number, DailyPlanCandidate>()
     for (const c of candidates) map.set(c.id, c)
-    for (const p of plans) {
-      if (!map.has(p.employee_id)) {
-        map.set(p.employee_id, {
-          id: p.employee_id,
-          name: p.employee_name,
-          nick: "",
-          store: p.employee_store,
-          job: "",
-          planRole: p.role_scope,
-        })
+    /**
+     * 본사/SV(canAssignAll)만 plans에 있는 추가 인원을 목록에 합친다.
+     * 매장 매니저는 candidates(담당 매장)만 — plans 병합으로 Office·타 매장이 새지 않게.
+     */
+    if (canAssignAll) {
+      for (const p of plans) {
+        if (!map.has(p.employee_id)) {
+          map.set(p.employee_id, {
+            id: p.employee_id,
+            name: p.employee_name,
+            nick: "",
+            store: p.employee_store,
+            job: "",
+            planRole: p.role_scope,
+          })
+        }
       }
     }
     const needle = q.trim().toLowerCase()
     return [...map.values()]
       .filter((c) => !needle || `${c.name} ${c.nick} ${c.store}`.toLowerCase().includes(needle))
-      .filter((c) => c.planRole !== "staff" || planByEmp.has(c.id) || needle)
+      .filter((c) => c.planRole !== "staff" || planByEmp.has(c.id) || needle || !canAssignAll)
       .sort(
         (a, b) =>
           ROLE_ORDER.indexOf(a.planRole) - ROLE_ORDER.indexOf(b.planRole) ||
           a.store.localeCompare(b.store) ||
           a.name.localeCompare(b.name)
       )
-  }, [candidates, plans, q, planByEmp])
+  }, [candidates, plans, q, planByEmp, canAssignAll])
 
   const selected = people.find((p) => p.id === selectedId) || null
   const selectedPlan = selectedId != null ? planByEmp.get(selectedId) : undefined

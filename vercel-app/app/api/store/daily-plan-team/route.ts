@@ -8,7 +8,7 @@ import {
   lateMinutes,
 } from '@/lib/daily-plan-timeline'
 import {
-  canAssignDailyPlan,
+  canListDailyPlanCandidate,
   dailyPlanRoleOf,
   getDailyPlanFor,
   getDailyPlanItems,
@@ -16,6 +16,7 @@ import {
   loadTravelMinutesByTemplate,
   resolveDailyPlanScope,
   travelMinutesOfPlan,
+  type DailyPlanRole,
 } from '@/lib/daily-plan-server'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -51,8 +52,8 @@ export async function GET(request: NextRequest) {
       .filter((e) => {
         if (!e.planRole) return false
         if (e.id === scope.actorEmployeeId) return false
-        return canAssignDailyPlan(scope, {
-          role: e.planRole as 'supervisor' | 'manager' | 'staff',
+        return canListDailyPlanCandidate(scope, {
+          role: e.planRole as DailyPlanRole,
           store: e.store,
           employeeId: e.id,
         })

@@ -1,14 +1,31 @@
 import 'server-only'
 
-import type { JwtPayload } from '@/lib/jwt-auth'
 import {
-  hasOfficeStaffScope,
-  isFranchiseeRole,
   isManagerRole,
   isOfficeStore,
   isSupervisorRole,
 } from '@/lib/permissions'
-import { storeOpsStoreInScope, storeOpsStoreNameScopePostgrestFilter } from '@/lib/store-ops-alert-utils'
+import {
+  canAssignDailyPlan,
+  canListDailyPlanCandidate,
+  canViewDailyPlan,
+  dailyPlanScopeFilter,
+  isOwnDailyPlan,
+  resolveDailyPlanScope,
+  type DailyPlanScope,
+} from '@/lib/daily-plan-scope'
+
+export type { DailyPlanScope }
+export type { DailyPlanRole } from '@/lib/daily-plan-generate'
+export {
+  canAssignDailyPlan,
+  canListDailyPlanCandidate,
+  canViewDailyPlan,
+  dailyPlanScopeFilter,
+  isOwnDailyPlan,
+  resolveDailyPlanScope,
+}
+
 import {
   supabaseDeleteByFilter,
   supabaseInsert,
@@ -106,71 +123,6 @@ export type PlanEmployee = {
   role: string
   /** 슈퍼바이저 담당 매장 등 추가 매장 */
   extraStores: string[]
-}
-
-// ─── 권한 ───────────────────────────────────────────
-
-export type DailyPlanScope = {
-  /** 본사·회계·오피스·슈퍼바이저 — 전 매장 */
-  all: boolean
-  office: boolean
-  supervisor: boolean
-  /** 매니저·가맹점주 — 자기 매장 직원 */
-  storeLead: boolean
-  stores: string[]
-  actorName: string
-  actorEmployeeId: number | null
-  canEditTemplates: boolean
-}
-
-export function resolveDailyPlanScope(auth: JwtPayload): DailyPlanScope {
-  const role = String(auth.role || '').toLowerCase()
-  const store = String(auth.store || '').trim()
-  const office = hasOfficeStaffScope(role, store)
-  const supervisor = isSupervisorRole(role)
-  const stores = [
-    ...new Set(
-      (Array.isArray(auth.allowedStores) ? auth.allowedStores : [])
-        .map((s) => String(s || '').trim())
-        .filter(Boolean)
-        .concat(store ? [store] : [])
-    ),
-  ]
-  const eid = auth.employeeId != null ? Math.floor(Number(auth.employeeId)) : 0
-  return {
-    all: office || supervisor,
-    office,
-    supervisor,
-    storeLead: isManagerRole(role) || isFranchiseeRole(role),
-    stores,
-    actorName: String(auth.name || '').trim(),
-    actorEmployeeId: Number.isFinite(eid) && eid > 0 ? eid : null,
-    canEditTemplates: office || supervisor,
-  }
-}
-
-export function dailyPlanScopeFilter(scope: DailyPlanScope): string {
-  if (scope.all) return ''
-  const f = storeOpsStoreNameScopePostgrestFilter(scope.stores)
-  return f || 'store_name=eq.__none__'
-}
-
-export function isOwnDailyPlan(scope: DailyPlanScope, plan: Pick<DailyPlanRow, 'employee_id' | 'employee_name'>): boolean {
-  if (scope.actorEmployeeId != null && Number(plan.employee_id) === scope.actorEmployeeId) return true
-  return !!scope.actorName && String(plan.employee_name || '').trim() === scope.actorName
-}
-
-export function canViewDailyPlan(scope: DailyPlanScope, plan: DailyPlanRow): boolean {
-  if (scope.all || isOwnDailyPlan(scope, plan)) return true
-  return scope.storeLead && storeOpsStoreInScope(plan.store_name, scope.stores, false)
-}
-
-/** 본사 → 전 직급, 슈퍼바이저 → 매니저·직원(본인 포함), 매니저 → 자기 매장 직원 */
-export function canAssignDailyPlan(scope: DailyPlanScope, target: { role: DailyPlanRole; store: string; employeeId: number }): boolean {
-  if (scope.office) return true
-  if (scope.supervisor) return target.role !== 'supervisor' || target.employeeId === scope.actorEmployeeId
-  if (scope.storeLead) return target.role === 'staff' && storeOpsStoreInScope(target.store, scope.stores, false)
-  return false
 }
 
 // ─── 직원·직급 ──────────────────────────────────────
