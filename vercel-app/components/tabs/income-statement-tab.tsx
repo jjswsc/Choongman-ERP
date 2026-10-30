@@ -2173,12 +2173,16 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       + {t("pL_purchases")}
                                     </span>
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                  {compareIncomeRows.map((row) => (
                                     <td
-                                      key={ym}
+                                      key={row.ym}
                                       className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
                                     >
-                                      {rowData.error ? "—" : formatBath(Number(rowData.purchases) || 0)}
+                                      {row.data.error
+                                        ? "—"
+                                        : formatBath(
+                                            incomeMetricsForCompareRow(row, vatDisplayMode)?.purchases ?? 0
+                                          )}
                                     </td>
                                   ))}
                                 </tr>
@@ -2229,14 +2233,17 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                   <td className="p-2 text-muted-foreground pl-4 sticky left-0 z-10 bg-background shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                     - {t("pL_endingInv")}
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                  {compareIncomeRows.map((row) => (
                                     <td
-                                      key={ym}
+                                      key={row.ym}
                                       className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
                                     >
-                                      {rowData.error
+                                      {row.data.error
                                         ? "—"
-                                        : formatBath(Number(rowData.endingInventory) || 0)}
+                                        : formatBath(
+                                            incomeMetricsForCompareRow(row, vatDisplayMode)
+                                              ?.endingInventory ?? 0
+                                          )}
                                     </td>
                                   ))}
                                 </tr>
@@ -2290,12 +2297,16 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                       - {t("pL_expenses")}
                                     </span>
                                   </td>
-                                  {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                  {compareIncomeRows.map((row) => (
                                     <td
-                                      key={ym}
+                                      key={row.ym}
                                       className="p-2 text-right font-mono text-muted-foreground whitespace-nowrap"
                                     >
-                                      {rowData.error ? "—" : formatBath(Number(rowData.expenses) || 0)}
+                                      {row.data.error
+                                        ? "—"
+                                        : formatBath(
+                                            incomeMetricsForCompareRow(row, vatDisplayMode)?.expenses ?? 0
+                                          )}
                                     </td>
                                   ))}
                                 </tr>
