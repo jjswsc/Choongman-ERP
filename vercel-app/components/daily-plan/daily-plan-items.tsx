@@ -28,6 +28,8 @@ import {
   type DailyPlanTeamMember,
 } from "@/lib/api-client"
 import { getBangkokDateTimeString, getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { useLang } from "@/lib/lang-context"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
@@ -100,6 +102,7 @@ export function DailyPlanItems(props: {
   onLink?: (item: DailyPlanItem, kind: DailyPlanLinkKind) => void
 }) {
   const { plan, items, t, travelMinutes, readOnly, canDelegate, delegateTargets, onChanged, onLink } = props
+  const { lang } = useLang()
   const label = dailyPlanLabelers(t)
   const fileRef = useRef<HTMLInputElement>(null)
   const [photoTarget, setPhotoTarget] = useState<DailyPlanItem | null>(null)
@@ -119,6 +122,23 @@ export function DailyPlanItems(props: {
     const id = window.setInterval(() => setNowMin(bangkokNowMin()), 60_000)
     return () => window.clearInterval(id)
   }, [isToday])
+
+  /** 외국인 직원: 상단 언어에 맞춰 업무 제목·설명 번역 (모바일은 자동번역 토글 없음 → force) */
+  const textsToTranslate = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const it of items) {
+      const title = dailyPlanItemTitle(it.title, t).trim()
+      const desc = String(it.description || "").trim()
+      for (const s of [title, desc, String(it.title || "").trim()]) {
+        if (!s || seen.has(s)) continue
+        seen.add(s)
+        out.push(s)
+      }
+    }
+    return out
+  }, [items, t])
+  const displayText = useTranslatedTextMap(textsToTranslate, lang, { force: true })
 
   const timeline = useMemo(
     () =>
@@ -303,10 +323,14 @@ export function DailyPlanItems(props: {
                   <span className="ml-auto font-medium">{label.itemStatus(it.status)}</span>
                 </div>
                 <p className={cn("mt-1 text-sm font-medium", it.status === "done" && "line-through decoration-1")}>
-                  {isVisit ? `📍 ${t("dp_visit_title")} · ${it.title}` : dailyPlanItemTitle(it.title, t)}
+                  {isVisit
+                    ? `📍 ${t("dp_visit_title")} · ${displayText(it.title)}`
+                    : displayText(dailyPlanItemTitle(it.title, t))}
                 </p>
                 {it.description ? (
-                  <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">{it.description}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
+                    {displayText(it.description)}
+                  </p>
                 ) : null}
                 {it.status === "done" && it.actual_minutes != null ? (
                   <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">

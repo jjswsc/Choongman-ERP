@@ -71,12 +71,17 @@ describe("pickRoutineTemplate", () => {
     tpl({ id: 2, roleScope: "staff", position: "kitchen" }),
     tpl({ id: 3, roleScope: "staff", position: "kitchen", storeName: "Silom" }),
     tpl({ id: 4, roleScope: "staff", position: "kitchen", storeName: "MBK", status: "draft" }),
+    tpl({ id: 5, roleScope: "manager", position: "service", storeName: "CM Silom", status: "active" }),
+    tpl({ id: 6, roleScope: "manager", position: "all", status: "active" }),
   ]
   it("prefers store > position > generic and ignores drafts", () => {
     expect(pickRoutineTemplate(list, { role: "staff", position: "kitchen", store: "Silom" })?.id).toBe(3)
     expect(pickRoutineTemplate(list, { role: "staff", position: "kitchen", store: "MBK" })?.id).toBe(2)
     expect(pickRoutineTemplate(list, { role: "staff", position: "service", store: "MBK" })?.id).toBe(1)
-    expect(pickRoutineTemplate(list, { role: "manager", position: "all", store: "MBK" })).toBeNull()
+    expect(pickRoutineTemplate(list, { role: "manager", position: "all", store: "MBK" })?.id).toBe(6)
+  })
+  it("matches manager position=all to store-scoped service templates (Silom case)", () => {
+    expect(pickRoutineTemplate(list, { role: "manager", position: "all", store: "CM Silom" })?.id).toBe(5)
   })
 })
 

@@ -588,7 +588,7 @@ export const MANUAL_BLOCK = 'manual'
 /** 일정표 보장 — 없으면 생성, regenerate면 미착수 항목 재생성. 마감된 일정표는 건드리지 않음 */
 export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: DailyPlanRow | null; created: boolean }> {
   const existing = p.knownMissing ? null : await getDailyPlanFor(p.date, p.employee.id)
-  if (existing && (existing.status === 'closed' || !p.regenerate)) return { plan: existing, created: false }
+  if (existing?.status === 'closed') return { plan: existing, created: false }
 
   const ctx = p.ctx || (await loadDailyPlanGenContext())
   const routeStores = (p.routeStores ?? existing?.route_stores ?? []).map((s) => String(s || '').trim()).filter(Boolean)
@@ -612,6 +612,15 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
     carry,
     hqTasks: p.hqTasks ?? [],
   })
+
+  /** 템플릿 미매칭으로 생긴 빈 껍데기(template_id 없음) → 이제 루틴이 있으면 자동 재생성 */
+  const healEmptyShell =
+    !!existing &&
+    !p.regenerate &&
+    !existing.template_id &&
+    drafts.some((d) => d.source === 'routine')
+
+  if (existing && !p.regenerate && !healEmptyShell) return { plan: existing, created: false }
 
   const now = new Date().toISOString()
 
@@ -738,16 +747,18 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
     loadActivePlanEmployees(),
     loadDailyPlanGenContext(),
     supabaseSelectFilter('daily_plans', `plan_date=eq.${date}`, {
-      select: 'employee_id,route_stores',
+      select: 'employee_id,route_stores,template_id',
       limit: 5000,
-    }) as Promise<{ employee_id?: number; route_stores?: unknown }[]>,
+    }) as Promise<{ employee_id?: number; route_stores?: unknown; template_id?: number | null }[]>,
     supabaseSelectFilter('schedules', `schedule_date=eq.${date}`, {
       select: 'employee_id,name,store_name,plan_in,plan_out,memo',
       limit: 5000,
     }).catch(() => []) as Promise<ScheduleLite[]>,
   ])
   ctx.carry = await loadCarryMap(date)
-  const existingIds = new Set((existingRows || []).map((r) => Number(r.employee_id)))
+  const existingByEmp = new Map(
+    (existingRows || []).map((r) => [Number(r.employee_id), r] as const)
+  )
   const byId = new Map(employees.map((e) => [e.id, e]))
   const byName = new Map<string, PlanEmployee>()
   for (const e of employees) {
@@ -776,13 +787,17 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
 
   const autoRoutes = await suggestRoutesForSupervisors(
     date,
-    targets.filter((t) => t.role === 'supervisor' && !existingIds.has(t.emp.id)).map((t) => t.emp),
+    targets
+      .filter((t) => t.role === 'supervisor' && !existingByEmp.has(t.emp.id))
+      .map((t) => t.emp),
     ctx.actions,
     (existingRows || []).flatMap((r) => routeOf(r.route_stores))
   )
 
   await runInBatches(targets, 5, async (t) => {
-    if (existingIds.has(t.emp.id)) {
+    const existingRow = existingByEmp.get(t.emp.id)
+    const shellWithoutTemplate = !!existingRow && (existingRow.template_id == null || existingRow.template_id === 0)
+    if (existingRow && !shellWithoutTemplate) {
       result.existing += 1
       return
     }
@@ -797,10 +812,13 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
         shiftOut: String(t.s?.plan_out || ''),
         routeStores: autoRoutes.get(t.emp.id),
         actor,
-        knownMissing: true,
+        knownMissing: !existingRow,
+        regenerate: shellWithoutTemplate,
+        force: shellWithoutTemplate,
         ctx,
       })
       if (r.created) result.created += 1
+      else if (shellWithoutTemplate && r.plan) result.created += 1
       else result.skipped += 1
     } catch (e) {
       result.failed += 1

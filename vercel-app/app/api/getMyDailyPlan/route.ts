@@ -68,10 +68,24 @@ export async function GET(request: NextRequest) {
     if (!plan && date === today && scope.actorEmployeeId) {
       const emp = await loadPlanEmployeeById(scope.actorEmployeeId)
       if (emp) plan = await ensureDailyPlanOnDemand(date, emp, scope.actorName || 'self')
+    } else if (plan && !plan.template_id && date === today && scope.actorEmployeeId) {
+      /** 템플릿 미매칭으로 생긴 빈 껍데기 → 앱 열 때 루틴 재채움 */
+      const emp = await loadPlanEmployeeById(scope.actorEmployeeId)
+      if (emp) {
+        const healed = await ensureDailyPlanOnDemand(date, emp, scope.actorName || 'self')
+        if (healed) plan = healed
+      }
     }
 
     const nextDate = addDaysYmdUtc(date, 1)
-    const nextPlan = await findOwnPlan(nextDate, scope.actorEmployeeId, scope.actorName)
+    let nextPlan = await findOwnPlan(nextDate, scope.actorEmployeeId, scope.actorName)
+    if (nextPlan?.published_at && !nextPlan.template_id && scope.actorEmployeeId) {
+      const emp = await loadPlanEmployeeById(scope.actorEmployeeId)
+      if (emp) {
+        const healed = await ensureDailyPlanOnDemand(nextDate, emp, scope.actorName || 'self')
+        if (healed) nextPlan = healed
+      }
+    }
     const tomorrow = nextPlan && nextPlan.published_at ? await withItems(nextPlan) : null
 
     return NextResponse.json({ success: true, date, today: await withItems(plan), tomorrow })

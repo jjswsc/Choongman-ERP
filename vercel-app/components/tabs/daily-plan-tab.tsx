@@ -12,6 +12,7 @@ import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useStoreView } from "@/lib/store-view-context"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import {
   closeDailyPlan,
   getDailyPlanTeam,
@@ -47,9 +48,15 @@ function teamMemberMatchesPicker(
 }
 
 function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => string }) {
+  const { lang } = useLang()
   const label = dailyPlanLabelers(t)
   const { plan, summary } = bundle
   const route = (plan.route_stores || []).join(" → ")
+  const briefingTexts = useMemo(
+    () => (plan.briefing_note ? [String(plan.briefing_note).trim()] : []),
+    [plan.briefing_note]
+  )
+  const trBriefing = useTranslatedTextMap(briefingTexts, lang, { force: true })
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -75,7 +82,9 @@ function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => 
         {minutesLabel(summary.estTotal, t)} · {t("dp_actual")} {minutesLabel(summary.actualTotal, t)}
       </p>
       {plan.briefing_note ? (
-        <p className="rounded bg-amber-50 p-2 text-xs whitespace-pre-wrap dark:bg-amber-950/30">💬 {plan.briefing_note}</p>
+        <p className="rounded bg-amber-50 p-2 text-xs whitespace-pre-wrap dark:bg-amber-950/30">
+          💬 {trBriefing(plan.briefing_note) || plan.briefing_note}
+        </p>
       ) : null}
     </div>
   )

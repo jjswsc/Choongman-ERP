@@ -146,7 +146,9 @@ export function pickRoutineTemplate(
     const tStore = norm(t.storeName)
     if (tStore && tStore !== store) continue
     const tPos = norm(t.position) || "all"
-    if (tPos !== "all" && tPos !== pos) continue
+    // 직원(kitchen/service 등)은 구역이 맞아야 함.
+    // 매니저·SV 생성은 position=all 이므로, 구역이 찍힌 템플릿(หน้าร้าน 등)도 후보에 넣는다.
+    if (pos !== "all" && tPos !== "all" && tPos !== pos) continue
     const score = (tStore ? 4 : 0) + (tPos !== "all" ? 2 : 0) + (t.status === "active" ? 1 : 0)
     if (!best || score > best.score || (score === best.score && t.id > best.t.id)) best = { t, score }
   }
