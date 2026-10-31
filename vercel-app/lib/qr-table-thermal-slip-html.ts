@@ -2,6 +2,7 @@
  * POS 열전사(80mm) — 테이블 QR 주문 슬립.
  * 관리자 A6 텐트 카드(PDF)와 문구는 같고, 용지만 영수증 프린터에 맞춘다.
  */
+import { getBangkokDateTimeString } from '@/lib/bangkok-time'
 import { posThermalReceiptPageSizeRule } from '@/lib/pos-receipt-paper'
 import { POS_PRINT_NOTO_SANS_THAI_FONT_LINKS } from '@/lib/pos-print-font-links'
 import { escapeHtml } from '@/lib/utils'
@@ -17,6 +18,12 @@ export const QR_TABLE_THERMAL_SCAN_TH = 'สแกนเพื่อสั่ง
 export const QR_TABLE_THERMAL_SCAN_EN = 'Scan to order from your phone'
 export const QR_TABLE_THERMAL_WIFI_HINT = 'Wi-Fi recommended · No app install'
 
+/** 방콕 벽시계 — 전표에 「พิมพ์ YYYY-MM-DD HH:mm」 */
+export function formatQrTableThermalSlipPrintedAt(base: Date = new Date()): string {
+  const s = getBangkokDateTimeString(base)
+  return `พิมพ์ ${s.slice(0, 16)}`
+}
+
 export type QrTableThermalSlipInput = {
   tableName: string
   /** data:image/... QR (원격 URL 금지 — Electron 인쇄 지연) */
@@ -25,6 +32,8 @@ export type QrTableThermalSlipInput = {
   scanTh?: string
   scanEn?: string
   wifiHint?: string
+  /** 비우면 인쇄 시점 방콕 시각 자동. 테스트·재현용으로만 고정 문자열 전달 */
+  printedAtLabel?: string
 }
 
 export function pickQrTokenForTable<T extends { tableName: string }>(
@@ -55,6 +64,8 @@ export function buildQrTableThermalSlipHtml(input: QrTableThermalSlipInput): str
   const scanTh = String(input.scanTh || '').trim() || QR_TABLE_THERMAL_SCAN_TH
   const scanEn = String(input.scanEn || '').trim() || QR_TABLE_THERMAL_SCAN_EN
   const wifiHint = String(input.wifiHint || '').trim() || QR_TABLE_THERMAL_WIFI_HINT
+  const printedAt =
+    String(input.printedAtLabel || '').trim() || formatQrTableThermalSlipPrintedAt()
   const pad = QR_TABLE_THERMAL_SLIP_PADDING_MM
   const c = (tag: string) => '\u003c/' + tag + '>'
   const title = escapeHtml(`QR ${tableName}`)
@@ -74,7 +85,8 @@ export function buildQrTableThermalSlipHtml(input: QrTableThermalSlipInput): str
     ` .qr { width: ${QR_TABLE_THERMAL_SLIP_QR_MM}mm; height: ${QR_TABLE_THERMAL_SLIP_QR_MM}mm; margin: 0 auto; display: block; background: #fff; }` +
     ' .scan-th { font-size: 13px; font-weight: 800; margin: 8px 0 2px; }' +
     ' .scan-en { font-size: 11px; font-weight: 700; margin: 0 0 4px; }' +
-    ' .wifi { font-size: 9px; font-weight: 600; margin: 0; }'
+    ' .wifi { font-size: 9px; font-weight: 600; margin: 0 0 4px; }' +
+    ' .printed-at { font-size: 9px; font-weight: 700; margin: 0; letter-spacing: 0.02em; }'
   return (
     '<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/>' +
     POS_PRINT_NOTO_SANS_THAI_FONT_LINKS +
@@ -92,6 +104,7 @@ export function buildQrTableThermalSlipHtml(input: QrTableThermalSlipInput): str
     `<p class="scan-th">${escapeHtml(scanTh)}</p>` +
     `<p class="scan-en">${escapeHtml(scanEn)}</p>` +
     `<p class="wifi">${escapeHtml(wifiHint)}</p>` +
+    `<p class="printed-at">${escapeHtml(printedAt)}</p>` +
     c('div') +
     c('body') +
     c('html')

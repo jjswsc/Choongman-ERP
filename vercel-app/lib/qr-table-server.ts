@@ -226,7 +226,7 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
     /** 컬럼 미배포·null 이면 기존과 같이 허용 */
     guestBillPayEnabled: row.guest_bill_pay_enabled !== false,
     requireStaffOpen: row.require_staff_open !== false,
-    maxOpenMinutes: Math.max(30, Math.floor(asNum(row.max_open_minutes) || 240)),
+    maxOpenMinutes: Math.max(30, Math.floor(asNum(row.max_open_minutes) || 720)),
     allowReorderAfterPaid: Boolean(row.allow_reorder_after_paid),
     printLogoUrl: String(row.print_logo_url || '').trim(),
     printBrandColor: String(row.print_brand_color || '').trim() || '#b45309',
@@ -410,7 +410,7 @@ export async function upsertQrOrderStoreSettings(
     extras_payment_mode: settings.extrasPaymentMode,
     guest_bill_pay_enabled: settings.guestBillPayEnabled !== false,
     require_staff_open: Boolean(settings.requireStaffOpen),
-    max_open_minutes: Math.max(30, Math.floor(settings.maxOpenMinutes || 240)),
+    max_open_minutes: Math.max(30, Math.floor(settings.maxOpenMinutes || 720)),
     allow_reorder_after_paid: Boolean(settings.allowReorderAfterPaid),
     print_logo_url: String(settings.printLogoUrl || '').trim() || null,
     print_brand_color: String(settings.printBrandColor || '').trim() || null,
@@ -759,7 +759,7 @@ export async function expireSessionIfStale(session: QrTableSession): Promise<QrT
     // max_open_minutes 하한은 30분 — 그 안이면 설정 조회 없이 통과 (카트 제출 핫패스)
     if (sessionAgeMinutes(session.createdAt) < 30) return session
     const settings = await loadQrOrderStoreSettings(session.storeCode)
-    const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 240))
+    const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 720))
     if (sessionAgeMinutes(session.createdAt) < maxMin) return session
     const now = getBangkokDateTimeString()
     await supabaseUpdateByFilter('pos_qr_table_sessions', `id=eq.${session.id}`, {
@@ -940,7 +940,7 @@ export async function listActiveQrSessionsForStore(
     const settings = await loadQrOrderStoreSettings(code)
     if (!settings.enabled) return { enabled: false, sessions: [] }
 
-    const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 240))
+    const maxMin = Math.max(30, Math.floor(settings.maxOpenMinutes || 720))
     const rows = (await supabaseSelectFilter(
       'pos_qr_table_sessions',
       `store_code=eq.${encodeURIComponent(code)}&status=in.(awaiting_entry,active)`,

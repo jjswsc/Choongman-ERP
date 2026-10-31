@@ -637,7 +637,7 @@ export function PosQrTableOrderContent() {
                   onChange={(e) =>
                     setSettings((s) => ({
                       ...s,
-                      maxOpenMinutes: Math.max(30, Math.min(720, Number(e.target.value || 240))),
+                      maxOpenMinutes: Math.max(30, Math.min(720, Number(e.target.value || 720))),
                     }))
                   }
                 />

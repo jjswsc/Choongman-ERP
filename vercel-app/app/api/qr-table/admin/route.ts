@@ -66,7 +66,7 @@ export async function PUT(req: NextRequest) {
       extrasPaymentMode: (String(body.extrasPaymentMode || 'postpay') as QrPaymentMode) || 'postpay',
       guestBillPayEnabled: body.guestBillPayEnabled !== false,
       requireStaffOpen: body.requireStaffOpen !== false,
-      maxOpenMinutes: Number(body.maxOpenMinutes || 240),
+      maxOpenMinutes: Number(body.maxOpenMinutes || 720),
       allowReorderAfterPaid: Boolean(body.allowReorderAfterPaid),
       printLogoUrl: body.printLogoUrl != null ? String(body.printLogoUrl) : '',
       printBrandColor: body.printBrandColor != null ? String(body.printBrandColor) : '',

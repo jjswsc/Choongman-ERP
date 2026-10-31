@@ -23,7 +23,7 @@ insert into public.pos_qr_order_store_settings (
   'guest_choice', -- 또는 postpay(1차 안전) / prepay
   'postpay',
   true,
-  240,
+  720,
   false,
   now()
 )

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildQrTableThermalSlipHtml,
+  formatQrTableThermalSlipPrintedAt,
   pickQrTokenForTable,
   QR_TABLE_THERMAL_SCAN_TH,
   QR_TABLE_THERMAL_SLIP_QR_MM,
@@ -19,11 +20,13 @@ describe('qr-table-thermal-slip-html', () => {
     expect(pickQrTokenForTable(tokens, '2')).toBeUndefined()
   })
 
-  it('builds an 80mm slip with table name, scan copy, and data-URI QR', () => {
+  it('builds an 80mm slip with table name, scan copy, print time, and data-URI QR', () => {
+    const printedAtLabel = 'พิมพ์ 2026-10-31 12:40'
     const html = buildQrTableThermalSlipHtml({
       tableName: '20',
       qrDataUrl: QR_DATA,
       storeLabel: 'Omni',
+      printedAtLabel,
     })
     expect(html).toContain('size: 80mm')
     expect(html).toContain('TABLE')
@@ -31,9 +34,15 @@ describe('qr-table-thermal-slip-html', () => {
     expect(html).toContain('Omni')
     expect(html).toContain(QR_TABLE_THERMAL_SCAN_TH)
     expect(html).toContain('Scan to order from your phone')
+    expect(html).toContain(printedAtLabel)
     expect(html).toContain(QR_DATA)
     expect(html).toContain(`${QR_TABLE_THERMAL_SLIP_QR_MM}mm`)
     expect(html).not.toContain('https://')
+  })
+
+  it('formats Bangkok wall-clock print time for the slip', () => {
+    const label = formatQrTableThermalSlipPrintedAt(new Date('2026-10-31T05:40:00.000Z'))
+    expect(label).toBe('พิมพ์ 2026-10-31 12:40')
   })
 
   it('strips Korean 번 from the slip table label', () => {

@@ -487,7 +487,7 @@ export function defaultQrOrderStoreSettings(storeCode: string): QrOrderStoreSett
     extrasPaymentMode: 'postpay',
     guestBillPayEnabled: true,
     requireStaffOpen: true,
-    maxOpenMinutes: 240,
+    maxOpenMinutes: 720,
     allowReorderAfterPaid: false,
     printLogoUrl: '',
     printBrandColor: '#b45309',
