@@ -10,17 +10,29 @@ export interface StoreViewContextValue {
   /** 모바일에서 오피스 직원이 선택한 "조회 기준 매장" (없으면 null) */
   viewStore: string | null
   setViewStore: (store: string | null) => void
+  /**
+   * 상단 검색칸 입력값 — 매장 드롭다운·팀 목록 등 공통 텍스트 필터.
+   * 별도 필터 칸을 두지 않고 같은 검색칸에서 함께 쓴다.
+   */
+  storePickerQuery: string
+  setStorePickerQuery: (q: string) => void
 }
 
 const StoreViewContext = createContext<StoreViewContextValue | null>(null)
 
 export function StoreViewProvider({ children }: { children: React.ReactNode }) {
   const [viewStore, setViewStoreState] = useState<string | null>(null)
+  const [storePickerQuery, setStorePickerQueryState] = useState('')
   const setViewStore = useCallback((store: string | null) => {
     setViewStoreState(store)
   }, [])
+  const setStorePickerQuery = useCallback((q: string) => {
+    setStorePickerQueryState(q)
+  }, [])
   return (
-    <StoreViewContext.Provider value={{ viewStore, setViewStore }}>
+    <StoreViewContext.Provider
+      value={{ viewStore, setViewStore, storePickerQuery, setStorePickerQuery }}
+    >
       {children}
     </StoreViewContext.Provider>
   )
@@ -28,7 +40,14 @@ export function StoreViewProvider({ children }: { children: React.ReactNode }) {
 
 export function useStoreView() {
   const ctx = useContext(StoreViewContext)
-  return ctx ?? { viewStore: null, setViewStore: () => {} }
+  return (
+    ctx ?? {
+      viewStore: null,
+      setViewStore: () => {},
+      storePickerQuery: '',
+      setStorePickerQuery: () => {},
+    }
+  )
 }
 
 /** Office(본사)가 아닌 실제 매장만 반환 */

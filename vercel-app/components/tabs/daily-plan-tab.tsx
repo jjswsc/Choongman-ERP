@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronUp, Copy, Lock, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { useStoreView } from "@/lib/store-view-context"
 import {
   closeDailyPlan,
   getDailyPlanTeam,
@@ -22,6 +23,28 @@ import {
 } from "@/lib/api-client"
 import { buildDailyPlanLineText, dailyPlanLabelers, dailyPlanLinkHref, minutesLabel } from "@/lib/daily-plan-i18n"
 import { DailyPlanItems, type DailyPlanLinkKind } from "@/components/daily-plan/daily-plan-items"
+
+function teamMemberMatchesViewStore(memberStore: string, viewStore: string | null): boolean {
+  const selected = String(viewStore || "").trim()
+  if (!selected || selected === "All") return true
+  const a = String(memberStore || "").trim().toLowerCase()
+  const b = selected.toLowerCase()
+  if (!a) return false
+  return a === b || a.includes(b) || b.includes(a)
+}
+
+/** 상단 검색칸 한 줄로 매장 칩 필터 + 이름·매장 텍스트 필터 */
+function teamMemberMatchesPicker(
+  m: Pick<DailyPlanTeamMember, "store" | "name" | "nick">,
+  viewStore: string | null,
+  query: string
+): boolean {
+  if (!teamMemberMatchesViewStore(m.store, viewStore)) return false
+  const q = String(query || "").trim().toLowerCase()
+  if (!q) return true
+  const hay = `${m.store} ${m.name} ${m.nick}`.toLowerCase()
+  return hay.includes(q)
+}
 
 function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => string }) {
   const label = dailyPlanLabelers(t)
@@ -65,6 +88,7 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
   const t = useT(lang)
   const label = dailyPlanLabelers(t)
   const router = useRouter()
+  const { viewStore, storePickerQuery } = useStoreView()
   const [today, setToday] = useState<DailyPlanBundle | null>(null)
   const [tomorrow, setTomorrow] = useState<DailyPlanBundle | null>(null)
   const [loading, setLoading] = useState(false)
@@ -77,6 +101,11 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
   const [memberBundle, setMemberBundle] = useState<DailyPlanBundle | null>(null)
   const [memberName, setMemberName] = useState("")
   const [creatingId, setCreatingId] = useState<number | null>(null)
+
+  const visibleTeamMembers = useMemo(
+    () => teamMembers.filter((m) => teamMemberMatchesPicker(m, viewStore, storePickerQuery)),
+    [teamMembers, viewStore, storePickerQuery]
+  )
 
   const loadMine = useCallback(async () => {
     setLoading(true)
@@ -279,14 +308,14 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
 
       {view === "team" ? (
         <div className="space-y-2">
-          {teamMembers.length === 0 ? (
+          {visibleTeamMembers.length === 0 ? (
             <Card>
               <CardContent className="p-4 text-center text-sm text-muted-foreground">
                 {loading ? t("loading") : t("dp_team_empty")}
               </CardContent>
             </Card>
           ) : (
-            teamMembers.map((m) => (
+            visibleTeamMembers.map((m) => (
               <Card key={m.employeeId}>
                 <CardContent className="flex items-center gap-2 p-3">
                   <div className="min-w-0 flex-1">
