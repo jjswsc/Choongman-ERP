@@ -1,8 +1,8 @@
 /**
  * 서버 런타임 번역 (Google gtx → MyMemory 폴백)
- * /api/translate · getMyNotices(lang) · FCM 등에서 공유
+ * /api/translate · getMyNotices(lang) · FCM · 일정표 업무 문구 등에서 공유
  *
- * 품질(A): 용어집 보호/복원 + 메모리·DB(translate_cache) 이중 캐시
+ * 품질: 용어집 보호/복원 + 메모리·DB(translate_cache) 이중 캐시
  */
 import { createHash } from 'node:crypto'
 import {
@@ -308,7 +308,6 @@ export async function translateOneRuntime(text: string, targetLang: string): Pro
   const { text: protectedText, slots } = protectGlossaryTerms(trimmed)
   let out = await translateProvidersRaw(protectedText, tl)
   if (out == null) {
-    // 보호문이 실패하면 원문 재시도
     out = protectedText !== trimmed ? await translateProvidersRaw(trimmed, tl) : null
   }
 

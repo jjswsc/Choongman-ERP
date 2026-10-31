@@ -123,14 +123,19 @@ export function DailyPlanItems(props: {
     return () => window.clearInterval(id)
   }, [isToday])
 
-  /** 외국인 직원: 상단 언어에 맞춰 업무 제목·설명 번역 (모바일은 자동번역 토글 없음 → force) */
+  /** 외국인 직원: 제목·설명·메모·스킵사유 전부 번역 (모바일은 자동번역 토글 없음 → force) */
   const textsToTranslate = useMemo(() => {
     const out: string[] = []
     const seen = new Set<string>()
     for (const it of items) {
       const title = dailyPlanItemTitle(it.title, t).trim()
-      const desc = String(it.description || "").trim()
-      for (const s of [title, desc, String(it.title || "").trim()]) {
+      for (const s of [
+        title,
+        String(it.title || "").trim(),
+        String(it.description || "").trim(),
+        String(it.note || "").trim(),
+        String(it.skip_reason || "").trim(),
+      ]) {
         if (!s || seen.has(s)) continue
         seen.add(s)
         out.push(s)
@@ -343,7 +348,7 @@ export function DailyPlanItems(props: {
                 ) : null}
                 {it.skip_reason ? (
                   <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">
-                    {t("dp_skip_reason")}: {it.skip_reason}
+                    {t("dp_skip_reason")}: {displayText(it.skip_reason)}
                   </p>
                 ) : null}
                 {it.status === "delegated" && it.delegated_to_name ? (
@@ -356,7 +361,7 @@ export function DailyPlanItems(props: {
                     {t("dp_delegated_from").replace("{name}", it.delegated_by_name)}
                   </p>
                 ) : null}
-                {it.note ? <p className="mt-0.5 text-[11px]">📝 {it.note}</p> : null}
+                {it.note ? <p className="mt-0.5 text-[11px]">📝 {displayText(it.note)}</p> : null}
                 {photos.length > 0 ? (
                   <div className="mt-1 flex gap-1 overflow-x-auto">
                     {photos.map((u) => (
@@ -464,7 +469,7 @@ export function DailyPlanItems(props: {
           <div className="max-h-[70vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-3 shadow-lg">
             <p className="text-sm font-semibold">{t("dp_delegate_title")}</p>
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-              {dailyPlanItemTitle(delegateItem.title, t)}
+              {displayText(dailyPlanItemTitle(delegateItem.title, t))}
             </p>
             <div className="mt-3 space-y-1.5">
               {targets.map((m) => (
