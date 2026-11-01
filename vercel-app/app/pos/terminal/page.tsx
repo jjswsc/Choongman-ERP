@@ -182,6 +182,10 @@ import {
   pickPosChannelOrderNo,
 } from '@/lib/pos-delivery-platform'
 import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-pending'
+import {
+  isPosOrderFullyPaidButOpen,
+  isPosOrderFullyPaidButOpenFromDbRow,
+} from '@/lib/pos-kbank-counter-qr-finalize-shared'
 import { formatGrabDeliveryTableDisplayName } from '@/lib/pos-grab-manual-delivery-guard'
 import {
   buildDineInAddKitchenAutoPrintDedupeKey,
@@ -5169,6 +5173,8 @@ export default function PosTerminalPage() {
         created_by: String(row.created_by ?? ''),
       })
       const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+      /** Thai QR 대기(금액 선기록·status 미마감): 홀 영수증만 막고 주방은 허용 */
+      const skipHallForCounterQrPending = isPosOrderFullyPaidButOpenFromDbRow(row)
       const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
         createdBy: String(row.created_by ?? ''),
         memo,
@@ -5185,13 +5191,20 @@ export default function PosTerminalPage() {
           isPendingDelivery,
           shouldWaitForDeliveryAccept,
           shouldWaitForMemberPortalPrepay,
+          skipHallForCounterQrPending,
         })
-        if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+        const wantHall = autoPrintReceiptOnOrder && !skipHallForCounterQrPending
+        if (wantHall && autoPrintKitchenSlipOnOrder) {
           printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true, runKitchenFromRealtimeOrderInsert)
-        } else if (autoPrintReceiptOnOrder) {
+        } else if (wantHall) {
           printReceiptNow(receiptPayloadRealtime, undefined, false, undefined, true)
         } else if (autoPrintKitchenSlipOnOrder) {
+          if (skipHallForCounterQrPending) {
+            logPosPrintDebug('realtime_insert_skip_hall_counter_qr_pending', { orderId })
+          }
           setTimeout(runKitchenFromRealtimeOrderInsert, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
+        } else if (skipHallForCounterQrPending) {
+          logPosPrintDebug('realtime_insert_skip_hall_counter_qr_pending', { orderId })
         }
       } else {
         logPosPrintDebug('realtime_insert_deferred_autoprint', {
@@ -6145,6 +6158,16 @@ export default function PosTerminalPage() {
             created_by: undefined,
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+          const skipHallForCounterQrPending = isPosOrderFullyPaidButOpen({
+            status: order.status,
+            total: order.total,
+            paymentCash: order.paymentCash,
+            paymentCard: order.paymentCard,
+            paymentQr: order.paymentQr,
+            paymentOther: order.paymentOther,
+            paymentDeliveryApp: order.paymentDeliveryApp,
+            paymentCrypto: (order as { paymentCrypto?: number }).paymentCrypto,
+          })
           const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
             createdBy: String((order as { createdBy?: string }).createdBy ?? ''),
             memo: String(order.memo ?? ''),
@@ -6161,13 +6184,20 @@ export default function PosTerminalPage() {
               isPendingDelivery,
               shouldWaitForDeliveryAccept,
               shouldWaitForMemberPortalPrepay,
+              skipHallForCounterQrPending,
             })
-            if (autoPrintReceiptOnOrder && autoPrintKitchenSlipOnOrder) {
+            const wantHall = autoPrintReceiptOnOrder && !skipHallForCounterQrPending
+            if (wantHall && autoPrintKitchenSlipOnOrder) {
               printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true, runKitchenForPolledOrder)
-            } else if (autoPrintReceiptOnOrder) {
+            } else if (wantHall) {
               printReceiptNow(receiptPayloadPoll, undefined, false, undefined, true)
             } else if (autoPrintKitchenSlipOnOrder) {
+              if (skipHallForCounterQrPending) {
+                logPosPrintDebug('poll_skip_hall_counter_qr_pending', { orderId: oid })
+              }
               setTimeout(runKitchenForPolledOrder, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
+            } else if (skipHallForCounterQrPending) {
+              logPosPrintDebug('poll_skip_hall_counter_qr_pending', { orderId: oid })
             }
           } else {
             logPosPrintDebug('poll_deferred_autoprint', {
@@ -10973,6 +11003,9 @@ export default function PosTerminalPage() {
                       }
                     )
                   } else {
+                    if (isMainPosDevice) {
+                      markPosTerminalOrderSubmitInFlight(30_000)
+                    }
                     const res = await savePosOrderWithOffline({
                       storeCode: currentStoreId,
                       createdBy: auth?.user ?? '',
@@ -11005,6 +11038,10 @@ export default function PosTerminalPage() {
                     }
                     orderIdToComplete = (res as { orderId?: number }).orderId ?? null
                     orderNo = (res as { orderNo?: string }).orderNo ?? ''
+                    if (orderIdToComplete != null && orderIdToComplete > 0) {
+                      seenOrderIdsRef.current.add(orderIdToComplete)
+                      bumpLastSeenOrderId(orderIdToComplete)
+                    }
                     await notifyQueuedSave(orderNo, (res as { queued?: boolean }).queued)
                     capturePaymentReceiptMember(res, {
                       memberId: payload.memberId,
@@ -11747,7 +11784,21 @@ export default function PosTerminalPage() {
                     ? resolveAfterReceiptToKitchenDelayMs()
                     : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
 
-                if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
+                /**
+                 * Thai QR 대기(kbankQrPending): hasPayment=false 이지만 결제 전 영수증/모달 금지.
+                 * 주방 전표만 허용(조리 시작). 결제 영수증은 승인 후 finalize에서만.
+                 */
+                if (kbankQrPending) {
+                  if (
+                    isMainPosDevice &&
+                    !suppressReceiptModalAutoPrint &&
+                    autoPrintKitchenNonDine &&
+                    payloadItemsNormalized.length > 0
+                  ) {
+                    markQueuedLocalPrintedIfNeeded()
+                    setTimeout(runKitchenAfterNonDineSubmit, KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS)
+                  }
+                } else if (!hasPayment && isMainPosDevice && !suppressReceiptModalAutoPrint) {
                   if (autoPrintReceiptNonDine && autoPrintKitchenNonDine && payloadItemsNormalized.length > 0) {
                     markQueuedLocalPrintedIfNeeded()
                     void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true, runKitchenAfterNonDineSubmit)

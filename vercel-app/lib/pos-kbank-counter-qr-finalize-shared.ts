@@ -48,6 +48,32 @@ export function isPosOrderFullyPaidButOpen(input: {
   return isPosOrderPaymentCompleteForTotal(total, sum)
 }
 
+/**
+ * Realtime/DB snake_case 행 — Thai QR 대기(금액은 찼지만 status 미마감)면
+ * 홀·주문 영수증 자동인쇄를 막고 주방만 허용할 때 사용.
+ */
+export function isPosOrderFullyPaidButOpenFromDbRow(row: {
+  status?: unknown
+  total?: unknown
+  payment_cash?: unknown
+  payment_card?: unknown
+  payment_qr?: unknown
+  payment_other?: unknown
+  payment_delivery_app?: unknown
+  payment_crypto?: unknown
+}): boolean {
+  return isPosOrderFullyPaidButOpen({
+    status: String(row.status ?? ''),
+    total: Number(row.total ?? 0) || 0,
+    paymentCash: Number(row.payment_cash ?? 0) || 0,
+    paymentCard: Number(row.payment_card ?? 0) || 0,
+    paymentQr: Number(row.payment_qr ?? 0) || 0,
+    paymentOther: Number(row.payment_other ?? 0) || 0,
+    paymentDeliveryApp: Number(row.payment_delivery_app ?? 0) || 0,
+    paymentCrypto: Number(row.payment_crypto ?? 0) || 0,
+  })
+}
+
 export type CounterKbankQrFinalizePatchInput = {
   status: string
   orderType?: string | null

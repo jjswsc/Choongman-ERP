@@ -111,6 +111,10 @@ import {
 import { inferPosOrderTypeFromRow, resolvePosOrderTypeReceiptLabel } from '@/lib/pos-sales-order-type-filter'
 import { isApiInboundDeliveryOrderMemo } from '@/lib/pos-delivery-platform'
 import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-pending'
+import {
+  isPosOrderFullyPaidButOpen,
+  isPosOrderFullyPaidButOpenFromDbRow,
+} from '@/lib/pos-kbank-counter-qr-finalize-shared'
 import { shouldReprintPaymentReceiptForTaxInvoiceMemoChange } from '@/lib/pos-tax-invoice'
 import {
   hallOrderReceiptPayloadFromOrderFields,
@@ -686,7 +690,8 @@ export function usePosMainDeviceSyncHost(): void {
       hallPayload: HallReceiptPrintPayload,
       orderForKitchen: PosOrder | null,
       flow: string,
-      deferAutoprint: boolean
+      deferAutoprint: boolean,
+      opts?: { skipHall?: boolean }
     ) => {
       if (!autoprintCtx || deferAutoprint) {
         if (deferAutoprint) {
@@ -694,22 +699,28 @@ export function usePosMainDeviceSyncHost(): void {
         }
         return
       }
+      const skipHall = Boolean(opts?.skipHall)
+      const wantHall = autoPrint.receiptOnOrder && !skipHall
       logPosPrintDebug(`${flow}_autoprint_start`, {
         orderId,
         autoPrintReceiptOnOrder: autoPrint.receiptOnOrder,
         autoPrintKitchenSlipOnOrder: autoPrint.kitchenOnOrder,
+        skipHallForCounterQrPending: skipHall,
       })
+      if (skipHall) {
+        logPosPrintDebug(`${flow}_skip_hall_counter_qr_pending`, { orderId })
+      }
       const runKitchen = () => {
         if (!orderForKitchen || !autoPrint.kitchenOnOrder) return
         runKitchenAutoprintForOrder(orderForKitchen, autoprintCtx, flow)
       }
-      const kitchenDelayMs = autoPrint.receiptOnOrder
+      const kitchenDelayMs = wantHall
         ? typeof window !== 'undefined' && window.cmPosShell
           ? resolveAfterReceiptToKitchenDelayMs()
           : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
         : KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS
       scheduleHallThenKitchenAutoprint({
-        printHall: autoPrint.receiptOnOrder,
+        printHall: wantHall,
         printKitchen: Boolean(autoPrint.kitchenOnOrder && orderForKitchen),
         runHall: () => {
           void printHallReceiptPayload(hallPayload, autoprintCtx).catch((e) => {
@@ -949,6 +960,7 @@ export function usePosMainDeviceSyncHost(): void {
         created_by: String(row.created_by ?? ''),
       })
       const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+      const skipHallForCounterQrPending = isPosOrderFullyPaidButOpenFromDbRow(row)
 
       const receiptPayload: HallReceiptPrintPayload = {
         ...hallOrderReceiptPayloadFromOrderFields(
@@ -990,7 +1002,9 @@ export function usePosMainDeviceSyncHost(): void {
       if (skipQrSessionOpenPrint) {
         logPosPrintDebug('realtime_insert_skip_qr_table_session_open', { orderId })
       } else if (!skipLocalKitchenAutoprintForOrder(orderId, row)) {
-        runAutoprintForNewOrder(orderId, receiptPayload, orderForKitchen, 'realtime_insert', shouldDeferAutoprint)
+        runAutoprintForNewOrder(orderId, receiptPayload, orderForKitchen, 'realtime_insert', shouldDeferAutoprint, {
+          skipHall: skipHallForCounterQrPending,
+        })
       } else if (
         shouldSyncHostKitchenFallbackForTerminalOrder(orderId, storeCode, autoPrint.kitchenOnOrder)
       ) {
@@ -1771,6 +1785,16 @@ export function usePosMainDeviceSyncHost(): void {
             created_by: undefined,
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
+          const skipHallForCounterQrPending = isPosOrderFullyPaidButOpen({
+            status: order.status,
+            total: order.total,
+            paymentCash: order.paymentCash,
+            paymentCard: order.paymentCard,
+            paymentQr: order.paymentQr,
+            paymentOther: order.paymentOther,
+            paymentDeliveryApp: order.paymentDeliveryApp,
+            paymentCrypto: (order as { paymentCrypto?: number }).paymentCrypto,
+          })
 
           const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
             createdBy: String((order as { createdBy?: string }).createdBy ?? ''),
@@ -1784,7 +1808,9 @@ export function usePosMainDeviceSyncHost(): void {
             order_type: String(order.orderType ?? ''),
             created_by: String((order as { createdBy?: string }).createdBy ?? ''),
           })) {
-            runAutoprintForNewOrder(oid, receiptPayload, order, 'poll', shouldDeferAutoprint)
+            runAutoprintForNewOrder(oid, receiptPayload, order, 'poll', shouldDeferAutoprint, {
+              skipHall: skipHallForCounterQrPending,
+            })
           } else if (shouldSyncHostKitchenFallbackForTerminalOrder(oid, storeCode, autoPrint.kitchenOnOrder)) {
             runKitchenAutoprintForOrder(order, autoprintCtx, 'poll_terminal_kitchen_fallback')
           }

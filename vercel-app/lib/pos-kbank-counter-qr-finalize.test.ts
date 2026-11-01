@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isPosOrderFullyPaidButOpen,
+  isPosOrderFullyPaidButOpenFromDbRow,
   resolveCounterKbankQrCloseStatus,
   resolveCounterKbankQrFinalizePatch,
 } from '@/lib/pos-kbank-counter-qr-finalize-shared'
@@ -52,6 +53,23 @@ describe('isPosOrderFullyPaidButOpen', () => {
         status: 'ready',
         total: 713,
         paymentQr: 400,
+      })
+    ).toBe(false)
+  })
+
+  it('maps snake_case realtime rows (QR pending hall-print guard)', () => {
+    expect(
+      isPosOrderFullyPaidButOpenFromDbRow({
+        status: 'pending',
+        total: 363.31,
+        payment_qr: 363.31,
+      })
+    ).toBe(true)
+    expect(
+      isPosOrderFullyPaidButOpenFromDbRow({
+        status: 'pending',
+        total: 363.31,
+        payment_qr: 0,
       })
     ).toBe(false)
   })
