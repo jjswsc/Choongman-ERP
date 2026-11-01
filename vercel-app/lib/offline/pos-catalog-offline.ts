@@ -14,19 +14,24 @@ import {
 
 /** getPosMenus / fetchPosCatalogCached 와 동일 키 — 백그라운드 갱신 시 UI 동기화에 사용 */
 export const ERP_POS_CATALOG_MENUS_CACHE_KEY = 'erp:posCatalog:menus' as const
-/** 대분류·소분류 표시 순서(tabOrder)가 포함된 카테고리 캐시 */
+/** 대분류·소분류 표시 순서(tabOrder)가 포함된 카테고리 캐시 (테넌트 접미는 posCategoriesCatalogCacheKey) */
 export const ERP_POS_CATALOG_CATEGORIES_CACHE_KEY = 'erp:posCatalog:categories:v2' as const
 
 function readClientTenantHint(): string {
-  if (typeof window === 'undefined') return ''
   try {
+    if (typeof sessionStorage === 'undefined') return ''
     const fromSession = String(sessionStorage.getItem('cm_tenant_id') || '').trim()
     if (fromSession) return fromSession.toLowerCase()
   } catch {
     /* ignore */
   }
   try {
-    const company = String(sessionStorage.getItem('cm_company') || localStorage.getItem('cm_company') || '').trim()
+    if (typeof sessionStorage === 'undefined' && typeof localStorage === 'undefined') return ''
+    const company = String(
+      (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('cm_company') : null) ||
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('cm_company') : null) ||
+        ''
+    ).trim()
     if (!company) return ''
     return company
       .toLowerCase()
@@ -45,6 +50,23 @@ export function posMenusCatalogCacheKey(storeCode?: string | null): string {
     ? `${ERP_POS_CATALOG_MENUS_CACHE_KEY}:t:${tenant}`
     : ERP_POS_CATALOG_MENUS_CACHE_KEY
   return normalized ? `${base}:${normalized}` : base
+}
+
+/** Omni: 법인별 카테고리 캐시 분리 (공유 브라우저에서 마루↔반주 탭 교차 방지) */
+export function posCategoriesCatalogCacheKey(): string {
+  const tenant = readClientTenantHint()
+  return tenant
+    ? `${ERP_POS_CATALOG_CATEGORIES_CACHE_KEY}:t:${tenant}`
+    : ERP_POS_CATALOG_CATEGORIES_CACHE_KEY
+}
+
+/** 카탈로그 갱신 이벤트가 현재 법인 카테고리 키인지 (레거시 전역 키도 허용) */
+export function isPosCategoriesCatalogCacheKey(cacheKey: string | null | undefined): boolean {
+  const key = String(cacheKey || '').trim()
+  if (!key) return false
+  if (key === posCategoriesCatalogCacheKey()) return true
+  if (key === ERP_POS_CATALOG_CATEGORIES_CACHE_KEY) return true
+  return false
 }
 
 /** Wi‑Fi만 연결·서버 무응답 시 fetch가 오래 걸리면 캐시 폴백이 늦아지므로 상한 둠 */

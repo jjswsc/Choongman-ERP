@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **810**개 · 접두어 그룹 **101**개
+- `sql/` 최상위: **828**개 · 접두어 그룹 **102**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -546,6 +546,31 @@
 
 </details>
 
+<details><summary><code>qr_*</code> (20)</summary>
+
+- [`qr_table_guest_bill_pay_01_columns.sql`](../sql/qr_table_guest_bill_pay_01_columns.sql)
+- [`qr_table_max_open_720_01_preview.sql`](../sql/qr_table_max_open_720_01_preview.sql) — preview
+- [`qr_table_max_open_720_02_apply.sql`](../sql/qr_table_max_open_720_02_apply.sql) — apply, log
+- [`qr_table_max_open_720_03_verify.sql`](../sql/qr_table_max_open_720_03_verify.sql) — verify
+- [`qr_table_paid_session_stuck_01_preview.sql`](../sql/qr_table_paid_session_stuck_01_preview.sql) — preview
+- [`qr_table_paid_session_stuck_02_backfill_payment_qr.sql`](../sql/qr_table_paid_session_stuck_02_backfill_payment_qr.sql) — backfill
+- [`qr_table_paid_session_stuck_03_close_sessions.sql`](../sql/qr_table_paid_session_stuck_03_close_sessions.sql)
+- [`qr_table_paid_session_stuck_04_fix_created_at_plus7.sql`](../sql/qr_table_paid_session_stuck_04_fix_created_at_plus7.sql) — apply
+- [`qr_table_paid_session_stuck_05_verify.sql`](../sql/qr_table_paid_session_stuck_05_verify.sql) — verify
+- [`qr_table_paid_session_stuck_06_force_backfill_two.sql`](../sql/qr_table_paid_session_stuck_06_force_backfill_two.sql) — backfill
+- [`qr_table_paid_session_stuck_07_force_created_at_two.sql`](../sql/qr_table_paid_session_stuck_07_force_created_at_two.sql)
+- [`qr_table_the_street_open_orders_01_preview.sql`](../sql/qr_table_the_street_open_orders_01_preview.sql) — preview
+- [`qr_table_the_street_open_sessions_01_preview.sql`](../sql/qr_table_the_street_open_sessions_01_preview.sql) — preview
+- [`qr_table_the_street_open_sessions_02_close_paid.sql`](../sql/qr_table_the_street_open_sessions_02_close_paid.sql)
+- [`qr_table_union_mall_max_open_01_preview.sql`](../sql/qr_table_union_mall_max_open_01_preview.sql) — preview
+- [`qr_table_union_mall_max_open_02_expired_sessions.sql`](../sql/qr_table_union_mall_max_open_02_expired_sessions.sql)
+- [`qr_table_union_mall_max_open_03_set_720.sql`](../sql/qr_table_union_mall_max_open_03_set_720.sql) — apply, log
+- [`qr_table_union_mall_max_open_04_verify.sql`](../sql/qr_table_union_mall_max_open_04_verify.sql) — verify
+- [`qr_table_union_mall_today_sessions_01_preview.sql`](../sql/qr_table_union_mall_today_sessions_01_preview.sql) — preview
+- [`qr_table_union_mall_today_tokens_01_preview.sql`](../sql/qr_table_union_mall_today_tokens_01_preview.sql) — preview
+
+</details>
+
 <details><summary><code>tax_*</code> (18)</summary>
 
 - [`tax_accounting_periods_01.sql`](../sql/tax_accounting_periods_01.sql)
@@ -676,22 +701,6 @@
 
 </details>
 
-<details><summary><code>qr_*</code> (11)</summary>
-
-- [`qr_table_guest_bill_pay_01_columns.sql`](../sql/qr_table_guest_bill_pay_01_columns.sql)
-- [`qr_table_paid_session_stuck_01_preview.sql`](../sql/qr_table_paid_session_stuck_01_preview.sql) — preview
-- [`qr_table_paid_session_stuck_02_backfill_payment_qr.sql`](../sql/qr_table_paid_session_stuck_02_backfill_payment_qr.sql) — backfill
-- [`qr_table_paid_session_stuck_03_close_sessions.sql`](../sql/qr_table_paid_session_stuck_03_close_sessions.sql)
-- [`qr_table_paid_session_stuck_04_fix_created_at_plus7.sql`](../sql/qr_table_paid_session_stuck_04_fix_created_at_plus7.sql) — apply
-- [`qr_table_paid_session_stuck_05_verify.sql`](../sql/qr_table_paid_session_stuck_05_verify.sql) — verify
-- [`qr_table_paid_session_stuck_06_force_backfill_two.sql`](../sql/qr_table_paid_session_stuck_06_force_backfill_two.sql) — backfill
-- [`qr_table_paid_session_stuck_07_force_created_at_two.sql`](../sql/qr_table_paid_session_stuck_07_force_created_at_two.sql)
-- [`qr_table_the_street_open_orders_01_preview.sql`](../sql/qr_table_the_street_open_orders_01_preview.sql) — preview
-- [`qr_table_the_street_open_sessions_01_preview.sql`](../sql/qr_table_the_street_open_sessions_01_preview.sql) — preview
-- [`qr_table_the_street_open_sessions_02_close_paid.sql`](../sql/qr_table_the_street_open_sessions_02_close_paid.sql)
-
-</details>
-
 <details><summary><code>store_*</code> (11)</summary>
 
 - [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
@@ -750,6 +759,20 @@
 - [`supabase_one_paste_phase2.sql`](../sql/supabase_one_paste_phase2.sql) — bundle
 - [`supabase_one_paste_pos_orders_list.sql`](../sql/supabase_one_paste_pos_orders_list.sql) — bundle
 - [`supabase_rpc_egress_helpers_deploy.sql`](../sql/supabase_rpc_egress_helpers_deploy.sql) — rpc
+
+</details>
+
+<details><summary><code>cw_*</code> (9)</summary>
+
+- [`cw_collab_the_street_01_check.sql`](../sql/cw_collab_the_street_01_check.sql) — verify
+- [`cw_collab_the_street_02_set_pos_percent.sql`](../sql/cw_collab_the_street_02_set_pos_percent.sql) — apply, log
+- [`cw_collab_the_street_03_scope_check.sql`](../sql/cw_collab_the_street_03_scope_check.sql) — verify
+- [`cw_collab_the_street_04_menu_category_check.sql`](../sql/cw_collab_the_street_04_menu_category_check.sql) — verify
+- [`cw_collab_the_street_05_add_promotion_scope.sql`](../sql/cw_collab_the_street_05_add_promotion_scope.sql) — log
+- [`cw_collab_the_street_06_fix_scope_and.sql`](../sql/cw_collab_the_street_06_fix_scope_and.sql) — apply, log
+- [`cw_collab_the_street_07_verify_scope.sql`](../sql/cw_collab_the_street_07_verify_scope.sql) — verify
+- [`cw_collab_the_street_08_remove_promotion_scope.sql`](../sql/cw_collab_the_street_08_remove_promotion_scope.sql) — log
+- [`cw_collab_the_street_09_verify_no_promotion.sql`](../sql/cw_collab_the_street_09_verify_no_promotion.sql) — verify
 
 </details>
 

@@ -94,7 +94,7 @@ import {
   uniqueSubcategoriesForMainMenu,
 } from "@/lib/pos-promo-constants"
 import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from "@/lib/pos-category-tab-order"
-import { ERP_POS_CATALOG_CATEGORIES_CACHE_KEY } from "@/lib/offline/pos-catalog-offline"
+import { isPosCategoriesCatalogCacheKey } from "@/lib/offline/pos-catalog-offline"
 import { getPromoChoiceSlotLabel, splitPromoChoiceGroups, type PromoChoiceGroup } from "@/lib/pos-promo-choice"
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext, shouldShowStandalonePromoTile } from "@/lib/pos-promo-visibility"
@@ -247,7 +247,7 @@ export default function PosOrderPage() {
   React.useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ cacheKey?: string; data?: { tabOrder?: unknown } }>).detail
-      if (detail?.cacheKey !== ERP_POS_CATALOG_CATEGORIES_CACHE_KEY) return
+      if (!isPosCategoriesCatalogCacheKey(detail?.cacheKey)) return
       const saved = sanitizePosCategoryTabOrder(detail.data?.tabOrder)
       setCategoryTabOrder(saved)
       setMainCategories((prev) => orderPosMainCategoryTabs(prev, saved.mains))
