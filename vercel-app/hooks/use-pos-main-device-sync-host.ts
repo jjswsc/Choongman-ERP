@@ -114,6 +114,7 @@ import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-p
 import {
   isPosOrderFullyPaidButOpen,
   isPosOrderFullyPaidButOpenFromDbRow,
+  shouldSkipHallAutoprintForCounterQrPending,
 } from '@/lib/pos-kbank-counter-qr-finalize-shared'
 import { shouldReprintPaymentReceiptForTaxInvoiceMemoChange } from '@/lib/pos-tax-invoice'
 import {
@@ -960,7 +961,10 @@ export function usePosMainDeviceSyncHost(): void {
         created_by: String(row.created_by ?? ''),
       })
       const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-      const skipHallForCounterQrPending = isPosOrderFullyPaidButOpenFromDbRow(row)
+      const skipHallForCounterQrPending = shouldSkipHallAutoprintForCounterQrPending({
+        fullyPaidButOpen: isPosOrderFullyPaidButOpenFromDbRow(row),
+        memo: String(row.memo ?? ''),
+      })
 
       const receiptPayload: HallReceiptPrintPayload = {
         ...hallOrderReceiptPayloadFromOrderFields(
@@ -1785,15 +1789,18 @@ export function usePosMainDeviceSyncHost(): void {
             created_by: undefined,
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-          const skipHallForCounterQrPending = isPosOrderFullyPaidButOpen({
-            status: order.status,
-            total: order.total,
-            paymentCash: order.paymentCash,
-            paymentCard: order.paymentCard,
-            paymentQr: order.paymentQr,
-            paymentOther: order.paymentOther,
-            paymentDeliveryApp: order.paymentDeliveryApp,
-            paymentCrypto: (order as { paymentCrypto?: number }).paymentCrypto,
+          const skipHallForCounterQrPending = shouldSkipHallAutoprintForCounterQrPending({
+            fullyPaidButOpen: isPosOrderFullyPaidButOpen({
+              status: order.status,
+              total: order.total,
+              paymentCash: order.paymentCash,
+              paymentCard: order.paymentCard,
+              paymentQr: order.paymentQr,
+              paymentOther: order.paymentOther,
+              paymentDeliveryApp: order.paymentDeliveryApp,
+              paymentCrypto: (order as { paymentCrypto?: number }).paymentCrypto,
+            }),
+            memo: String(order.memo ?? ''),
           })
 
           const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({

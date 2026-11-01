@@ -185,6 +185,7 @@ import { isMemberPortalPaymentPendingOrder } from '@/lib/member-portal-payment-p
 import {
   isPosOrderFullyPaidButOpen,
   isPosOrderFullyPaidButOpenFromDbRow,
+  shouldSkipHallAutoprintForCounterQrPending,
 } from '@/lib/pos-kbank-counter-qr-finalize-shared'
 import { formatGrabDeliveryTableDisplayName } from '@/lib/pos-grab-manual-delivery-guard'
 import {
@@ -5173,8 +5174,11 @@ export default function PosTerminalPage() {
         created_by: String(row.created_by ?? ''),
       })
       const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-      /** Thai QR 대기(금액 선기록·status 미마감): 홀 영수증만 막고 주방은 허용 */
-      const skipHallForCounterQrPending = isPosOrderFullyPaidButOpenFromDbRow(row)
+      /** Thai QR 대기만 홀 차단 — Grab 등 API 배달(payment_delivery_app=total·cooking)은 제외 */
+      const skipHallForCounterQrPending = shouldSkipHallAutoprintForCounterQrPending({
+        fullyPaidButOpen: isPosOrderFullyPaidButOpenFromDbRow(row),
+        memo: String(row.memo ?? ''),
+      })
       const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
         createdBy: String(row.created_by ?? ''),
         memo,
@@ -6158,15 +6162,18 @@ export default function PosTerminalPage() {
             created_by: undefined,
           })
           const shouldDeferAutoprint = shouldWaitForDeliveryAccept || shouldWaitForMemberPortalPrepay
-          const skipHallForCounterQrPending = isPosOrderFullyPaidButOpen({
-            status: order.status,
-            total: order.total,
-            paymentCash: order.paymentCash,
-            paymentCard: order.paymentCard,
-            paymentQr: order.paymentQr,
-            paymentOther: order.paymentOther,
-            paymentDeliveryApp: order.paymentDeliveryApp,
-            paymentCrypto: (order as { paymentCrypto?: number }).paymentCrypto,
+          const skipHallForCounterQrPending = shouldSkipHallAutoprintForCounterQrPending({
+            fullyPaidButOpen: isPosOrderFullyPaidButOpen({
+              status: order.status,
+              total: order.total,
+              paymentCash: order.paymentCash,
+              paymentCard: order.paymentCard,
+              paymentQr: order.paymentQr,
+              paymentOther: order.paymentOther,
+              paymentDeliveryApp: order.paymentDeliveryApp,
+              paymentCrypto: (order as { paymentCrypto?: number }).paymentCrypto,
+            }),
+            memo: String(order.memo ?? ''),
           })
           const skipQrSessionOpenPrint = shouldSkipQrTableSessionOpenAutoprint({
             createdBy: String((order as { createdBy?: string }).createdBy ?? ''),

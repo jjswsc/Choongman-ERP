@@ -1,6 +1,7 @@
 /**
  * 카운터 KBank QR 마감 — 클라이언트·서버 공용 순수 로직 (server-only 금지).
  */
+import { isApiInboundDeliveryOrderMemo } from '@/lib/pos-delivery-platform'
 import {
   isPosOrderPaymentCompleteForTotal,
   posOrderPaymentSumFromAmounts,
@@ -72,6 +73,19 @@ export function isPosOrderFullyPaidButOpenFromDbRow(row: {
     paymentDeliveryApp: Number(row.payment_delivery_app ?? 0) || 0,
     paymentCrypto: Number(row.payment_crypto ?? 0) || 0,
   })
+}
+
+/**
+ * Thai QR 카운터 대기일 때만 홀 영수증을 막는다.
+ * Grab 등 API 배달은 payment_delivery_app≈total + cooking 이어도 홀(บิล) 자동인쇄가 필요하다.
+ */
+export function shouldSkipHallAutoprintForCounterQrPending(opts: {
+  fullyPaidButOpen: boolean
+  memo?: string | null
+}): boolean {
+  if (!opts.fullyPaidButOpen) return false
+  if (isApiInboundDeliveryOrderMemo(String(opts.memo ?? ''))) return false
+  return true
 }
 
 export type CounterKbankQrFinalizePatchInput = {

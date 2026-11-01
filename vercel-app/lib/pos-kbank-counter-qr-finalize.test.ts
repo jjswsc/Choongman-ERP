@@ -4,6 +4,7 @@ import {
   isPosOrderFullyPaidButOpenFromDbRow,
   resolveCounterKbankQrCloseStatus,
   resolveCounterKbankQrFinalizePatch,
+  shouldSkipHallAutoprintForCounterQrPending,
 } from '@/lib/pos-kbank-counter-qr-finalize-shared'
 
 describe('resolveCounterKbankQrCloseStatus', () => {
@@ -70,6 +71,41 @@ describe('isPosOrderFullyPaidButOpen', () => {
         status: 'pending',
         total: 363.31,
         payment_qr: 0,
+      })
+    ).toBe(false)
+  })
+})
+
+describe('shouldSkipHallAutoprintForCounterQrPending', () => {
+  it('skips hall for Thai QR counter pending (no delivery memo)', () => {
+    expect(
+      shouldSkipHallAutoprintForCounterQrPending({
+        fullyPaidButOpen: true,
+        memo: '',
+      })
+    ).toBe(true)
+  })
+
+  it('does not skip hall for Grab cooking + payment_delivery_app=total', () => {
+    const grabOpen = isPosOrderFullyPaidButOpen({
+      status: 'cooking',
+      total: 450,
+      paymentDeliveryApp: 450,
+    })
+    expect(grabOpen).toBe(true)
+    expect(
+      shouldSkipHallAutoprintForCounterQrPending({
+        fullyPaidButOpen: grabOpen,
+        memo: 'grab_order:GF-123 · grab_state:ACCEPTED',
+      })
+    ).toBe(false)
+  })
+
+  it('returns false when not fully paid but open', () => {
+    expect(
+      shouldSkipHallAutoprintForCounterQrPending({
+        fullyPaidButOpen: false,
+        memo: '',
       })
     ).toBe(false)
   })
