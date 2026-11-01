@@ -1,0 +1,35 @@
+---
+description: 홀·주문 영수증 자동인쇄 가드 — Thai QR vs Grab/API 배달 오탐 재발 금지
+alwaysApply: true
+---
+
+# POS 홀(บิล)·주문 영수증 자동인쇄 가드
+
+2026-11-01: Thai QR 대기 중 홀 영수증 선출력을 막으려 `isPosOrderFullyPaidButOpen`(금액 합≥total·status 미마감)만으로 홀을 스킵 → **Grab 자동수락** 주문(`payment_delivery_app≈total` + `cooking` + `grab_order:` memo)까지 잡혀 **บิลแกร็บ 미인쇄**. 주방은 정상. 수정: `shouldSkipHallAutoprintForCounterQrPending` + `isApiInboundDeliveryOrderMemo` 제외 (`fcd43d7b`).
+
+## 절대 원칙
+
+1. **홀/주문 영수증 skip 조건을 “금액이 찼다”만으로 쓰지 않는다.**  
+   Grab·Lineman·Shopee API 유입은 접수 시점에 `payment_delivery_app`(또는 채널 결제액)이 total을 채워도 **홀 บิล 자동인쇄가 필요**하다.
+2. Thai QR 카운터 대기 가드는 **반드시** `shouldSkipHallAutoprintForCounterQrPending`를 쓴다.  
+   `isPosOrderFullyPaidButOpen` / `…FromDbRow`만으로 `skipHall`/`wantHall`을 결정하지 않는다.
+3. API 배달 판별은 memo 앵커: `isApiInboundDeliveryOrderMemo` (`grab_order:` / `lineman_order:` / `shopee_order:` / `sf_order:`).
+4. 가드 변경 시 **단위 테스트 필수**: (a) Thai QR pending → skip true (b) Grab cooking + delivery_app=total + grab memo → skip false.
+
+## 건드릴 때 체크리스트
+
+홀·주문 자동인쇄 / Realtime INSERT·폴링 / `runAutoprintForNewOrder` / KBank QR pending 관련 수정 시:
+
+- [ ] Thai QR 대기만 홀을 막는가? Grab·Lineman·Shopee memo는 홀이 **나온다**
+- [ ] 주방 전표 경로를 실수로 같이 막지 않았는가?
+- [ ] 결제 영수증(paid 전환) 경로와 홀(주문) 경로를 혼동하지 않았는가? Grab auto-paid는 결제 영수증 억제가 의도(`isGrabAutoPaidMemo`)
+- [ ] 호출부: `use-pos-main-device-sync-host.ts`, `app/pos/terminal/page.tsx` — 헬퍼 우회 직접 분기 금지
+- [ ] 배포 전 Silom 등 자동수락 Grab 매장: บิล+주방 각각 확인
+
+## 관련 코드
+
+- [`vercel-app/lib/pos-kbank-counter-qr-finalize-shared.ts`](vercel-app/lib/pos-kbank-counter-qr-finalize-shared.ts) — `shouldSkipHallAutoprintForCounterQrPending`
+- [`vercel-app/lib/pos-delivery-platform.ts`](vercel-app/lib/pos-delivery-platform.ts) — `isApiInboundDeliveryOrderMemo`
+- 테스트: [`vercel-app/lib/pos-kbank-counter-qr-finalize.test.ts`](vercel-app/lib/pos-kbank-counter-qr-finalize.test.ts)
+
+Realtime·결제 영수증 대량 재인쇄는 [`pos-orders-realtime-safety.mdc`](pos-orders-realtime-safety.mdc)를 따른다.

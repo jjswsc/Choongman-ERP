@@ -78,6 +78,7 @@ export function isPosOrderFullyPaidButOpenFromDbRow(row: {
 /**
  * Thai QR 카운터 대기일 때만 홀 영수증을 막는다.
  * Grab 등 API 배달은 payment_delivery_app≈total + cooking 이어도 홀(บิล) 자동인쇄가 필요하다.
+ * 재발 금지: `.cursor/rules/pos-hall-autoprint-guards.mdc` — fullyPaidButOpen만으로 skipHall 금지.
  */
 export function shouldSkipHallAutoprintForCounterQrPending(opts: {
   fullyPaidButOpen: boolean
