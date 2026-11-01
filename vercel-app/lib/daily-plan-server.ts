@@ -47,7 +47,9 @@ import {
   addDaysYmdUtc,
   buildDailyPlanItems,
   buildDailyPlanWorkLogContent,
-  pickRoutineTemplate,
+  managerDailyPlanPosition,
+  mergeRoutineTemplatesForPlan,
+  pickRoutineTemplatesForPlan,
   planItemDraftKey,
   selectCarryItems,
   summarizePlanItems,
@@ -208,6 +210,17 @@ export function dailyPlanRoleOf(e: Pick<PlanEmployee, 'role' | 'job' | 'store'>)
   if (isOfficeStore(e.store)) return null
   if (isManagerRole(e.role) || isManagerRole(e.job)) return 'manager'
   return 'staff'
+}
+
+/** staff=근무표 memo+job, manager=job(Service/Kitchen) 없으면 all, supervisor=all */
+export function dailyPlanPositionOf(
+  role: DailyPlanRole,
+  emp: Pick<PlanEmployee, 'job'>,
+  scheduleMemo?: string | null
+): string {
+  if (role === 'staff') return primaryAreaForDisplay(scheduleMemo, emp.job).toLowerCase()
+  if (role === 'manager') return managerDailyPlanPosition(emp.job)
+  return 'all'
 }
 
 // ─── 템플릿 ────────────────────────────────────────
@@ -594,7 +607,8 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   const routeStores = (p.routeStores ?? existing?.route_stores ?? []).map((s) => String(s || '').trim()).filter(Boolean)
   const homeStore = String(p.store ?? existing?.store_name ?? p.employee.store).trim()
   const position = String(p.position ?? existing?.position ?? 'all').toLowerCase() || 'all'
-  const template = pickRoutineTemplate(ctx.templates, { role: p.role, position, store: homeStore })
+  const picked = pickRoutineTemplatesForPlan(ctx.templates, { role: p.role, position, store: homeStore })
+  const template = mergeRoutineTemplatesForPlan(picked)
 
   let carry: CarryLite[] = []
   if (!existing) {
@@ -781,7 +795,7 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
     const s = scheduleOf.get(emp.id)
     if (role === 'staff' && !s) continue
     const store = role === 'staff' ? String(s?.store_name || emp.store).trim() : emp.store
-    const position = role === 'staff' ? primaryAreaForDisplay(s?.memo, emp.job).toLowerCase() : 'all'
+    const position = dailyPlanPositionOf(role, emp, s?.memo)
     targets.push({ emp, role, store, position, s })
   }
 
@@ -870,7 +884,7 @@ export async function ensureDailyPlanOnDemand(
     role,
     routeStores,
     store: role === 'staff' ? String(s?.store_name || employee.store).trim() : employee.store,
-    position: role === 'staff' ? primaryAreaForDisplay(s?.memo, employee.job).toLowerCase() : 'all',
+    position: dailyPlanPositionOf(role, employee, s?.memo),
     shiftIn: String(s?.plan_in || ''),
     shiftOut: String(s?.plan_out || ''),
     actor,

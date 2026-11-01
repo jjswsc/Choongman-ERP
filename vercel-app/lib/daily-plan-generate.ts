@@ -132,6 +132,33 @@ export function weekdayMatches(weekdays: string, isoWeekday: number): boolean {
   return w.includes(String(isoWeekday))
 }
 
+/**
+ * 매니저 Daily Job 구역 — employees.job(Service/Kitchen)만 반영.
+ * job 미설정·기타 직무면 `all`(공통 템플릿만, 기존과 동일).
+ */
+export function managerDailyPlanPosition(job: string | null | undefined): string {
+  const raw = String(job || "").trim()
+  if (!raw) return "all"
+  const m = raw.toLowerCase()
+  if (
+    m.includes("kitchen") ||
+    m.includes("주방") ||
+    m.includes("ครัว") ||
+    m.includes("キッチン")
+  ) {
+    return "kitchen"
+  }
+  if (
+    m.includes("service") ||
+    m.includes("서비스") ||
+    m.includes("บริการ") ||
+    m.includes("サービス")
+  ) {
+    return "service"
+  }
+  return "all"
+}
+
 /** 직급·포지션·매장에 가장 구체적으로 맞는 파일럿/운영 템플릿 */
 export function pickRoutineTemplate(
   templates: RoutineTemplate[],
@@ -146,13 +173,60 @@ export function pickRoutineTemplate(
     const tStore = norm(t.storeName)
     if (tStore && tStore !== store) continue
     const tPos = norm(t.position) || "all"
-    // 직원(kitchen/service 등)은 구역이 맞아야 함.
-    // 매니저·SV 생성은 position=all 이므로, 구역이 찍힌 템플릿(หน้าร้าน 등)도 후보에 넣는다.
-    if (pos !== "all" && tPos !== "all" && tPos !== pos) continue
+    // position=all 요청은 공통(all) 템플릿만. 구역 전용은 pickRoutineTemplatesForPlan에서 별도 병합.
+    // position=service|kitchen|office 는 동일 구역 또는 all 폴백.
+    if (pos === "all") {
+      if (tPos !== "all") continue
+    } else if (tPos !== "all" && tPos !== pos) {
+      continue
+    }
     const score = (tStore ? 4 : 0) + (tPos !== "all" ? 2 : 0) + (t.status === "active" ? 1 : 0)
     if (!best || score > best.score || (score === best.score && t.id > best.t.id)) best = { t, score }
   }
   return best?.t ?? null
+}
+
+/**
+ * 일정표에 쓸 템플릿 목록.
+ * 매니저 service/kitchen → 구역 전용 + 공통(all)을 함께 (중복 id 제거).
+ * all/office → 단일 템플릿.
+ */
+export function pickRoutineTemplatesForPlan(
+  templates: RoutineTemplate[],
+  params: { role: DailyPlanRole; position: string; store: string }
+): RoutineTemplate[] {
+  const pos = norm(params.position) || "all"
+  if (pos === "service" || pos === "kitchen") {
+    const area = pickRoutineTemplate(templates, { ...params, position: pos })
+    const shared = pickRoutineTemplate(templates, { ...params, position: "all" })
+    const out: RoutineTemplate[] = []
+    if (area) out.push(area)
+    if (shared && shared.id !== area?.id) out.push(shared)
+    return out
+  }
+  const one = pickRoutineTemplate(templates, params)
+  return one ? [one] : []
+}
+
+/** 구역+공통 템플릿 아이템 병합. primary(첫 번째) id·메타 유지, title 중복 제거 */
+export function mergeRoutineTemplatesForPlan(templates: RoutineTemplate[]): RoutineTemplate | null {
+  if (templates.length === 0) return null
+  if (templates.length === 1) return templates[0]
+  const primary = templates[0]
+  const seen = new Set<string>()
+  const items: RoutineTemplateItem[] = []
+  let sortBase = 0
+  for (const t of templates) {
+    const sorted = [...t.items].sort((a, b) => a.sortOrder - b.sortOrder)
+    for (const it of sorted) {
+      const key = norm(it.title)
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      items.push({ ...it, sortOrder: sortBase + (Number(it.sortOrder) || 0) })
+    }
+    sortBase += 1000
+  }
+  return { ...primary, items }
 }
 
 function matchesPerson(

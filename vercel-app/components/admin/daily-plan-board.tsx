@@ -157,7 +157,10 @@ export function DailyPlanBoard({ t }: { t: T }) {
                           <p className="font-medium">{r.employee_name}</p>
                           <p className="text-[10px] text-muted-foreground">
                             {label.role(r.role_scope)}
-                            {r.role_scope === "staff" ? ` · ${label.position(r.position)}` : ""}
+                            {(r.role_scope === "staff" ||
+                              (r.role_scope === "manager" && r.position && r.position !== "all"))
+                              ? ` · ${label.position(r.position)}`
+                              : ""}
                             {r.shift_in ? ` · ${r.shift_in}–${r.shift_out}` : ""}
                           </p>
                         </td>
@@ -211,8 +214,15 @@ export function DailyPlanBoard({ t }: { t: T }) {
           {detail ? (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                {label.role(detail.plan.role_scope)} · {t("dp_col_progress")} {detail.summary.done}/{detail.summary.total} ·{" "}
-                {t("dp_actual")} {minutesLabel(detail.summary.actualTotal, t)} / {t("dp_est")}{" "}
+                {label.role(detail.plan.role_scope)}
+                {detail.plan.role_scope === "staff" ||
+                (detail.plan.role_scope === "manager" &&
+                  detail.plan.position &&
+                  detail.plan.position !== "all")
+                  ? ` · ${label.position(detail.plan.position)}`
+                  : ""}{" "}
+                · {t("dp_col_progress")} {detail.summary.done}/{detail.summary.total} · {t("dp_actual")}{" "}
+                {minutesLabel(detail.summary.actualTotal, t)} / {t("dp_est")}{" "}
                 {minutesLabel(detail.summary.estTotal, t)}
               </p>
               {detail.plan.briefing_note ? (

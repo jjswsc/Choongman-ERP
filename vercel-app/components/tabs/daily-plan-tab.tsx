@@ -62,7 +62,10 @@ function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => 
       <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         <span className="font-semibold text-foreground">{plan.plan_date}</span>
         <span>· {label.role(plan.role_scope)}</span>
-        {plan.role_scope === "staff" ? <span>· {label.position(plan.position)}</span> : null}
+        {plan.role_scope === "staff" ||
+        (plan.role_scope === "manager" && plan.position && plan.position !== "all") ? (
+          <span>· {label.position(plan.position)}</span>
+        ) : null}
         {plan.shift_in ? (
           <span>
             · {plan.shift_in}–{plan.shift_out}
