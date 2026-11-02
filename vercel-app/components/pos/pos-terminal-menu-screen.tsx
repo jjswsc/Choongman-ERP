@@ -380,7 +380,8 @@ export function PosTerminalMenuScreen({
     const [r0, r1, r2, r3] = await Promise.allSettled([
       fromParent
         ? Promise.resolve(fromParent.menus)
-        : getPosMenus({ storeCode: storeCode || undefined }),
+        : // Menu Screen(admin) must match Menu management: always network, not stale IDB cache.
+          getPosMenus({ storeCode: storeCode || undefined, fresh: isAdminMode }),
       getPosMenuCategories(isAdminMode ? { fresh: true } : undefined),
       fromParent ? Promise.resolve(fromParent.options) : getPosMenuOptions({ forCodeMap: true }),
       fromParent ? Promise.resolve(fromParent.promos) : getPosPromosWithItems({ storeCode: storeCode || undefined }),
@@ -390,14 +391,14 @@ export function PosTerminalMenuScreen({
     const opts = r2.status === 'fulfilled' ? r2.value || [] : []
     const promoList = r3.status === 'fulfilled' ? r3.value || [] : []
     if (!fromParent) {
-      if (Array.isArray(list) && list.length > 0) {
-        setMenus(list)
-      }
+      // Always apply (including empty) so a failed/stale empty cache cannot keep old wrong menus,
+      // and so newly registered Banjoo menus appear after Menu management save.
+      setMenus(Array.isArray(list) ? list : [])
       setPromos(promoList)
       setAllOptions(opts)
     }
     applyMenuCatalogTabs(
-      Array.isArray(list) && list.length > 0 ? list : fromParent ? parentCatalog?.menus || [] : list,
+      Array.isArray(list) ? list : fromParent ? parentCatalog?.menus || [] : [],
       promoList,
       catRes
     )
