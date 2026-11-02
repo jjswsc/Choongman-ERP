@@ -75,6 +75,21 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuBanbanFlavorClearAll: 'ล้างทั้งหมด',
     posMenuAlertCodeName: 'กรุณาป้อนรหัสและชื่อเมนู',
     posMenuConfirmDelete: 'ลบหรือไม่?',
+    posMenuDelete: 'ลบเมนู',
+    posMenuConfirmDeleteHard:
+      'ลบเมนูนี้ถาวรหรือไม่ครับ? กู้คืนไม่ได้ ถ้ามีออเดอร์หรือชุดเซ็ตจะลบไม่ได้ครับ',
+    posMenuDeleteOnlyIfNoDataHint:
+      'ลบได้เฉพาะเมนูที่ไม่เคยอยู่ในออเดอร์ ถ้ามีประวัติแล้วให้ใช้「ไม่ใช้งาน」แทนครับ',
+    posMenuDeleteBlockedOrder:
+      'มีประวัติออเดอร์ของเมนูนี้แล้ว ลบไม่ได้ครับ ให้ตั้งเป็น「ไม่ใช้งาน」แทน',
+    posMenuDeleteBlockedPromoMirror:
+      'เป็นเมนูชุด (โปรโม) ครับ ให้ลบที่แท็บ「ค้นหาชุดเซ็ต」',
+    posMenuDeleteBlockedPromoItems:
+      'เมนูนี้อยู่ในชุดเซ็ต ลบไม่ได้ครับ เอาออกจากชุดก่อน หรือใช้「ไม่ใช้งาน」',
+    posMenuDeleteBlockedBanban:
+      'เมนูนี้อยู่ในลิงก์ครึ่ง-ครึ่ง ลบไม่ได้ครับ ยกเลิกการเชื่อมก่อนแล้วลองใหม่',
+    posMenuDeleteBlockedAdditive:
+      'เมนูนี้ถูกใช้เป็นเมนูเสริมของตัวเลือกอื่น ลบไม่ได้ครับ ยกเลิกการเชื่อมก่อนแล้วลองใหม่',
     posOptionConfigDeleteFromGroupHint:
       "ตัวเลือกนี้ถูกสร้างจากการลิงก์กลุ่มตัวเลือก โปรดลบรายการใน 'Option Group Master' ทางซ้าย แล้วกดบันทึก",
     posMenuCategoryAll: 'ทั้งหมด',

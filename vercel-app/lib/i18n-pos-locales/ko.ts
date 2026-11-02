@@ -2588,6 +2588,21 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuBanbanFlavorClearAll: '전체 해제',
     posMenuAlertCodeName: '코드와 메뉴명을 입력해 주세요.',
     posMenuConfirmDelete: '삭제하시겠습니까?',
+    posMenuDelete: '메뉴 삭제',
+    posMenuConfirmDeleteHard:
+      '메뉴를 완전히 삭제할까요? 되돌릴 수 없습니다. 주문·세트 이력이 있으면 거부됩니다.',
+    posMenuDeleteOnlyIfNoDataHint:
+      '주문에 한 번도 안 들어간 메뉴만 삭제됩니다. 이력이 있으면 「사용 안함」을 쓰세요.',
+    posMenuDeleteBlockedOrder:
+      '이 메뉴가 포함된 주문 이력이 있어 삭제할 수 없습니다. 「사용 안함」으로 숨겨 주세요.',
+    posMenuDeleteBlockedPromoMirror:
+      '세트(프로모) 미러 메뉴입니다. 「번들 세트 조회」에서 세트를 삭제해 주세요.',
+    posMenuDeleteBlockedPromoItems:
+      '세트 구성에 포함된 메뉴라 삭제할 수 없습니다. 세트에서 뺀 뒤 다시 시도하거나 「사용 안함」을 쓰세요.',
+    posMenuDeleteBlockedBanban:
+      '반반 메뉴 연결에 사용 중이라 삭제할 수 없습니다. 연결을 해제한 뒤 다시 시도하세요.',
+    posMenuDeleteBlockedAdditive:
+      '다른 메뉴 옵션의 추가 메뉴로 연결돼 있어 삭제할 수 없습니다. 연결을 해제한 뒤 다시 시도하세요.',
     posOptionConfigDeleteFromGroupHint:
       "이 옵션은 옵션그룹 링크에서 생성된 항목입니다. 왼쪽 '옵션그룹 마스터'에서 항목을 삭제한 뒤 저장해 주세요.",
     posMenuCategoryAll: '전체',

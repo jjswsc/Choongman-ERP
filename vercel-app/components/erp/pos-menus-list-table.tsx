@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   Ban,
+  Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -65,6 +66,8 @@ export interface PosMenuListTableProps {
   soldOutTogglingId: string | null
   handleEdit: (menu: PosMenu) => void
   handleMarkUnused: (menu: PosMenu) => Promise<void>
+  handleDeleteMenu: (menu: PosMenu) => Promise<void>
+  deletingMenuId?: string | null
 }
 
 export function PosMenuListTable({
@@ -102,6 +105,8 @@ export function PosMenuListTable({
   soldOutTogglingId,
   handleEdit,
   handleMarkUnused,
+  handleDeleteMenu,
+  deletingMenuId = null,
 }: PosMenuListTableProps) {
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
@@ -415,6 +420,16 @@ export function PosMenuListTable({
                         ) : (
                           <Ban className="h-3.5 w-3.5" />
                         )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => handleDeleteMenu(m)}
+                        disabled={deletingMenuId === m.id}
+                        title={t("posMenuDelete") || t("itemsBtnDelete") || "삭제"}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </td>

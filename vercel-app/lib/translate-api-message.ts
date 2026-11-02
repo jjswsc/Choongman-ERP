@@ -110,6 +110,16 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "승인·취소된 발주는 수정할 수 없습니다.": "poEditNotDraft",
   "이 발주를 수정할 권한이 없습니다.": "poEditForbidden",
   "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.": "posMenuPromoLinkedEdit",
+  "이 메뉴가 포함된 주문 이력이 있어 삭제할 수 없습니다. 「사용 안함」으로 숨겨 주세요.":
+    "posMenuDeleteBlockedOrder",
+  "세트(프로모) 미러 메뉴입니다. 「번들 세트 조회」에서 세트를 삭제해 주세요.":
+    "posMenuDeleteBlockedPromoMirror",
+  "세트 구성에 포함된 메뉴라 삭제할 수 없습니다. 세트에서 뺀 뒤 다시 시도하거나 「사용 안함」을 쓰세요.":
+    "posMenuDeleteBlockedPromoItems",
+  "반반 메뉴 연결에 사용 중이라 삭제할 수 없습니다. 연결을 해제한 뒤 다시 시도하세요.":
+    "posMenuDeleteBlockedBanban",
+  "다른 메뉴 옵션의 추가 메뉴로 연결돼 있어 삭제할 수 없습니다. 연결을 해제한 뒤 다시 시도하세요.":
+    "posMenuDeleteBlockedAdditive",
   [POS_PROMO_ITEM_CHOICE_GROUP_INDEX_MESSAGE]: "posPromoSameMenuNeedsChoiceGroupIndex",
 
   // POS 메뉴 노출 매장

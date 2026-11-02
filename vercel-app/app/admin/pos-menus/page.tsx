@@ -52,6 +52,7 @@ import {
   savePosMenuIngredient,
   deletePosMenuOption,
   deletePosMenuIngredient,
+  deletePosMenu,
   updatePosMenuSoldOut,
   getPosPromos,
   getPosPromoSchemaStatus,
@@ -3204,6 +3205,36 @@ export default function PosMenusPage() {
     await appAlert(nextActive ? t("posMenuUseAgainDone") : t("posMenuUnusedDone"))
   }
 
+  const [deletingMenuId, setDeletingMenuId] = React.useState<string | null>(null)
+  const handleDeleteMenu = async (menu: PosMenu) => {
+    const hint = t("posMenuDeleteOnlyIfNoDataHint")
+    const confirmMsg = `"${menu.name}" (${menu.code}) ${t("posMenuConfirmDeleteHard") || t("posMenuConfirmDelete")}${
+      hint ? `\n\n${hint}` : ""
+    }`
+    if (!(await appConfirm(confirmMsg))) return
+    setDeletingMenuId(menu.id)
+    try {
+      const res = await deletePosMenu({ id: menu.id })
+      if (!res.success) {
+        await appAlert(
+          translateApiMessage(res.message, t) ||
+            res.message ||
+            t("msg_save_fail_detail")
+        )
+        return
+      }
+      setMenus((prev) => prev.filter((m) => m.id !== menu.id))
+      if (editingId === menu.id) {
+        handleNewRegister()
+      }
+      await appAlert(t("msg_delete_ok") || "삭제되었습니다.")
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeletingMenuId(null)
+    }
+  }
+
   const todayStr = bangkokTodayStr
   const handleSoldOutToggle = async (menu: PosMenu) => {
     const isSoldOut = isPosMenuSoldOut(menu.soldOutDate)
@@ -4219,6 +4250,8 @@ export default function PosMenusPage() {
             soldOutTogglingId={soldOutTogglingId}
             handleEdit={handleEdit}
             handleMarkUnused={handleMarkUnused}
+            handleDeleteMenu={handleDeleteMenu}
+            deletingMenuId={deletingMenuId}
           />
           )}
         </div>

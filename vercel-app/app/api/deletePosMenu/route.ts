@@ -6,8 +6,9 @@ import {
   assertPosCatalogTenantWritable,
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import { findPosMenuDeleteBlockReason } from '@/lib/pos-menu-delete-guard-server'
 
-/** POS 메뉴 삭제 */
+/** POS 메뉴 삭제 — 주문·세트·반반 등 참조가 있으면 거부 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -33,8 +34,8 @@ export async function POST(req: NextRequest) {
     const existing = (await supabaseSelectFilter(
       'pos_menus',
       filter,
-      { limit: 1, select: 'id' }
-    )) as { id?: number }[] | null
+      { limit: 1, select: 'id,promo_id,name,code' }
+    )) as { id?: number; promo_id?: number | null; name?: string; code?: string }[] | null
     if (!existing || existing.length === 0) {
       return NextResponse.json(
         {
@@ -43,6 +44,18 @@ export async function POST(req: NextRequest) {
             ? '메뉴를 찾을 수 없거나 다른 회사 메뉴입니다.'
             : '존재하지 않는 메뉴입니다.',
         },
+        { headers }
+      )
+    }
+
+    const row = existing[0]
+    const blocked = await findPosMenuDeleteBlockReason({
+      menuId: String(row.id ?? id),
+      promoId: row.promo_id,
+    })
+    if (blocked) {
+      return NextResponse.json(
+        { success: false, message: blocked.message, code: `menu_delete_blocked_${blocked.reason}` },
         { headers }
       )
     }

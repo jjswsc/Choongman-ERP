@@ -2599,6 +2599,21 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuBanbanFlavorClearAll: 'Clear all',
     posMenuAlertCodeName: 'Enter code and menu name.',
     posMenuConfirmDelete: 'Delete?',
+    posMenuDelete: 'Delete menu',
+    posMenuConfirmDeleteHard:
+      'Permanently delete this menu? This cannot be undone. Delete is refused if the item appears in orders or sets.',
+    posMenuDeleteOnlyIfNoDataHint:
+      'Only menus never used on an order can be deleted. If there is history, use Unused instead.',
+    posMenuDeleteBlockedOrder:
+      'This menu appears in order history, so it cannot be deleted. Mark it Unused instead.',
+    posMenuDeleteBlockedPromoMirror:
+      'This is a set (promo) mirror menu. Delete the set from Bundle set inquiry.',
+    posMenuDeleteBlockedPromoItems:
+      'This menu is part of a set. Remove it from the set first, or mark it Unused.',
+    posMenuDeleteBlockedBanban:
+      'This menu is linked as a banban flavor. Unlink it first, then try again.',
+    posMenuDeleteBlockedAdditive:
+      'This menu is linked as an additive source on another option. Unlink it first, then try again.',
     posOptionConfigDeleteFromGroupHint:
       "This option was generated from an option-group link. Delete the item in 'Option Group Master' on the left, then save.",
     posMenuCategoryAll: 'All',
