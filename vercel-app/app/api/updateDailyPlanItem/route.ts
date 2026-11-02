@@ -6,7 +6,7 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilterReturning,
 } from '@/lib/supabase-server'
-import { computeActualMinutes } from '@/lib/daily-plan-generate'
+import { computeActualMinutes, mergeDailyPlanPhotoUrls } from '@/lib/daily-plan-generate'
 import {
   canAssignDailyPlan,
   canViewDailyPlan,
@@ -15,9 +15,12 @@ import {
   getDailyPlanById,
   loadPlanEmployeeById,
   normalizePlanItemRow,
+  planRecipient,
   resolveDailyPlanScope,
   touchDailyPlanProgress,
+  type DailyPlanItemRow,
 } from '@/lib/daily-plan-server'
+import { pushStoreActionNotice } from '@/lib/store-action-server'
 
 type Body = {
   itemId?: number | string
@@ -35,8 +38,93 @@ type Body = {
   targetEmployeeId?: number | string
 }
 
-const ACTIONS = new Set(['start', 'done', 'skip', 'reopen', 'note', 'photo', 'add', 'remove', 'delegate'])
+const ACTIONS = new Set([
+  'start',
+  'done',
+  'skip',
+  'reopen',
+  'note',
+  'photo',
+  'add',
+  'remove',
+  'delegate',
+  'verify_pass',
+  'verify_reject',
+])
 const MAX_PHOTOS = 6
+
+/** 피위임자 복사본 → 원본(위임자) 상태·증빙 동기화 */
+async function syncDelegatedSourceFromCopy(
+  copy: DailyPlanItemRow,
+  action: string,
+  nowIso: string,
+  extras: { skipReason?: string; actualMinutes?: number | null; photos?: string[]; note?: string } = {}
+): Promise<number | null> {
+  const srcId = copy.delegated_from_item_id
+  if (!srcId) return null
+  const srcRows = (await supabaseSelectFilter('daily_plan_items', `id=eq.${srcId}`, { limit: 1 })) as Record<
+    string,
+    unknown
+  >[]
+  if (!srcRows?.[0]) return null
+  const src = normalizePlanItemRow(srcRows[0])
+  if (src.status !== 'delegated' && src.status !== 'awaiting_verify') return src.plan_id
+
+  const patch: Record<string, unknown> = { updated_at: nowIso }
+  if (action === 'start') {
+    if (!src.started_at) patch.started_at = nowIso
+  } else if (action === 'done') {
+    patch.status = 'awaiting_verify'
+    patch.finished_at = nowIso
+    patch.skip_reason = ''
+    patch.actual_minutes =
+      extras.actualMinutes != null ? extras.actualMinutes : copy.actual_minutes ?? copy.est_minutes
+    if (!src.started_at && copy.started_at) patch.started_at = copy.started_at
+    patch.photo_urls = mergeDailyPlanPhotoUrls(src.photo_urls, extras.photos ?? copy.photo_urls, MAX_PHOTOS)
+    const noteParts = [src.note, extras.note ?? copy.note].map((s) => String(s || '').trim()).filter(Boolean)
+    if (noteParts.length) patch.note = [...new Set(noteParts)].join('\n').slice(0, 1000)
+  } else if (action === 'skip') {
+    patch.status = 'awaiting_verify'
+    patch.finished_at = nowIso
+    patch.skip_reason = String(extras.skipReason || copy.skip_reason || '').slice(0, 500)
+    patch.actual_minutes = null
+    patch.photo_urls = mergeDailyPlanPhotoUrls(src.photo_urls, extras.photos ?? copy.photo_urls, MAX_PHOTOS)
+    const noteParts = [src.note, extras.note ?? copy.note].map((s) => String(s || '').trim()).filter(Boolean)
+    if (noteParts.length) patch.note = [...new Set(noteParts)].join('\n').slice(0, 1000)
+  } else if (action === 'reopen') {
+    if (src.status === 'awaiting_verify') {
+      patch.status = 'delegated'
+      patch.finished_at = null
+      patch.actual_minutes = null
+      patch.skip_reason = ''
+    }
+  } else if (action === 'note' || action === 'photo') {
+    if (action === 'note' && extras.note !== undefined) {
+      const noteParts = [String(src.note || '').trim(), String(extras.note || '').trim()].filter(Boolean)
+      patch.note = [...new Set(noteParts)].join('\n').slice(0, 1000)
+    }
+    if (action === 'photo' || extras.photos) {
+      patch.photo_urls = mergeDailyPlanPhotoUrls(src.photo_urls, extras.photos ?? copy.photo_urls, MAX_PHOTOS)
+    }
+  } else {
+    return src.plan_id
+  }
+
+  await supabaseUpdateByFilterReturning('daily_plan_items', `id=eq.${src.id}`, patch)
+
+  if (action === 'done' || action === 'skip') {
+    const srcPlan = await getDailyPlanById(src.plan_id)
+    const assignee = String(src.delegated_to_name || '').trim() || 'พนักงาน'
+    if (srcPlan) {
+      void pushStoreActionNotice({
+        title: '🔎 ดำเนินการเสร็จแล้ว · 처리 완료',
+        body: `${assignee}: ${String(src.title || '').slice(0, 80)} — กรุณาตรวจยืนยันครับ`,
+        recipients: [planRecipient(srcPlan)],
+      }).catch(() => {})
+    }
+  }
+  return src.plan_id
+}
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, 'any')
@@ -95,9 +183,10 @@ export async function POST(request: NextRequest) {
     if (!canViewDailyPlan(scope, plan)) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
     }
-    // 마감 후에도 증빙(사진·메모)만 소급 첨부 허용 — 상태 변경·추가/삭제는 불가
+    // 마감 후에도 증빙(사진·메모)·위임 검수(확인/반려)는 허용 — 그 외 상태 변경·추가/삭제 불가
     const evidenceOnly = action === 'photo' || action === 'note'
-    if (plan.status === 'closed' && !evidenceOnly) {
+    const verifyOnly = action === 'verify_pass' || action === 'verify_reject'
+    if (plan.status === 'closed' && !evidenceOnly && !verifyOnly) {
       return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
     }
 
@@ -206,7 +295,9 @@ export async function POST(request: NextRequest) {
           delegated_to_employee_id: targetEmp.id,
           delegated_to_name: (targetEmp.nick || targetEmp.name).slice(0, 120),
           delegated_by_name: (scope.actorName || plan.employee_name).slice(0, 120),
-          finished_at: nowIso,
+          finished_at: null,
+          actual_minutes: null,
+          skip_reason: '',
           updated_at: nowIso,
         })) as Record<string, unknown>[]
       } catch (e) {
@@ -241,7 +332,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, removed: item.id })
     }
 
-    if (item.status === 'delegated' && action !== 'note' && action !== 'photo') {
+    if (action === 'verify_pass' || action === 'verify_reject') {
+      if (item.status !== 'awaiting_verify') {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_verify_status', message: '확인 대기 항목만 검수할 수 있습니다.' },
+          { status: 400 }
+        )
+      }
+      if (!item.delegated_to_employee_id) {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_verify_status', message: '위임 원본만 검수할 수 있습니다.' },
+          { status: 400 }
+        )
+      }
+      const verifyPatch: Record<string, unknown> = { updated_at: nowIso }
+      const touchPlanIds = new Set<number>([plan.id])
+      if (action === 'verify_pass') {
+        verifyPatch.status = item.skip_reason ? 'skipped' : 'done'
+        if (!item.finished_at) verifyPatch.finished_at = nowIso
+      } else {
+        verifyPatch.status = 'delegated'
+        verifyPatch.finished_at = null
+        verifyPatch.actual_minutes = null
+        verifyPatch.skip_reason = ''
+        const copies = (await supabaseSelectFilter(
+          'daily_plan_items',
+          `delegated_from_item_id=eq.${item.id}`,
+          { limit: 5 }
+        )) as Record<string, unknown>[]
+        for (const row of copies || []) {
+          const copy = normalizePlanItemRow(row)
+          await supabaseUpdateByFilterReturning('daily_plan_items', `id=eq.${copy.id}`, {
+            status: 'todo',
+            started_at: null,
+            finished_at: null,
+            actual_minutes: null,
+            skip_reason: '',
+            updated_at: nowIso,
+          })
+          touchPlanIds.add(copy.plan_id)
+          const copyPlan = await getDailyPlanById(copy.plan_id)
+          if (copyPlan) {
+            void pushStoreActionNotice({
+              title: '↩️ ตีกลับงาน · 작업 반려',
+              body: `${String(item.title || '').slice(0, 80)} — กรุณาทำใหม่ครับ`,
+              recipients: [planRecipient(copyPlan)],
+            }).catch(() => {})
+          }
+        }
+      }
+      const updated = (await supabaseUpdateByFilterReturning(
+        'daily_plan_items',
+        `id=eq.${item.id}`,
+        verifyPatch
+      )) as Record<string, unknown>[]
+      await Promise.all([...touchPlanIds].map((id) => touchDailyPlanProgress(id)))
+      return NextResponse.json({ success: true, item: updated?.[0] ? normalizePlanItemRow(updated[0]) : null })
+    }
+
+    if (
+      (item.status === 'delegated' || item.status === 'awaiting_verify') &&
+      action !== 'note' &&
+      action !== 'photo' &&
+      action !== 'verify_pass' &&
+      action !== 'verify_reject'
+    ) {
       return NextResponse.json(
         { success: false, messageKey: 'dp_err_delegated_locked', message: '위임된 항목은 수정할 수 없습니다.' },
         { status: 400 }
@@ -257,6 +412,9 @@ export async function POST(request: NextRequest) {
     if (note !== undefined) patch.note = note
     if (photoUrl) patch.photo_urls = photos.slice(-MAX_PHOTOS)
 
+    let actualMinutes: number | null = null
+    let skipReason = ''
+
     switch (action) {
       case 'start':
         patch.status = 'doing'
@@ -270,12 +428,14 @@ export async function POST(request: NextRequest) {
           )
         }
         const manual = Number(body.actualMinutes)
-        patch.status = 'done'
-        patch.finished_at = nowIso
-        patch.actual_minutes =
+        actualMinutes =
           Number.isFinite(manual) && manual > 0
             ? Math.round(manual)
             : computeActualMinutes(item.started_at, now.getTime(), item.est_minutes)
+        patch.status = 'done'
+        patch.finished_at = nowIso
+        patch.actual_minutes = actualMinutes
+        patch.skip_reason = ''
         break
       }
       case 'skip': {
@@ -286,6 +446,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
+        skipReason = reason
         patch.status = 'skipped'
         patch.skip_reason = reason
         patch.finished_at = nowIso
@@ -306,8 +467,19 @@ export async function POST(request: NextRequest) {
       string,
       unknown
     >[]
-    await touchDailyPlanProgress(plan.id)
-    return NextResponse.json({ success: true, item: updated?.[0] ? normalizePlanItemRow(updated[0]) : null })
+    const updatedItem = updated?.[0] ? normalizePlanItemRow(updated[0]) : null
+    const touchIds = new Set<number>([plan.id])
+    if (item.delegated_from_item_id) {
+      const srcPlanId = await syncDelegatedSourceFromCopy(updatedItem || item, action, nowIso, {
+        skipReason,
+        actualMinutes,
+        photos: updatedItem?.photo_urls || photos,
+        note: note !== undefined ? note : updatedItem?.note || item.note,
+      })
+      if (srcPlanId) touchIds.add(srcPlanId)
+    }
+    await Promise.all([...touchIds].map((id) => touchDailyPlanProgress(id)))
+    return NextResponse.json({ success: true, item: updatedItem })
   } catch (e) {
     console.error('updateDailyPlanItem:', e)
     return NextResponse.json({ success: false, message: '저장 실패' }, { status: 500 })

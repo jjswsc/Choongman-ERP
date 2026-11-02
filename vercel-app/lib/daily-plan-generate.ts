@@ -13,8 +13,27 @@ export type RoutineTemplateStatus = (typeof ROUTINE_TEMPLATE_STATUSES)[number]
 export const DAILY_PLAN_ITEM_SOURCES = ["routine", "hq_task", "action", "carry", "visit"] as const
 export type DailyPlanItemSource = (typeof DAILY_PLAN_ITEM_SOURCES)[number]
 
-export const DAILY_PLAN_ITEM_STATUSES = ["todo", "doing", "done", "skipped"] as const
+/** DB status 문자열 — delegated / awaiting_verify 는 위임 흐름용 */
+export const DAILY_PLAN_ITEM_STATUSES = ["todo", "doing", "done", "skipped", "delegated", "awaiting_verify"] as const
 export type DailyPlanItemStatus = (typeof DAILY_PLAN_ITEM_STATUSES)[number]
+
+/** 진행률·완료 건수에 넣는 상태 (위임만 한 delegated 는 미완료 — 피위임자 실제 완료 후 awaiting_verify) */
+export function isDailyPlanProgressDone(status: string): boolean {
+  return status === "done" || status === "awaiting_verify"
+}
+
+/** 사진 URL 합치기 (뒤쪽 우선, 최대 max개) */
+export function mergeDailyPlanPhotoUrls(a: string[] | null | undefined, b: string[] | null | undefined, max = 6): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const u of [...(a || []), ...(b || [])]) {
+    const s = String(u || "").trim()
+    if (!s || seen.has(s)) continue
+    seen.add(s)
+    out.push(s)
+  }
+  return out.slice(-max)
+}
 
 export const DAILY_PLAN_LINK_TYPES = [
   "none",
@@ -457,14 +476,14 @@ export type PlanSummary = {
   doneRate: number
 }
 
-/** 방문(체류) 항목은 시간 합계에서 제외. delegated는 진행률상 완료와 동일 */
+/** 방문(체류) 항목은 시간 합계에서 제외. awaiting_verify·done 만 진행률 완료 (delegated=피위임자 대기) */
 export function summarizePlanItems(items: PlanItemLite[]): PlanSummary {
   const work = items.filter((i) => i.source !== "visit")
-  const done = work.filter((i) => i.status === "done" || i.status === "delegated")
+  const done = work.filter((i) => isDailyPlanProgressDone(i.status))
   const skipped = work.filter((i) => i.status === "skipped")
   const estTotal = work.reduce((s, i) => s + (Number(i.estMinutes) || 0), 0)
   const actualTotal = work
-    .filter((i) => i.status === "done")
+    .filter((i) => i.status === "done" || i.status === "awaiting_verify")
     .reduce((s, i) => s + (Number(i.actualMinutes ?? i.estMinutes) || 0), 0)
   return {
     total: work.length,
@@ -495,13 +514,22 @@ export function buildDailyPlanWorkLogContent(params: {
     `[일일 일정표 · ตารางงาน ${params.dateYmd}] 완료 · เสร็จ ${s.done}/${s.total} (${s.doneRate}%)${params.auto ? " · 자동 마감 · ปิดอัตโนมัติ" : ""}`,
     `예상 · ประมาณ ${s.estTotal}분(นาที) / 실제 · จริง ${s.actualTotal}분(นาที)`,
   ]
-  const pending = params.items.filter((i) => i.source !== "visit" && i.status !== "done")
+  const pending = params.items.filter((i) => i.source !== "visit" && !isDailyPlanProgressDone(i.status))
   if (pending.length > 0) {
     lines.push("미완료 · ยังไม่เสร็จ:")
     for (const i of pending.slice(0, 20)) {
       const where = i.storeName ? `${i.storeName} · ` : ""
       const why = i.status === "skipped" && i.skipReason ? ` (사유 · เหตุผล: ${i.skipReason})` : ""
-      lines.push(`- ${where}${dailyPlanItemTitle(i.title, koThText)}${why}`)
+      const wait = i.status === "delegated" ? " (위임 대기 · รอผู้รับมอบหมาย)" : ""
+      lines.push(`- ${where}${dailyPlanItemTitle(i.title, koThText)}${why}${wait}`)
+    }
+  }
+  const toVerify = params.items.filter((i) => i.source !== "visit" && i.status === "awaiting_verify")
+  if (toVerify.length > 0) {
+    lines.push("확인 대기 · รอตรวจยืนยัน:")
+    for (const i of toVerify.slice(0, 20)) {
+      const where = i.storeName ? `${i.storeName} · ` : ""
+      lines.push(`- ${where}${dailyPlanItemTitle(i.title, koThText)}`)
     }
   }
   return lines.join("\n")

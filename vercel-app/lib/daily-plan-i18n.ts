@@ -18,6 +18,7 @@ const ITEM_STATUS_KEYS: Record<string, string> = {
   done: "dp_item_done",
   skipped: "dp_item_skipped",
   delegated: "dp_item_delegated",
+  awaiting_verify: "dp_item_awaiting_verify",
 }
 
 const PLAN_STATUS_KEYS: Record<string, string> = {
@@ -148,7 +149,14 @@ export function koThText(k: string): string {
   return `${I18N_DAILY_PLAN_KO[k] ?? k} · ${I18N_DAILY_PLAN_TH[k] ?? k}`
 }
 
-const LINE_MARK: Record<string, string> = { done: "✅", skipped: "⏭️", doing: "▶️", todo: "▫️" }
+const LINE_MARK: Record<string, string> = {
+  done: "✅",
+  skipped: "⏭️",
+  doing: "▶️",
+  todo: "▫️",
+  delegated: "📤",
+  awaiting_verify: "🔎",
+}
 
 /** 한 사람 일정 → LINE 붙여넣기 문구 (표 없이 시간순) */
 export function buildDailyPlanLineText(b: DailyPlanBundle, t: T): string {

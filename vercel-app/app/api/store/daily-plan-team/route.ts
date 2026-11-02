@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { isDailyPlanProgressDone } from '@/lib/daily-plan-generate'
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
   computePlanTimeline,
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
         const items = await getDailyPlanItems(plan.id)
         const travel = await loadTravelMinutesByTemplate([plan.template_id])
         const work = items.filter((i) => i.source !== 'visit')
-        const done = work.filter((i) => i.status === 'done' || i.status === 'delegated').length
+        const done = work.filter((i) => isDailyPlanProgressDone(i.status)).length
         const { slots } = computePlanTimeline(
           items.map((i) => ({
             id: i.id,

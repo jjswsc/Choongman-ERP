@@ -99,6 +99,8 @@ export type DailyPlanItemAction =
   | "add"
   | "remove"
   | "delegate"
+  | "verify_pass"
+  | "verify_reject"
 
 export async function updateDailyPlanItem(data: {
   action: DailyPlanItemAction

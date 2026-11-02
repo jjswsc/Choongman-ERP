@@ -11,6 +11,7 @@ import {
   PlusCircle,
   RotateCcw,
   SkipForward,
+  Undo2,
   UserPlus,
   Wrench,
 } from "lucide-react"
@@ -48,6 +49,7 @@ const STATUS_CN: Record<string, string> = {
   done: "border-l-emerald-500 opacity-80",
   skipped: "border-l-amber-500 opacity-80",
   delegated: "border-l-violet-500 opacity-90",
+  awaiting_verify: "border-l-teal-500 bg-teal-50/60 dark:bg-teal-950/25",
 }
 
 const DOT_CN: Record<string, string> = {
@@ -56,6 +58,7 @@ const DOT_CN: Record<string, string> = {
   done: "bg-emerald-500 border-emerald-500",
   skipped: "bg-amber-500 border-amber-500",
   delegated: "bg-violet-500 border-violet-500",
+  awaiting_verify: "bg-teal-500 border-teal-500",
 }
 
 const SOURCE_CN: Record<string, string> = {
@@ -198,6 +201,25 @@ export function DailyPlanItems(props: {
     fileRef.current?.click()
   }
 
+  const onVerify = async (item: DailyPlanItem, action: "verify_pass" | "verify_reject") => {
+    if (action === "verify_reject") {
+      const ok = await appConfirm(t("dp_verify_reject_confirm"))
+      if (!ok) return
+    }
+    setBusyId(item.id)
+    try {
+      const res = await updateDailyPlanItem({ action, itemId: item.id })
+      if (!res.success) {
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
+        return
+      }
+      await appAlert(action === "verify_pass" ? t("dp_verify_pass_ok") : t("dp_verify_reject_ok"))
+      onChanged()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const onDelegatePick = async (member: DailyPlanTeamMember) => {
     const item = delegateItem
     if (!item) return
@@ -325,9 +347,23 @@ export function DailyPlanItems(props: {
                       · {t("dp_late_n").replace("{n}", minutesLabel(late, t))}
                     </span>
                   ) : null}
-                  <span className="ml-auto font-medium">{label.itemStatus(it.status)}</span>
+                  <span
+                    className={cn(
+                      "ml-auto font-medium",
+                      it.status === "awaiting_verify" && "text-teal-700 dark:text-teal-300"
+                    )}
+                  >
+                    {it.status === "awaiting_verify" && it.skip_reason
+                      ? t("dp_item_awaiting_verify_skip")
+                      : label.itemStatus(it.status)}
+                  </span>
                 </div>
-                <p className={cn("mt-1 text-sm font-medium", it.status === "done" && "line-through decoration-1")}>
+                <p
+                  className={cn(
+                    "mt-1 text-sm font-medium",
+                    (it.status === "done" || it.status === "awaiting_verify") && "line-through decoration-1"
+                  )}
+                >
                   {isVisit
                     ? `📍 ${t("dp_visit_title")} · ${displayText(it.title)}`
                     : displayText(dailyPlanItemTitle(it.title, t))}
@@ -337,8 +373,15 @@ export function DailyPlanItems(props: {
                     {displayText(it.description)}
                   </p>
                 ) : null}
-                {it.status === "done" && it.actual_minutes != null ? (
-                  <p className="mt-0.5 text-[11px] text-emerald-700 dark:text-emerald-300">
+                {(it.status === "done" || it.status === "awaiting_verify") && it.actual_minutes != null ? (
+                  <p
+                    className={cn(
+                      "mt-0.5 text-[11px]",
+                      it.status === "awaiting_verify"
+                        ? "text-teal-700 dark:text-teal-300"
+                        : "text-emerald-700 dark:text-emerald-300"
+                    )}
+                  >
                     {hm(it.started_at)}–{hm(it.finished_at)} · {t("dp_actual")} {minutesLabel(it.actual_minutes, t)}
                   </p>
                 ) : it.status === "doing" && it.started_at ? (
@@ -351,9 +394,15 @@ export function DailyPlanItems(props: {
                     {t("dp_skip_reason")}: {displayText(it.skip_reason)}
                   </p>
                 ) : null}
-                {it.status === "delegated" && it.delegated_to_name ? (
+                {it.status === "awaiting_verify" && it.delegated_to_name ? (
+                  <p className="mt-0.5 text-[11px] font-semibold text-teal-700 dark:text-teal-300">
+                    {t("dp_awaiting_verify_by").replace("{name}", it.delegated_to_name)}
+                  </p>
+                ) : it.status === "delegated" && it.delegated_to_name ? (
                   <p className="mt-0.5 text-[11px] font-medium text-violet-700 dark:text-violet-300">
-                    {t("dp_delegated_to").replace("{name}", it.delegated_to_name)}
+                    {it.started_at
+                      ? t("dp_delegated_doing").replace("{name}", it.delegated_to_name)
+                      : t("dp_delegated_to").replace("{name}", it.delegated_to_name)}
                   </p>
                 ) : null}
                 {it.delegated_from_item_id && it.delegated_by_name ? (
@@ -418,6 +467,29 @@ export function DailyPlanItems(props: {
                       <UserPlus className="mr-1 h-3 w-3" />
                       {t("dp_btn_delegate")}
                     </Button>
+                  ) : null}
+                  {!readOnly && it.status === "awaiting_verify" && it.delegated_to_employee_id ? (
+                    <>
+                      <Button
+                        size="sm"
+                        className="h-7 px-2 text-xs bg-teal-600 hover:bg-teal-700"
+                        disabled={busy}
+                        onClick={() => void onVerify(it, "verify_pass")}
+                      >
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        {t("dp_btn_verify_pass")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-amber-700"
+                        disabled={busy}
+                        onClick={() => void onVerify(it, "verify_reject")}
+                      >
+                        <Undo2 className="mr-1 h-3 w-3" />
+                        {t("dp_btn_verify_reject")}
+                      </Button>
+                    </>
                   ) : null}
                   {editable && (it.status === "done" || it.status === "skipped") ? (
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void run(it, "reopen")}>

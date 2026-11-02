@@ -3,8 +3,10 @@ import {
   buildDailyPlanItems,
   buildDailyPlanWorkLogContent,
   computeActualMinutes,
+  isDailyPlanProgressDone,
   isoWeekdayOfYmd,
   managerDailyPlanPosition,
+  mergeDailyPlanPhotoUrls,
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplate,
   pickRoutineTemplatesForPlan,
@@ -206,6 +208,15 @@ describe("buildDailyPlanItems", () => {
   })
 })
 
+describe("delegate progress helpers", () => {
+  it("mergeDailyPlanPhotoUrls dedupes and keeps last max", () => {
+    expect(isDailyPlanProgressDone("delegated")).toBe(false)
+    expect(isDailyPlanProgressDone("awaiting_verify")).toBe(true)
+    expect(mergeDailyPlanPhotoUrls(["a", "b"], ["b", "c"], 6)).toEqual(["a", "b", "c"])
+    expect(mergeDailyPlanPhotoUrls(["1", "2", "3"], ["4", "5", "6", "7"], 4)).toEqual(["4", "5", "6", "7"])
+  })
+})
+
 describe("summary and work log", () => {
   const items = [
     { source: "visit", status: "done", title: "A", storeName: "A", estMinutes: 0, actualMinutes: 50, skipReason: "" },
@@ -224,16 +235,33 @@ describe("summary and work log", () => {
       doneRate: 33,
     })
   })
-  it("counts delegated as done for progress", () => {
+  it("counts awaiting_verify as done; delegated stays open until assignee finishes", () => {
     const withDelegated = [
       ...items,
       { source: "hq_task", status: "delegated", title: "위임", storeName: "", estMinutes: 10, actualMinutes: null, skipReason: "" },
     ]
-    const s = summarizePlanItems(withDelegated)
-    expect(s.total).toBe(4)
-    expect(s.done).toBe(2)
-    expect(s.open).toBe(1)
-    expect(s.doneRate).toBe(50)
+    const open = summarizePlanItems(withDelegated)
+    expect(open.total).toBe(4)
+    expect(open.done).toBe(1)
+    expect(open.open).toBe(2)
+    expect(open.doneRate).toBe(25)
+
+    const verified = summarizePlanItems([
+      ...items,
+      {
+        source: "hq_task",
+        status: "awaiting_verify",
+        title: "위임",
+        storeName: "",
+        estMinutes: 10,
+        actualMinutes: 8,
+        skipReason: "",
+      },
+    ])
+    expect(verified.done).toBe(2)
+    expect(verified.open).toBe(1)
+    expect(verified.doneRate).toBe(50)
+    expect(verified.actualTotal).toBe(23)
   })
   it("lists unfinished items with reasons", () => {
     const text = buildDailyPlanWorkLogContent({ dateYmd: "2026-10-08", items, auto: true })
