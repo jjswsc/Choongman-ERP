@@ -9,6 +9,7 @@ import {
   LEGACY_PROMOTION_MAIN_CATEGORY,
   normalizePromotionCategoryMain,
   normalizePromotionSubcategory,
+  promotionSubcategoriesEqual,
   uniqueSubcategoriesForMainMenu,
 } from '@/lib/pos-promo-constants'
 
@@ -203,4 +204,28 @@ export function getPresetCategoriesForMain(mainCat: string): readonly string[] |
   }
   const entry = Object.entries(MAIN_CATEGORY_ALIASES).find(([, aliases]) => aliases.includes(mainCat))
   return entry ? POS_CATEGORIES_BY_MAIN[entry[0] as keyof typeof POS_CATEGORIES_BY_MAIN] : null
+}
+
+export type PosMenuCategoryFields = {
+  categoryMain?: string | null
+  category?: string | null
+}
+
+/**
+ * Menu Screen / POS 주문: 선택한 대분류+소분류에 맞는 메뉴만.
+ * 소분류 이름만 같으면(예: Food·Banjoo Bunsik 둘 다 BBQ) 다른 대분류 메뉴를 끌어오지 않는다.
+ */
+export function filterMenusMatchingMainAndSubcategory<T extends PosMenuCategoryFields>(
+  menus: T[],
+  selectedMainCategory: string,
+  selectedCategory: string
+): T[] {
+  const main = String(selectedMainCategory ?? '').trim()
+  const sub = String(selectedCategory ?? '').trim()
+  if (!main || !sub) return []
+  const subOk = (cat: string | null | undefined) =>
+    main === PROMOTION_MAIN_CATEGORY
+      ? promotionSubcategoriesEqual(cat ?? '', sub)
+      : String(cat ?? '').trim() === sub
+  return menus.filter((m) => String(m.categoryMain ?? '').trim() === main && subOk(m.category))
 }

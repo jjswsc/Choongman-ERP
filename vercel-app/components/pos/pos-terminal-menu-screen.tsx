@@ -91,7 +91,7 @@ import {
 } from '@/lib/pos-chicken-option-picker-plan'
 import { PosChickenOptionPickerPanel } from '@/components/pos/pos-chicken-option-picker-panel'
 import { resolvePosMenuImageUrlPayloadForSave } from '@/lib/pos-menu-image-storage-path'
-import { isChickenMenu } from '@/lib/pos-menu-categories'
+import { filterMenusMatchingMainAndSubcategory, isChickenMenu } from '@/lib/pos-menu-categories'
 
 export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
 
@@ -572,15 +572,7 @@ export function PosTerminalMenuScreen({
 
   const categoryMenus = React.useMemo(() => {
     if (!selectedMainCategory || !selectedCategory) return [] as PosMenu[]
-    const subOk = (cat: string | undefined) =>
-      selectedMainCategory === PROMOTION_MAIN_CATEGORY
-        ? promotionSubcategoriesEqual(cat, selectedCategory)
-        : (cat ?? '').trim() === selectedCategory
-    const byMainAndSub = menus.filter(
-      (menu) => (menu.categoryMain ?? '') === selectedMainCategory && subOk(menu.category)
-    )
-    if (byMainAndSub.length > 0) return byMainAndSub
-    return menus.filter((menu) => subOk(menu.category))
+    return filterMenusMatchingMainAndSubcategory(menus, selectedMainCategory, selectedCategory)
   }, [menus, selectedCategory, selectedMainCategory])
 
   const moveMenuInCategory = (menuId: string, direction: -1 | 1) => {
@@ -687,15 +679,11 @@ export function PosTerminalMenuScreen({
       return visible == null ? true : visible
     })
     if (!selectedMainCategory || !selectedCategory) return []
-    const subOk = (cat: string | undefined) =>
-      selectedMainCategory === PROMOTION_MAIN_CATEGORY
-        ? promotionSubcategoriesEqual(cat, selectedCategory)
-        : (cat ?? '').trim() === selectedCategory
-    const byMainAndSub = visibleByPromoChannel.filter(
-      (m) => (m.categoryMain ?? '') === selectedMainCategory && subOk(m.category)
+    return filterMenusMatchingMainAndSubcategory(
+      visibleByPromoChannel,
+      selectedMainCategory,
+      selectedCategory
     )
-    if (byMainAndSub.length > 0) return byMainAndSub
-    return visibleByPromoChannel.filter((m) => subOk(m.category))
   }, [menus, orderType, selectedCategory, selectedMainCategory, todayStr, promoVisibilityById])
 
   const filteredPromos = React.useMemo(() => {

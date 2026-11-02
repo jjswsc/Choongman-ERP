@@ -3,6 +3,7 @@ import {
   mergePromotionIntoCategoriesConfig,
   mergeImportedMenuCategoriesIntoConfig,
   resolveConfiguredCategoriesForMain,
+  filterMenusMatchingMainAndSubcategory,
   POS_CATEGORIES_BY_MAIN,
   fallbackPosMenuCategoriesConfig,
   emptyPosMenuCategoriesConfig,
@@ -135,5 +136,21 @@ describe('fallbackPosMenuCategoriesConfig', () => {
     const cfg = fallbackPosMenuCategoriesConfig(false)
     expect(cfg.mainCategories).toEqual(chungmanPresetPosMenuCategoriesConfig().mainCategories)
     expect(cfg.categoriesByMain.Chicken).toEqual([...POS_CATEGORIES_BY_MAIN.Chicken])
+  })
+})
+
+describe('filterMenusMatchingMainAndSubcategory', () => {
+  it('does not fall back to another main that shares the same subcategory name (Banjoo BBQ vs Food BBQ)', () => {
+    const menus = [
+      { id: 'f1', categoryMain: 'Food', category: 'BBQ' },
+      { id: 'f2', categoryMain: 'Food', category: 'BBQ' },
+      { id: 'b1', categoryMain: 'Banjoo Bunsik', category: 'BBQ' },
+      { id: 'b2', categoryMain: 'Banjoo Bunsik', category: 'BBQ' },
+      { id: 'b3', categoryMain: 'Banjoo Bunsik', category: 'BBQ' },
+      { id: 'b4', categoryMain: 'Banjoo Bunsik', category: 'Side' },
+    ]
+    const banjooBbq = filterMenusMatchingMainAndSubcategory(menus, 'Banjoo Bunsik', 'BBQ')
+    expect(banjooBbq.map((m) => m.id)).toEqual(['b1', 'b2', 'b3'])
+    expect(filterMenusMatchingMainAndSubcategory(menus, 'Banjoo Bunsik', 'Soup')).toEqual([])
   })
 })

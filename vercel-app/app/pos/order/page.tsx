@@ -173,7 +173,7 @@ import { resolvePromoTileImageSrc } from "@/lib/pos-menu-display-image"
 import { loadPosDeliveryMenuImageByMenuId } from "@/lib/load-pos-delivery-menu-images"
 import { usePosMenusCatalogLiveRefresh } from "@/lib/offline/use-pos-menus-catalog-live-refresh"
 import { resolvePromoSublineOptionDisplayName } from "@/lib/pos-promo-subline-option-label"
-import { isChickenMenu } from "@/lib/pos-menu-categories"
+import { filterMenusMatchingMainAndSubcategory, isChickenMenu } from "@/lib/pos-menu-categories"
 import {
   posHallAutoPrintDedupeKey,
   reservePosAutoPrintKeys,
@@ -857,15 +857,11 @@ export default function PosOrderPage() {
           : m.sellHall !== false
     )
     if (!selectedMainCategory || !selectedCategory) return []
-    const subOk = (cat: string | undefined) =>
-      selectedMainCategory === PROMOTION_MAIN_CATEGORY
-        ? promotionSubcategoriesEqual(cat, selectedCategory)
-        : (cat ?? "").trim() === selectedCategory
-    const byMainAndSub = visibleByOrderType.filter(
-      (m) => (m.categoryMain ?? "") === selectedMainCategory && subOk(m.category)
+    return filterMenusMatchingMainAndSubcategory(
+      visibleByOrderType,
+      selectedMainCategory,
+      selectedCategory
     )
-    if (byMainAndSub.length > 0) return byMainAndSub
-    return visibleByOrderType.filter((m) => subOk(m.category))
   }, [menus, orderType, selectedCategory, selectedMainCategory, todayStr])
 
   const linkedPromoIds = React.useMemo(() => {
