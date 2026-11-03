@@ -9,6 +9,31 @@ import {
   isChannelReconcileDayMismatch,
 } from "@/lib/pos-channel-reconcile-match"
 import type { SalesCashOrderDrillTarget } from "@/components/tabs/sales-cash-order-drill-sheet"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+  type SalesSortDir,
+} from "@/components/tabs/sales-management-sortable"
+
+/** 정산 표 헤더 — 기존 py-2(좌우 패딩 없음) 유지 */
+function ReconTh<K extends string>(props: {
+  sort: { sortKey: K; sortDir: SalesSortDir; toggleSort: (key: K) => void }
+  k: K
+  label: React.ReactNode
+  align?: "left" | "right"
+}) {
+  return (
+    <SalesSortableTh
+      label={props.label}
+      active={props.sort.sortKey === props.k}
+      dir={props.sort.sortDir}
+      align={props.align ?? "right"}
+      className="!px-0"
+      onClick={() => props.sort.toggleSort(props.k)}
+    />
+  )
+}
 
 export const EMPTY_POS_CASH_RECONCILE: PosCashReconcileResult = {
   rows: [],
@@ -111,6 +136,7 @@ export function SalesCashReconcilePanel(props: {
   const { data, placeholder, tr, formatAmount, storeDisplayName, onCashDrill } = props
   const [expanded, setExpanded] = React.useState<string | null>(null)
   const [mismatchOnly, setMismatchOnly] = React.useState(true)
+  const sort = useSalesTableSort<"store" | "count" | "pos" | "bank" | "diff">("pos", "desc")
 
   if (placeholder) {
     return <p className="py-8 text-center text-sm text-muted-foreground">{placeholder}</p>
@@ -121,6 +147,22 @@ export function SalesCashReconcilePanel(props: {
   const kpiDiff = hasBank ? Math.round((kpi.bankDepositAmt - kpi.cashSales) * 100) / 100 : null
   const mismatchDayCount = data.rows.reduce((n, r) => n + cashMismatchDates(r.days).length, 0)
   const clickHint = tr("salesCashDrillClickHint", "클릭하면 주문 목록")
+  // 통장 금액이 없는 행(—)은 정렬 방향과 무관하게 맨 아래
+  const missingLast = sort.sortDir === "asc" ? Number.MAX_VALUE : -Number.MAX_VALUE
+  const sortedRows = sortSalesRows(data.rows, sort.sortDir, (r) => {
+    switch (sort.sortKey) {
+      case "store":
+        return storeDisplayName(r.storeCode) || r.storeCode
+      case "count":
+        return r.orderCount
+      case "bank":
+        return r.bankDepositAmt ?? missingLast
+      case "diff":
+        return r.bankDepositAmt == null ? missingLast : r.bankDepositAmt - r.cashSales
+      default:
+        return r.cashSales
+    }
+  })
 
   const openKpiDrill = () => {
     onCashDrill?.({
@@ -220,15 +262,15 @@ export function SalesCashReconcilePanel(props: {
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="py-2 text-left">{tr("store", "매장")}</th>
-                <th className="py-2 text-right">{tr("salesCashColCount", "건수")}</th>
-                <th className="py-2 text-right">{tr("salesCashColPos", "POS 현금")}</th>
-                <th className="py-2 text-right">{tr("salesCashColBank", "통장 현금입금")}</th>
-                <th className="py-2 text-right">{tr("salesCashColDiff", "차이")}</th>
+                <ReconTh sort={sort} k="store" align="left" label={tr("store", "매장")} />
+                <ReconTh sort={sort} k="count" label={tr("salesCashColCount", "건수")} />
+                <ReconTh sort={sort} k="pos" label={tr("salesCashColPos", "POS 현금")} />
+                <ReconTh sort={sort} k="bank" label={tr("salesCashColBank", "통장 현금입금")} />
+                <ReconTh sort={sort} k="diff" label={tr("salesCashColDiff", "차이")} />
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((r) => {
+              {sortedRows.map((r) => {
                 const open = expanded === r.storeCode
                 const dates = cashMismatchDates(r.days)
                 const visibleDays = mismatchOnly

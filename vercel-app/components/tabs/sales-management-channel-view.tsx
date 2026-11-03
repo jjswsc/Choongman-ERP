@@ -4,12 +4,19 @@ import * as React from "react"
 import { SalesPeriodTrendChartBlock } from "@/components/tabs/sales-management-charts"
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from "recharts"
 import { formatSalesAmount } from "@/components/tabs/sales-management-shared"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
 import type {
   SalesChannelChartRow,
   SalesPeriodBarXAxisProps,
   SalesPeriodChartRow,
   SalesPeriodChartYAxisProps,
 } from "@/components/tabs/sales-management-view-types"
+
+type ChannelSortKey = "channel" | "sales"
 
 export interface SalesChannelViewProps {
   periodChartRows: SalesPeriodChartRow[]
@@ -26,6 +33,19 @@ export function SalesChannelView({
   tr,
   channelChartRows,
 }: SalesChannelViewProps) {
+  const { sortKey, sortDir, toggleSort } = useSalesTableSort<ChannelSortKey>("sales", "desc")
+
+  const sortedRows = React.useMemo(
+    () =>
+      sortSalesRows(
+        channelChartRows,
+        sortDir,
+        (r) => (sortKey === "channel" ? r.axisLabel : r.sales),
+        (a, b) => a.axisLabel.localeCompare(b.axisLabel, undefined, { sensitivity: "base" })
+      ),
+    [channelChartRows, sortKey, sortDir]
+  )
+
   return (
     <>
       <SalesPeriodTrendChartBlock
@@ -48,12 +68,23 @@ export function SalesChannelView({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="py-2 text-center">{tr("salesChannel", "채널")}</th>
-            <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+            <SalesSortableTh
+              label={tr("salesChannel", "채널")}
+              active={sortKey === "channel"}
+              dir={sortDir}
+              align="center"
+              onClick={() => toggleSort("channel")}
+            />
+            <SalesSortableTh
+              label={tr("pL_sales", "매출")}
+              active={sortKey === "sales"}
+              dir={sortDir}
+              onClick={() => toggleSort("sales")}
+            />
           </tr>
         </thead>
         <tbody>
-          {channelChartRows.slice(0, 30).map((r) => (
+          {sortedRows.slice(0, 30).map((r) => (
             <tr key={r.channelKey} className="border-b">
               <td className="py-1.5 text-center">{r.axisLabel}</td>
               <td className="py-1.5 text-right font-erp-numeric">

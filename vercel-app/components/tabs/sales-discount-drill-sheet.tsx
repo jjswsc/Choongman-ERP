@@ -21,6 +21,13 @@ import {
 } from "@/lib/sales-discount-analytics-labels"
 import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
+
+type DiscountDrillSortKey = "orderNo" | "store" | "orderType" | "total" | "discount" | "reason"
 
 export type SalesDiscountDrillContext = {
   startStr: string
@@ -75,6 +82,34 @@ export function useSalesDiscountDrillSheet(ctx: SalesDiscountDrillContext, tr: T
   const [orders, setOrders] = React.useState<PosSalesDiscountDrillOrderRow[]>([])
   const [truncated, setTruncated] = React.useState(false)
   const [error, setError] = React.useState("")
+  const { sortKey, sortDir, toggleSort } = useSalesTableSort<DiscountDrillSortKey>("discount", "desc")
+
+  const sortedOrders = React.useMemo(
+    () =>
+      sortSalesRows(
+        orders,
+        sortDir,
+        (row) => {
+          switch (sortKey) {
+            case "orderNo":
+              return row.orderNo || String(row.orderId)
+            case "store":
+              return row.storeCode || ""
+            case "orderType":
+              return orderTypeLabel(row.orderType, tr)
+            case "total":
+              return row.total
+            case "reason":
+              return row.discountReason || row.couponCode || row.promoLabel || row.tableName || ""
+            case "discount":
+            default:
+              return row.discountAmount
+          }
+        },
+        (a, b) => String(a.orderNo || "").localeCompare(String(b.orderNo || ""))
+      ),
+    [orders, sortKey, sortDir, tr]
+  )
 
   const openDrill = React.useCallback((next: SalesDiscountDrillTarget) => {
     setTarget(next)
@@ -163,16 +198,50 @@ export function useSalesDiscountDrillSheet(ctx: SalesDiscountDrillContext, tr: T
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-muted-foreground">
-                      <th className="px-3 py-2 text-left">{tr("salesDiscountDrillColOrderNo", "주문")}</th>
-                      <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
-                      <th className="px-3 py-2 text-left">{tr("salesDiscountDrillColOrderType", "종류")}</th>
-                      <th className="px-3 py-2 text-right">{tr("salesAmount", "매출액")}</th>
-                      <th className="px-3 py-2 text-right">{tr("salesDiscountDrillColDiscount", "할인액")}</th>
-                      <th className="px-3 py-2 text-left">{tr("salesPaymentDiscountReason", "할인 사유")}</th>
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesDiscountDrillColOrderNo", "주문")}
+                        active={sortKey === "orderNo"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("orderNo")}
+                      />
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesStoreName", "매장명")}
+                        active={sortKey === "store"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("store")}
+                      />
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesDiscountDrillColOrderType", "종류")}
+                        active={sortKey === "orderType"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("orderType")}
+                      />
+                      <SalesSortableTh
+                        label={tr("salesAmount", "매출액")}
+                        active={sortKey === "total"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("total")}
+                      />
+                      <SalesSortableTh
+                        label={tr("salesDiscountDrillColDiscount", "할인액")}
+                        active={sortKey === "discount"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("discount")}
+                      />
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesPaymentDiscountReason", "할인 사유")}
+                        active={sortKey === "reason"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("reason")}
+                      />
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((row) => (
+                    {sortedOrders.map((row) => (
                       <tr key={row.orderId} className="border-b border-border/60">
                         <td className="px-3 py-1.5">
                           <Link

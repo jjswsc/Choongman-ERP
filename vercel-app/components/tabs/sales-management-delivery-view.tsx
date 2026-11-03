@@ -4,6 +4,11 @@ import * as React from "react"
 import { SalesPeriodTrendChartBlock, SALES_CHART_COLORS } from "@/components/tabs/sales-management-charts"
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts"
 import { formatSalesAmount } from "@/components/tabs/sales-management-shared"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import type {
@@ -15,6 +20,9 @@ import type {
 } from "@/components/tabs/sales-management-view-types"
 
 const COLORS = [...SALES_CHART_COLORS]
+
+type DeliverySortKey = "channel" | "sales" | "pct"
+type PlatformSortKey = "platform" | "sales" | "pct"
 
 export interface SalesDeliveryViewProps {
   periodChartRows: SalesPeriodChartRow[]
@@ -37,6 +45,47 @@ export function SalesDeliveryView({
   deliveryPlatformBreakdown,
   deliveryPlatformPieRows,
 }: SalesDeliveryViewProps) {
+  const {
+    sortKey: channelSortKey,
+    sortDir: channelSortDir,
+    toggleSort: toggleChannelSort,
+  } = useSalesTableSort<DeliverySortKey>("sales", "desc")
+  const {
+    sortKey: platformSortKey,
+    sortDir: platformSortDir,
+    toggleSort: togglePlatformSort,
+  } = useSalesTableSort<PlatformSortKey>("sales", "desc")
+
+  const sortedChannelRows = React.useMemo(
+    () =>
+      sortSalesRows(
+        deliveryPieRows,
+        channelSortDir,
+        (r) => {
+          if (channelSortKey === "channel") return r.axisLabel
+          if (channelSortKey === "pct") return r.pct
+          return r.sales
+        },
+        (a, b) => a.axisLabel.localeCompare(b.axisLabel, undefined, { sensitivity: "base" })
+      ),
+    [deliveryPieRows, channelSortKey, channelSortDir]
+  )
+
+  const sortedPlatformRows = React.useMemo(
+    () =>
+      sortSalesRows(
+        deliveryPlatformPieRows,
+        platformSortDir,
+        (r) => {
+          if (platformSortKey === "platform") return r.axisLabel
+          if (platformSortKey === "pct") return r.pct
+          return r.sales
+        },
+        (a, b) => a.axisLabel.localeCompare(b.axisLabel, undefined, { sensitivity: "base" })
+      ),
+    [deliveryPlatformPieRows, platformSortKey, platformSortDir]
+  )
+
   return (
     <>
       <SalesPeriodTrendChartBlock
@@ -75,13 +124,29 @@ export function SalesDeliveryView({
         <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="py-2 text-center">{tr("salesDeliveryChannel", "배달앱/채널")}</th>
-            <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
-            <th className="py-2 text-right">{tr("salesRatio", "비율")}</th>
+            <SalesSortableTh
+              label={tr("salesDeliveryChannel", "배달앱/채널")}
+              active={channelSortKey === "channel"}
+              dir={channelSortDir}
+              align="center"
+              onClick={() => toggleChannelSort("channel")}
+            />
+            <SalesSortableTh
+              label={tr("pL_sales", "매출")}
+              active={channelSortKey === "sales"}
+              dir={channelSortDir}
+              onClick={() => toggleChannelSort("sales")}
+            />
+            <SalesSortableTh
+              label={tr("salesRatio", "비율")}
+              active={channelSortKey === "pct"}
+              dir={channelSortDir}
+              onClick={() => toggleChannelSort("pct")}
+            />
           </tr>
         </thead>
         <tbody>
-          {deliveryPieRows.map((r) => (
+          {sortedChannelRows.map((r) => (
             <tr key={r.channelKey} className="border-b">
               <td className="py-1.5 text-center">{r.axisLabel}</td>
               <td className="py-1.5 text-right font-erp-numeric">
@@ -135,15 +200,29 @@ export function SalesDeliveryView({
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="py-2 text-center">
-                          {tr("salesDeliveryPlatformBreakdown", "배달 플랫폼별")}
-                        </th>
-                        <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
-                        <th className="py-2 text-right">{tr("salesRatio", "비율")}</th>
+                        <SalesSortableTh
+                          label={tr("salesDeliveryPlatformBreakdown", "배달 플랫폼별")}
+                          active={platformSortKey === "platform"}
+                          dir={platformSortDir}
+                          align="center"
+                          onClick={() => togglePlatformSort("platform")}
+                        />
+                        <SalesSortableTh
+                          label={tr("pL_sales", "매출")}
+                          active={platformSortKey === "sales"}
+                          dir={platformSortDir}
+                          onClick={() => togglePlatformSort("sales")}
+                        />
+                        <SalesSortableTh
+                          label={tr("salesRatio", "비율")}
+                          active={platformSortKey === "pct"}
+                          dir={platformSortDir}
+                          onClick={() => togglePlatformSort("pct")}
+                        />
                       </tr>
                     </thead>
                     <tbody>
-                      {deliveryPlatformPieRows.map((r) => (
+                      {sortedPlatformRows.map((r) => (
                         <tr key={r.code} className="border-b">
                           <td className="py-1.5 text-center">{r.axisLabel}</td>
                           <td className="py-1.5 text-right font-erp-numeric">

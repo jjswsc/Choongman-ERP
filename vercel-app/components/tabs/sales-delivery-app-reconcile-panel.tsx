@@ -14,6 +14,12 @@ import {
   channelReconcileMismatchDates,
   isChannelReconcileDayMismatch,
 } from "@/lib/pos-channel-reconcile-match"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+  type SalesSortDir,
+} from "@/components/tabs/sales-management-sortable"
 
 export const EMPTY_POS_DELIVERY_APP_RECONCILE: PosDeliveryAppReconcileResult = {
   rows: [],
@@ -108,6 +114,83 @@ function MismatchCountLabel(props: {
   )
 }
 
+type DeliverySortKey =
+  | "store"
+  | "app"
+  | "sales"
+  | "count"
+  | "deliverySales"
+  | "deliveryCount"
+  | "inStoreSales"
+  | "inStoreCount"
+  | "feePct"
+  | "suggestedFee"
+  | "suggestedPayout"
+  | "bank"
+  | "diff"
+  | "settledFee"
+
+/** 정렬 값 — 값이 없는 칸(—)은 방향과 무관하게 항상 맨 아래 */
+function deliveryRowSortValue(
+  r: PosDeliveryAppReconcileRow,
+  key: DeliverySortKey,
+  dir: SalesSortDir,
+  storeLabel: (code: string) => string,
+  appLabel: (code: string) => string
+): string | number {
+  const last = dir === "asc" ? Number.MAX_VALUE : -Number.MAX_VALUE
+  const bank = r.bankDepositAmt ?? r.settledNet
+  switch (key) {
+    case "store":
+      return storeLabel(r.storeCode)
+    case "app":
+      return appLabel(r.appCode)
+    case "count":
+      return r.deliveryCount + r.inStoreCount
+    case "deliverySales":
+      return r.deliverySales
+    case "deliveryCount":
+      return r.deliveryCount
+    case "inStoreSales":
+      return r.inStoreSales
+    case "inStoreCount":
+      return r.inStoreCount
+    case "feePct":
+      return r.feeSource === "none" ? last : r.feePct
+    case "suggestedFee":
+      return r.suggestedFee
+    case "suggestedPayout":
+      return r.suggestedPayout
+    case "bank":
+      return bank ?? last
+    case "diff":
+      return bank == null ? last : bank - r.suggestedPayout
+    case "settledFee":
+      return r.settledFee ?? last
+    case "sales":
+    default:
+      return r.appNetSales
+  }
+}
+
+function DeliveryTh(props: {
+  sort: { sortKey: DeliverySortKey; sortDir: SalesSortDir; toggleSort: (key: DeliverySortKey) => void }
+  k: DeliverySortKey
+  label: React.ReactNode
+  align?: "left" | "right"
+}) {
+  return (
+    <SalesSortableTh
+      label={props.label}
+      active={props.sort.sortKey === props.k}
+      dir={props.sort.sortDir}
+      align={props.align ?? "right"}
+      className="!px-3"
+      onClick={() => props.sort.toggleSort(props.k)}
+    />
+  )
+}
+
 function KpiCard(props: {
   title: string
   hint?: string
@@ -142,6 +225,8 @@ export function SalesDeliveryAppReconcilePanel(props: {
     () => data.rows.filter((r) => matchesAppFilter(r.appCode, appFilter)),
     [data.rows, appFilter]
   )
+  const splitSort = useSalesTableSort<DeliverySortKey>("sales", "desc")
+  const combinedSort = useSalesTableSort<DeliverySortKey>("sales", "desc")
 
   const kpi = React.useMemo(() => {
     if (appFilter === "all") return data.kpi
@@ -184,6 +269,18 @@ export function SalesDeliveryAppReconcilePanel(props: {
     return <p className="py-8 text-center text-sm text-muted-foreground">{placeholder}</p>
   }
 
+  const sortDeliveryRows = (sort: { sortKey: DeliverySortKey; sortDir: SalesSortDir }) =>
+    sortSalesRows(filteredRows, sort.sortDir, (r) =>
+      deliveryRowSortValue(
+        r,
+        sort.sortKey,
+        sort.sortDir,
+        (c) => storeDisplayName(c),
+        (c) => translateDeliveryAppCode(c, tr)
+      )
+    )
+  const splitSortedRows = sortDeliveryRows(splitSort)
+  const combinedSortedRows = sortDeliveryRows(combinedSort)
   const rowKey = (r: PosDeliveryAppReconcileRow) => `${r.storeCode}::${r.appCode}`
   const kindDelivery = tr("salesAppReconcileKindDelivery", "배달")
   const kindDine = tr("salesAppReconcileKindDine", "매장앱결제")
@@ -369,21 +466,21 @@ export function SalesDeliveryAppReconcilePanel(props: {
           <table className="w-full min-w-[980px] text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
-                <th className="px-3 py-2 text-left">{tr("salesDeliveryChannel", "배달앱/채널")}</th>
+                <DeliveryTh sort={splitSort} k="store" align="left" label={tr("salesStoreName", "매장명")} />
+                <DeliveryTh sort={splitSort} k="app" align="left" label={tr("salesDeliveryChannel", "배달앱/채널")} />
                 <th className="px-3 py-2 text-left">{tr("salesAppReconcileKind", "구분")}</th>
-                <th className="px-3 py-2 text-right">{tr("pL_sales", "매출")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesOccupancy", "주문건수")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColFeePct", "수수료%")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSuggestedFee", "예상 수수료")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSuggestedPayout", "예상 입금")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledNet", "통장 입금")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledFee", "결산 수수료")}</th>
+                <DeliveryTh sort={splitSort} k="sales" label={tr("pL_sales", "매출")} />
+                <DeliveryTh sort={splitSort} k="count" label={tr("salesOccupancy", "주문건수")} />
+                <DeliveryTh sort={splitSort} k="feePct" label={tr("salesAppReconcileColFeePct", "수수료%")} />
+                <DeliveryTh sort={splitSort} k="suggestedFee" label={tr("salesAppReconcileColSuggestedFee", "예상 수수료")} />
+                <DeliveryTh sort={splitSort} k="suggestedPayout" label={tr("salesAppReconcileColSuggestedPayout", "예상 입금")} />
+                <DeliveryTh sort={splitSort} k="bank" label={tr("salesAppReconcileColSettledNet", "통장 입금")} />
+                <DeliveryTh sort={splitSort} k="diff" label={tr("salesAppReconcileCsvDiff", "차이")} />
+                <DeliveryTh sort={splitSort} k="settledFee" label={tr("salesAppReconcileColSettledFee", "결산 수수료")} />
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((r) => {
+              {splitSortedRows.map((r) => {
                 const k = rowKey(r)
                 const open = openKey === k
                 const feeLabel = r.feeSource === "none" ? "—" : `${r.feePct.toFixed(1)}%`
@@ -501,35 +598,23 @@ export function SalesDeliveryAppReconcilePanel(props: {
           <table className="w-full min-w-[1080px] text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
-                <th className="px-3 py-2 text-left">{tr("salesDeliveryChannel", "배달앱/채널")}</th>
-                <th className="px-3 py-2 text-right">
-                  {tr("salesAppReconcileColDeliverySales", "배달 순매출")}
-                </th>
-                <th className="px-3 py-2 text-right">
-                  {tr("salesAppReconcileColDeliveryCount", "배달 건수")}
-                </th>
-                <th className="px-3 py-2 text-right">
-                  {tr("salesAppReconcileColInStoreSales", "매장앱결제")}
-                </th>
-                <th className="px-3 py-2 text-right">
-                  {tr("salesAppReconcileColInStoreCount", "매장앱 건수")}
-                </th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColAppNet", "앱 합계 순매출")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColFeePct", "수수료%")}</th>
-                <th className="px-3 py-2 text-right">
-                  {tr("salesAppReconcileColSuggestedFee", "예상 수수료")}
-                </th>
-                <th className="px-3 py-2 text-right">
-                  {tr("salesAppReconcileColSuggestedPayout", "예상 입금")}
-                </th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledNet", "통장 입금")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
-                <th className="px-3 py-2 text-right">{tr("salesAppReconcileColSettledFee", "결산 수수료")}</th>
+                <DeliveryTh sort={combinedSort} k="store" align="left" label={tr("salesStoreName", "매장명")} />
+                <DeliveryTh sort={combinedSort} k="app" align="left" label={tr("salesDeliveryChannel", "배달앱/채널")} />
+                <DeliveryTh sort={combinedSort} k="deliverySales" label={tr("salesAppReconcileColDeliverySales", "배달 순매출")} />
+                <DeliveryTh sort={combinedSort} k="deliveryCount" label={tr("salesAppReconcileColDeliveryCount", "배달 건수")} />
+                <DeliveryTh sort={combinedSort} k="inStoreSales" label={tr("salesAppReconcileColInStoreSales", "매장앱결제")} />
+                <DeliveryTh sort={combinedSort} k="inStoreCount" label={tr("salesAppReconcileColInStoreCount", "매장앱 건수")} />
+                <DeliveryTh sort={combinedSort} k="sales" label={tr("salesAppReconcileColAppNet", "앱 합계 순매출")} />
+                <DeliveryTh sort={combinedSort} k="feePct" label={tr("salesAppReconcileColFeePct", "수수료%")} />
+                <DeliveryTh sort={combinedSort} k="suggestedFee" label={tr("salesAppReconcileColSuggestedFee", "예상 수수료")} />
+                <DeliveryTh sort={combinedSort} k="suggestedPayout" label={tr("salesAppReconcileColSuggestedPayout", "예상 입금")} />
+                <DeliveryTh sort={combinedSort} k="bank" label={tr("salesAppReconcileColSettledNet", "통장 입금")} />
+                <DeliveryTh sort={combinedSort} k="diff" label={tr("salesAppReconcileCsvDiff", "차이")} />
+                <DeliveryTh sort={combinedSort} k="settledFee" label={tr("salesAppReconcileColSettledFee", "결산 수수료")} />
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((r) => {
+              {combinedSortedRows.map((r) => {
                 const k = rowKey(r)
                 const open = openKey === k
                 return (

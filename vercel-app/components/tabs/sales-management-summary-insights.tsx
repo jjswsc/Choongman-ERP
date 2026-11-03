@@ -46,6 +46,10 @@ export function SalesManagementSummaryInsights({
   insightTopChannels,
   showInsightPanel,
 }: SalesManagementSummaryInsightsProps) {
+  // 순매출 워터폴과 같은 금액이면 단독「현재 기간 매출」카드는 합침(칸 절약)
+  const showCurrentOnlyCard = summaryRowShowCurrentOnly && !insightShowTotals
+  const mergeCurrentIntoNet = insightShowTotals && summaryRowShowCurrentOnly
+
   return (
     <>
       {summaryRowShowFull ? (
@@ -81,7 +85,7 @@ export function SalesManagementSummaryInsights({
             </CardContent>
           </Card>
         </div>
-      ) : summaryRowShowCurrentOnly ? (
+      ) : showCurrentOnlyCard ? (
         <Card className="mb-3 max-w-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
@@ -99,9 +103,18 @@ export function SalesManagementSummaryInsights({
           {insightShowTotals ? (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">{tr("salesNetResult", "순매출")}</CardTitle>
+                <CardTitle className="text-sm">
+                  {mergeCurrentIntoNet
+                    ? tr("salesSummaryCurrent", "현재 기간 매출")
+                    : tr("salesNetResult", "순매출")}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
+                {mergeCurrentIntoNet ? (
+                  <p className={`text-xl font-semibold ${ADMIN_NUMERIC_CN}`}>
+                    {formatSalesAmount(activeTotalsSummary.total)}
+                  </p>
+                ) : null}
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">{tr("salesNetGross", "총액(할인·서비스 전)")}</span>
                   <span className={`font-semibold ${ADMIN_NUMERIC_CN}`}>
@@ -120,12 +133,14 @@ export function SalesManagementSummaryInsights({
                     -{formatSalesAmount(activeTotalsSummary.service)}
                   </span>
                 </div>
-                <div className="flex justify-between gap-2 border-t pt-2">
-                  <span className="font-medium">{tr("salesNetResult", "순매출")}</span>
-                  <span className={`text-base font-bold ${ADMIN_NUMERIC_CN}`}>
-                    {formatSalesAmount(activeTotalsSummary.total)}
-                  </span>
-                </div>
+                {!mergeCurrentIntoNet ? (
+                  <div className="flex justify-between gap-2 border-t pt-2">
+                    <span className="font-medium">{tr("salesNetResult", "순매출")}</span>
+                    <span className={`text-base font-bold ${ADMIN_NUMERIC_CN}`}>
+                      {formatSalesAmount(activeTotalsSummary.total)}
+                    </span>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}
