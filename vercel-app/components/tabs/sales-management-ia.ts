@@ -12,6 +12,7 @@ export type AnalyticsView =
   | "store-period"
   | "yoy-compare"
   | "mom-compare"
+  | "mom-store-compare"
   | "forecast"
   | "overview"
   | "channel-reconcile"
@@ -21,13 +22,17 @@ export type AnalyticsView =
 export type PeriodGroupValue = "year" | "month" | "week" | "day" | "hour" | "dow"
 
 /** 집계 기간 UI·상단 추이 차트를 공유하는 리포트 주제 (실시간 운영 제외) */
+/**
+ * 집계 단위(연·월·주·일·시간·요일)가 표·차트를 바꾸는 주제.
+ * 매출 집계(매장&분류)는 선택 기간 합계라 여기 넣지 않는다.
+ * 월별 비교는 매장·기간 목록(store-period)이다.
+ */
 export const PERIOD_GROUP_TOPIC_VIEWS: Exclude<AnalyticsView, null>[] = [
   "period",
   "store-period",
   "channel",
   "menu",
   "delivery",
-  "store-category",
   "payment",
 ]
 
@@ -149,6 +154,12 @@ export const SALES_IA: SalesSubMenuConfig[] = [
         labelKey: "salesTopicCompareMonthMom",
         hintKey: "salesTopicCompareMonthMomHint",
         view: "mom-compare",
+      },
+      {
+        id: "report-store-mom",
+        labelKey: "salesTopicCompareStoreMom",
+        hintKey: "salesTopicCompareStoreMomHint",
+        view: "mom-store-compare",
       },
       {
         id: "report-forecast-monthly",

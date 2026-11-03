@@ -33,6 +33,30 @@ export type MomDayCompareRow = {
   }
 }
 
+/** 매장별 전월대비 — posSalesByStore 행 입력 */
+export type MomStoreCompareInputRow = {
+  storeName: string
+  count?: number
+  total?: number
+  guestSum?: number
+  dineInGuestSum?: number
+  salesPerGuest?: number
+}
+
+export type MomStoreCompareRow = {
+  storeName: string
+  prevMonth: SalesCompareMetrics
+  currMonth: SalesCompareMetrics
+  changeAbs: {
+    total: number
+  }
+  changePct: {
+    total: number | null
+    guest: number | null
+    salesPerGuest: number | null
+  }
+}
+
 export type ForecastHorizon = 'week' | 'month' | 'year'
 
 export type DowAverageMap = Record<number, number>
@@ -182,6 +206,77 @@ export function buildMomDayCompareRows(params: {
     })
   }
   return out
+}
+
+function metricsFromStoreRow(row?: MomStoreCompareInputRow | null): SalesCompareMetrics {
+  if (!row) return emptyMetrics()
+  const guest =
+    Number(row.dineInGuestSum ?? 0) > 0 ? Number(row.dineInGuestSum ?? 0) : Number(row.guestSum ?? 0)
+  const total = Number(row.total ?? 0) || 0
+  const orderCount = Number(row.count ?? 0) || 0
+  const salesPerGuestRaw = Number(row.salesPerGuest ?? 0)
+  return {
+    orderCount,
+    total,
+    guestSum: guest,
+    salesPerGuest:
+      Number.isFinite(salesPerGuestRaw) && salesPerGuestRaw > 0
+        ? Math.round(salesPerGuestRaw * 100) / 100
+        : guest > 0
+          ? Math.round((total / guest) * 100) / 100
+          : 0,
+  }
+}
+
+function indexStoreRowsByName(rows: MomStoreCompareInputRow[]): Map<string, MomStoreCompareInputRow> {
+  const map = new Map<string, MomStoreCompareInputRow>()
+  for (const r of rows) {
+    const k = String(r.storeName ?? '').trim()
+    if (!k) continue
+    const prev = map.get(k)
+    if (!prev) {
+      map.set(k, r)
+      continue
+    }
+    // 동일 매장명이 겹치면 합산 (필터·표기 차이 방어)
+    map.set(k, {
+      storeName: k,
+      count: (Number(prev.count) || 0) + (Number(r.count) || 0),
+      total: (Number(prev.total) || 0) + (Number(r.total) || 0),
+      guestSum: (Number(prev.guestSum) || 0) + (Number(r.guestSum) || 0),
+      dineInGuestSum: (Number(prev.dineInGuestSum) || 0) + (Number(r.dineInGuestSum) || 0),
+    })
+  }
+  return map
+}
+
+/** 매장별 전월대비 — 당월·전월 달력월 합계 (POS 매장별 전월대비) */
+export function buildMomStoreCompareRows(params: {
+  prevMonthRows: MomStoreCompareInputRow[]
+  currMonthRows: MomStoreCompareInputRow[]
+}): MomStoreCompareRow[] {
+  const prevMap = indexStoreRowsByName(params.prevMonthRows)
+  const currMap = indexStoreRowsByName(params.currMonthRows)
+  const keys = Array.from(new Set([...prevMap.keys(), ...currMap.keys()])).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  )
+  return keys.map((storeName) => {
+    const prevMonth = metricsFromStoreRow(prevMap.get(storeName))
+    const currMonth = metricsFromStoreRow(currMap.get(storeName))
+    return {
+      storeName,
+      prevMonth,
+      currMonth,
+      changeAbs: {
+        total: Math.round((currMonth.total - prevMonth.total) * 100) / 100,
+      },
+      changePct: {
+        total: pctChange(currMonth.total, prevMonth.total),
+        guest: pctChange(currMonth.guestSum, prevMonth.guestSum),
+        salesPerGuest: pctChange(currMonth.salesPerGuest, prevMonth.salesPerGuest),
+      },
+    }
+  })
 }
 
 function indexDailyTotals(rows: PeriodAggRow[]): Map<string, number> {
@@ -365,6 +460,23 @@ export function sumYoyMonthMetrics(rows: YoyMonthCompareRow[], side: 'prevYear' 
 }
 
 export function sumMomDayMetrics(rows: MomDayCompareRow[], side: 'prevMonth' | 'currMonth'): SalesCompareMetrics {
+  const acc = emptyMetrics()
+  for (const r of rows) {
+    const m = r[side]
+    acc.orderCount += m.orderCount
+    acc.total += m.total
+    acc.guestSum += m.guestSum
+  }
+  acc.total = Math.round(acc.total * 100) / 100
+  acc.salesPerGuest =
+    acc.guestSum > 0 ? Math.round((acc.total / acc.guestSum) * 100) / 100 : 0
+  return acc
+}
+
+export function sumMomStoreMetrics(
+  rows: MomStoreCompareRow[],
+  side: 'prevMonth' | 'currMonth'
+): SalesCompareMetrics {
   const acc = emptyMetrics()
   for (const r of rows) {
     const m = r[side]
