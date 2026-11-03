@@ -288,6 +288,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/getRoutineTemplates", module: "store_ops" },
   { prefix: "/api/saveRoutineTemplate", module: "store_ops" },
   { prefix: "/api/store/copy-routine-template", module: "store_ops" },
+  { prefix: "/api/store/publish-daily-plans", module: "store_ops" },
   { prefix: "/api/store/daily-plan-team", module: "store_ops" },
   { prefix: "/api/getDailyPlanWeek", module: "store_ops" },
   { prefix: "/api/storeActionDailyPlan", module: "store_ops" },

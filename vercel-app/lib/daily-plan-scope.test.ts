@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import {
   canAssignDailyPlan,
+  canEditRoutineTemplate,
   canListDailyPlanCandidate,
   canViewDailyPlan,
+  canViewRoutineTemplate,
   resolveDailyPlanScope,
 } from '@/lib/daily-plan-scope'
 
@@ -27,6 +29,8 @@ describe('resolveDailyPlanScope — store manager', () => {
     expect(scope.supervisor).toBe(false)
     expect(scope.all).toBe(false)
     expect(scope.stores).toEqual(['CM Silom'])
+    expect(scope.canEditTemplates).toBe(true)
+    expect(scope.canCopyTemplates).toBe(false)
   })
 
   it('Manager at CM Office keeps office scope', () => {
@@ -35,6 +39,23 @@ describe('resolveDailyPlanScope — store manager', () => {
     )
     expect(scope.office).toBe(true)
     expect(scope.all).toBe(true)
+    expect(scope.canCopyTemplates).toBe(true)
+  })
+})
+
+describe('routine template access — Silom Manager', () => {
+  const scope = resolveDailyPlanScope(
+    auth({ store: 'CM Silom', name: 'Pimpakarn', role: 'manager', employeeId: 101 })
+  )
+
+  it('sees only own-store manager/staff templates', () => {
+    expect(canViewRoutineTemplate(scope, { roleScope: 'manager', storeName: 'CM Silom' })).toBe(true)
+    expect(canViewRoutineTemplate(scope, { roleScope: 'staff', storeName: 'CM Silom' })).toBe(true)
+    expect(canEditRoutineTemplate(scope, { roleScope: 'staff', storeName: 'CM Silom' })).toBe(true)
+    expect(canViewRoutineTemplate(scope, { roleScope: 'supervisor', storeName: 'CM Silom' })).toBe(false)
+    expect(canViewRoutineTemplate(scope, { roleScope: 'manager', storeName: '' })).toBe(false)
+    expect(canViewRoutineTemplate(scope, { roleScope: 'manager', storeName: 'CM MBK' })).toBe(false)
+    expect(canViewRoutineTemplate(scope, { roleScope: 'manager', storeName: 'CM Office' })).toBe(false)
   })
 })
 

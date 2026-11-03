@@ -26,7 +26,19 @@ export type DailyPlanScope = {
   stores: string[]
   actorName: string
   actorEmployeeId: number | null
+  /**
+   * 템플릿 편집 UI 노출.
+   * 본사·SV = 전체, 매장 매니저 = 자기 매장 manager/staff 템플릿만(서버에서 재검증).
+   */
   canEditTemplates: boolean
+  /** 전 매장 공통·타 매장 복사 — 본사·SV만 */
+  canCopyTemplates: boolean
+}
+
+export type RoutineTemplateAccessLite = {
+  roleScope: string
+  storeName: string
+  employeeId?: number | null
 }
 
 export type DailyPlanTargetLite = {
@@ -79,6 +91,7 @@ export function resolveDailyPlanScope(auth: JwtPayload): DailyPlanScope {
   }
 
   const eid = auth.employeeId != null ? Math.floor(Number(auth.employeeId)) : 0
+  const storeLeadOnly = storeLead && !office
   return {
     all: office || supervisor,
     office,
@@ -87,8 +100,45 @@ export function resolveDailyPlanScope(auth: JwtPayload): DailyPlanScope {
     stores,
     actorName: String(auth.name || '').trim(),
     actorEmployeeId: Number.isFinite(eid) && eid > 0 ? eid : null,
-    canEditTemplates: office || supervisor,
+    canEditTemplates: office || supervisor || storeLeadOnly,
+    canCopyTemplates: office || supervisor,
   }
+}
+
+function normStore(s: string | null | undefined): string {
+  return String(s || '').trim()
+}
+
+function normRole(s: string | null | undefined): string {
+  return String(s || '').trim().toLowerCase()
+}
+
+/**
+ * 매장 매니저: 자기 매장 + manager/staff 템플릿만.
+ * 전 매장 공통(store 빈 값)·Supervisor·Office 매장·타 매장은 숨김.
+ */
+export function canViewRoutineTemplate(
+  scope: DailyPlanScope,
+  tpl: RoutineTemplateAccessLite
+): boolean {
+  if (scope.office || scope.supervisor) return true
+  if (!scope.storeLead) return false
+  const role = normRole(tpl.roleScope)
+  if (role === 'supervisor') return false
+  if (role !== 'manager' && role !== 'staff') return false
+  const store = normStore(tpl.storeName)
+  if (!store || isOfficeStore(store)) return false
+  return storeOpsStoreInScope(store, scope.stores, false)
+}
+
+/** 조회 가능 + (본사·SV는 전부, 매장 매니저는 자기 매장 manager/staff만) */
+export function canEditRoutineTemplate(
+  scope: DailyPlanScope,
+  tpl: RoutineTemplateAccessLite
+): boolean {
+  if (scope.office || scope.supervisor) return true
+  if (!scope.storeLead || !scope.canEditTemplates) return false
+  return canViewRoutineTemplate(scope, tpl)
 }
 
 export function dailyPlanScopeFilter(scope: DailyPlanScope): string {

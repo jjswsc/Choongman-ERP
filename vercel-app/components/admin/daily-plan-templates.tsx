@@ -12,12 +12,15 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
   copyRoutineTemplate,
+  getDailyPlanBoard,
   getRoutineTemplates,
   saveRoutineTemplate,
   useStoreList,
+  type DailyPlanCandidate,
   type RoutineTemplateDto,
   type RoutineTemplateItemDto,
 } from "@/lib/api-client"
+import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import {
   DAILY_PLAN_CATEGORIES,
   DAILY_PLAN_LINK_TYPES,
@@ -25,7 +28,11 @@ import {
   DAILY_PLAN_ROLES,
   DAILY_PLAN_WORKDAY_MINUTES,
   ROUTINE_TEMPLATE_STATUSES,
+  diffPersonalAgainstSharedTemplate,
+  mergeRoutineTemplatesForPlan,
+  pickRoutineTemplatesForPlan,
   type DailyPlanRole,
+  type RoutineTemplate,
 } from "@/lib/daily-plan-generate"
 import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 
@@ -46,16 +53,42 @@ function blankItem(): RoutineTemplateItemDto {
     photoRequired: false,
     linkType: "none",
     perStore: false,
+    employeeId: 0,
   }
 }
 
-function blankTemplate(roleScope: DailyPlanRole = "supervisor"): RoutineTemplateDto {
+function toRoutineTemplate(dto: RoutineTemplateDto): RoutineTemplate {
+  return {
+    id: dto.id,
+    name: dto.name,
+    roleScope: dto.roleScope,
+    position: dto.position,
+    storeName: dto.storeName,
+    employeeId: Number(dto.employeeId || 0) || 0,
+    status: dto.status,
+    version: dto.version,
+    note: dto.note,
+    travelMinutes: dto.travelMinutes,
+    updatedBy: dto.updatedBy,
+    updatedAt: dto.updatedAt,
+    items: (dto.items || []).map((it) => ({
+      ...it,
+      employeeId: Number(it.employeeId || 0) || 0,
+    })),
+  }
+}
+
+function blankTemplate(
+  roleScope: DailyPlanRole = "supervisor",
+  opts: { storeName?: string; employeeId?: number } = {}
+): RoutineTemplateDto {
   return {
     id: 0,
     name: "",
     roleScope,
     position: "all",
-    storeName: "",
+    storeName: opts.storeName || "",
+    employeeId: opts.employeeId || 0,
     status: "draft",
     version: 0,
     note: "",
@@ -71,6 +104,10 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   const { stores: storeList } = useStoreList()
   const [list, setList] = useState<RoutineTemplateDto[]>([])
   const [canEdit, setCanEdit] = useState(false)
+  const [canCopy, setCanCopy] = useState(false)
+  const [storeLeadOnly, setStoreLeadOnly] = useState(false)
+  const [allowedStores, setAllowedStores] = useState<string[]>([])
+  const [candidates, setCandidates] = useState<DailyPlanCandidate[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
@@ -89,9 +126,26 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getRoutineTemplates()
-      setList(Array.isArray(res.list) ? res.list : [])
+      const today = getBangkokTodayDateString()
+      const [res, board] = await Promise.all([
+        getRoutineTemplates(),
+        getDailyPlanBoard(today, { candidates: true }).catch(() => null),
+      ])
+      setList(
+        (Array.isArray(res.list) ? res.list : []).map((x) => ({
+          ...x,
+          employeeId: Number(x.employeeId || 0) || 0,
+          items: (x.items || []).map((it) => ({
+            ...it,
+            employeeId: Number(it.employeeId || 0) || 0,
+          })),
+        }))
+      )
       setCanEdit(!!res.canEdit)
+      setCanCopy(!!res.canCopy)
+      setStoreLeadOnly(!!res.storeLeadOnly)
+      setAllowedStores(Array.isArray(res.allowedStores) ? res.allowedStores : [])
+      setCandidates(Array.isArray(board?.candidates) ? board!.candidates : [])
     } finally {
       setLoading(false)
     }
@@ -100,6 +154,36 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  const roleFilterOptions = useMemo(
+    () => (storeLeadOnly ? (["all", "manager", "staff"] as const) : (["all", ...DAILY_PLAN_ROLES] as const)),
+    [storeLeadOnly]
+  )
+
+  const storeOptions = useMemo(() => {
+    if (storeLeadOnly && allowedStores.length > 0) return [...allowedStores].sort()
+    return (storeList || []).map((s) => String(s || "").trim()).filter(Boolean).sort()
+  }, [storeLeadOnly, allowedStores, storeList])
+
+  const employeeOptions = useMemo(() => {
+    const storeSet = new Set(storeOptions.map((s) => s.toLowerCase()))
+    return candidates
+      .filter((c) => {
+        if (storeLeadOnly && storeSet.size > 0 && !storeSet.has(String(c.store || "").trim().toLowerCase())) {
+          return false
+        }
+        if (edit?.roleScope === "manager") return c.planRole === "manager"
+        if (edit?.roleScope === "staff") return c.planRole === "staff"
+        return c.planRole === "manager" || c.planRole === "staff"
+      })
+      .sort((a, b) => a.store.localeCompare(b.store) || a.name.localeCompare(b.name))
+  }, [candidates, storeOptions, storeLeadOnly, edit?.roleScope])
+
+  const employeeNameById = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const c of candidates) m.set(c.id, c.name)
+    return m
+  }, [candidates])
 
   const visible = useMemo(
     () =>
@@ -115,6 +199,24 @@ export function DailyPlanTemplates({ t }: { t: T }) {
     tpl.items.filter((i) => !i.perStore).reduce((s, i) => s + (Number(i.estMinutes) || 0), 0)
   const perStoreMinutes = (tpl: RoutineTemplateDto) =>
     tpl.items.filter((i) => i.perStore).reduce((s, i) => s + (Number(i.estMinutes) || 0), 0)
+
+  /** 개인 템플릿 편집 시 — 공통 템플릿과 항목 비교 */
+  const personalDiff = useMemo(() => {
+    if (!edit || !(Number(edit.employeeId) > 0)) return []
+    const role = (["supervisor", "manager", "staff"].includes(edit.roleScope)
+      ? edit.roleScope
+      : "staff") as DailyPlanRole
+    const sharedPool = list
+      .filter((x) => !(Number(x.employeeId) > 0) && x.id !== edit.id)
+      .map(toRoutineTemplate)
+    const picked = pickRoutineTemplatesForPlan(sharedPool, {
+      role,
+      position: edit.position || "all",
+      store: edit.storeName || "",
+    })
+    const shared = mergeRoutineTemplatesForPlan(picked)
+    return diffPersonalAgainstSharedTemplate(toRoutineTemplate(edit), shared)
+  }, [edit, list])
 
   const setItem = (idx: number, patch: Partial<RoutineTemplateItemDto>) =>
     setEdit((e) => (e ? { ...e, items: e.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) } : e))
@@ -147,6 +249,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         roleScope: edit.roleScope,
         position: edit.position,
         storeName: edit.storeName,
+        employeeId: Number(edit.employeeId || 0) || 0,
         status: edit.status,
         note: edit.note,
         travelMinutes: edit.travelMinutes,
@@ -255,11 +358,17 @@ export function DailyPlanTemplates({ t }: { t: T }) {
             />
             <select
               value={edit.roleScope}
-              onChange={(e) => setEdit({ ...edit, roleScope: e.target.value })}
+              onChange={(e) =>
+                setEdit({
+                  ...edit,
+                  roleScope: e.target.value,
+                  employeeId: 0,
+                })
+              }
               className="h-9 rounded border bg-background px-2 text-sm"
-              disabled={!canEdit}
+              disabled={!canEdit || storeLeadOnly}
             >
-              {DAILY_PLAN_ROLES.map((r) => (
+              {(storeLeadOnly ? (["manager", "staff"] as const) : DAILY_PLAN_ROLES).map((r) => (
                 <option key={r} value={r}>
                   {label.role(r)}
                 </option>
@@ -292,21 +401,54 @@ export function DailyPlanTemplates({ t }: { t: T }) {
             <div className="space-y-1 lg:col-span-2">
               <select
                 value={edit.storeName}
-                onChange={(e) => setEdit({ ...edit, storeName: e.target.value })}
+                onChange={(e) => setEdit({ ...edit, storeName: e.target.value, employeeId: 0 })}
                 className="h-9 w-full rounded border bg-background px-2 text-sm"
-                disabled={!canEdit}
+                disabled={!canEdit || (storeLeadOnly && storeOptions.length <= 1)}
               >
-                <option value="">{t("dp_tpl_all_stores")}</option>
-                {(storeList || [])
-                  .filter((s) => s && String(s).trim())
-                  .sort()
-                  .map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
+                {!storeLeadOnly ? <option value="">{t("dp_tpl_all_stores")}</option> : null}
+                {storeOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
-              <p className="text-[11px] text-muted-foreground">{t("dp_tpl_store_hint")}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {storeLeadOnly ? t("dp_tpl_store_hint_manager") : t("dp_tpl_store_hint")}
+              </p>
+            </div>
+            <div className="space-y-1 lg:col-span-2">
+              <select
+                value={String(edit.employeeId || 0)}
+                onChange={(e) => {
+                  const eid = Math.floor(Number(e.target.value) || 0)
+                  const hit = employeeOptions.find((c) => c.id === eid)
+                  setEdit({
+                    ...edit,
+                    employeeId: eid > 0 ? eid : 0,
+                    items:
+                      eid > 0
+                        ? edit.items.map((it) => ({ ...it, employeeId: 0 }))
+                        : edit.items,
+                    ...(hit
+                      ? {
+                          storeName: hit.store || edit.storeName,
+                          roleScope: hit.planRole === "manager" ? "manager" : edit.roleScope === "supervisor" ? "staff" : edit.roleScope,
+                        }
+                      : {}),
+                  })
+                }}
+                className="h-9 w-full rounded border bg-background px-2 text-sm"
+                disabled={!canEdit || edit.roleScope === "supervisor"}
+              >
+                <option value="0">{t("dp_tpl_employee_all")}</option>
+                {employeeOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.store ? ` · ${c.store}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">{t("dp_tpl_employee_hint")}</p>
             </div>
             <Textarea
               value={edit.note}
@@ -337,8 +479,41 @@ export function DailyPlanTemplates({ t }: { t: T }) {
               .replace("{cap}", minutesLabel(DAILY_PLAN_WORKDAY_MINUTES, t))}
           </p>
 
+          {Number(edit.employeeId) > 0 && personalDiff.length > 0 ? (
+            <div className="rounded-md border bg-muted/20 p-2">
+              <p className="mb-1 text-xs font-semibold">{t("dp_tpl_diff_title")}</p>
+              <p className="mb-2 text-[11px] text-muted-foreground">{t("dp_tpl_diff_hint")}</p>
+              <ul className="max-h-40 space-y-1 overflow-y-auto text-[11px]">
+                {personalDiff.map((d) => (
+                  <li key={`${d.kind}-${d.title}`} className="flex flex-wrap gap-x-2 gap-y-0.5">
+                    <span
+                      className={cn(
+                        "rounded px-1 font-medium",
+                        d.kind === "personal_only" && "bg-emerald-100 text-emerald-800",
+                        d.kind === "shared_only" && "bg-amber-100 text-amber-900",
+                        d.kind === "both_changed" && "bg-sky-100 text-sky-900",
+                        d.kind === "both_same" && "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {t(`dp_tpl_diff_${d.kind}`)}
+                    </span>
+                    <span className="font-medium">{d.title}</span>
+                    {d.kind === "both_changed" ? (
+                      <span className="text-muted-foreground">
+                        {minutesLabel(Number(d.sharedEst) || 0, t)} → {minutesLabel(Number(d.personalEst) || 0, t)}
+                      </span>
+                    ) : null}
+                    {d.kind === "shared_only" ? (
+                      <span className="text-muted-foreground">{t("dp_tpl_diff_not_applied")}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <AdminTableScroll>
-            <table className="w-full min-w-[980px] text-xs">
+            <table className="w-full min-w-[1100px] text-xs">
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="p-1">#</th>
@@ -348,6 +523,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                   <th className="p-1">{t("dp_col_title")}</th>
                   <th className="p-1">{t("dp_est_min")}</th>
                   <th className="p-1">{t("dp_col_weekdays")}</th>
+                  <th className="p-1">{t("dp_tpl_item_employee")}</th>
                   <th className="p-1">{t("dp_col_per_store")}</th>
                   <th className="p-1">📷</th>
                   <th className="p-1">{t("dp_col_link")}</th>
@@ -444,6 +620,26 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                           )
                         })}
                       </div>
+                    </td>
+                    <td className="p-1">
+                      <select
+                        value={String(it.employeeId || 0)}
+                        onChange={(e) => setItem(idx, { employeeId: Math.floor(Number(e.target.value) || 0) })}
+                        className="h-8 max-w-[9rem] rounded border bg-background px-1"
+                        disabled={!canEdit || Number(edit.employeeId) > 0}
+                        title={
+                          Number(edit.employeeId) > 0
+                            ? t("dp_tpl_item_employee_locked")
+                            : t("dp_tpl_item_employee_hint")
+                        }
+                      >
+                        <option value="0">{t("dp_tpl_employee_all")}</option>
+                        {employeeOptions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="p-1 text-center">
                       <input
@@ -558,7 +754,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                   <Save className="mr-1 h-4 w-4" />
                   {t("dp_save")}
                 </Button>
-                {edit.id ? (
+                {edit.id && canCopy ? (
                   <Button variant="outline" disabled={copying} onClick={openCopy}>
                     <Copy className="mr-1 h-4 w-4" />
                     {t("dp_tpl_copy")}
@@ -587,16 +783,26 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         {canEdit ? (
           <Button
             size="sm"
-            onClick={() =>
-              setEdit(blankTemplate(roleFilter !== "all" ? (roleFilter as DailyPlanRole) : "supervisor"))
-            }
+            onClick={() => {
+              const role =
+                roleFilter !== "all"
+                  ? (roleFilter as DailyPlanRole)
+                  : storeLeadOnly
+                    ? "staff"
+                    : "supervisor"
+              setEdit(
+                blankTemplate(role, {
+                  storeName: storeLeadOnly ? allowedStores[0] || "" : "",
+                })
+              )
+            }}
           >
             <Plus className="mr-1 h-4 w-4" />
             {t("dp_tpl_new")}
           </Button>
         ) : null}
         <div className="flex gap-1">
-          {["all", ...DAILY_PLAN_ROLES].map((r) => (
+          {roleFilterOptions.map((r) => (
             <Button
               key={r}
               size="sm"
@@ -613,7 +819,9 @@ export function DailyPlanTemplates({ t }: { t: T }) {
           {t("dp_tpl_show_archived")}
         </label>
       </div>
-      <p className="text-xs text-muted-foreground">{t("dp_tpl_hint")}</p>
+      <p className="text-xs text-muted-foreground">
+        {storeLeadOnly ? t("dp_tpl_hint_manager") : t("dp_tpl_hint")}
+      </p>
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
         {visible.length === 0 ? (
           <p className="text-sm text-muted-foreground">{loading ? t("loading") : t("dp_tpl_empty")}</p>
@@ -638,7 +846,11 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {label.role(tpl.roleScope)} · {label.position(tpl.position)}
-                  {tpl.storeName ? ` · ${tpl.storeName}` : ""} · v{tpl.version}
+                  {tpl.storeName ? ` · ${tpl.storeName}` : ""}
+                  {tpl.employeeId
+                    ? ` · ${employeeNameById.get(tpl.employeeId) || t("dp_tpl_employee_one").replace("{id}", String(tpl.employeeId))}`
+                    : ""}{" "}
+                  · v{tpl.version}
                 </p>
                 <p className="text-xs">
                   {t("dp_tpl_items_n").replace("{n}", String(tpl.items.length))} · {minutesLabel(fixedMinutes(tpl), t)}

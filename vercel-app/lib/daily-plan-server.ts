@@ -7,8 +7,10 @@ import {
 } from '@/lib/permissions'
 import {
   canAssignDailyPlan,
+  canEditRoutineTemplate,
   canListDailyPlanCandidate,
   canViewDailyPlan,
+  canViewRoutineTemplate,
   dailyPlanScopeFilter,
   isOwnDailyPlan,
   resolveDailyPlanScope,
@@ -19,8 +21,10 @@ export type { DailyPlanScope }
 export type { DailyPlanRole } from '@/lib/daily-plan-generate'
 export {
   canAssignDailyPlan,
+  canEditRoutineTemplate,
   canListDailyPlanCandidate,
   canViewDailyPlan,
+  canViewRoutineTemplate,
   dailyPlanScopeFilter,
   isOwnDailyPlan,
   resolveDailyPlanScope,
@@ -47,6 +51,7 @@ import {
   addDaysYmdUtc,
   buildDailyPlanItems,
   buildDailyPlanWorkLogContent,
+  DAILY_PLAN_ROLES,
   managerDailyPlanPosition,
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplatesForPlan,
@@ -231,6 +236,7 @@ type TemplateDbRow = {
   role_scope?: string
   position?: string
   store_name?: string
+  employee_id?: number | null
   status?: string
   version?: number
   note?: string
@@ -258,9 +264,11 @@ type TemplateItemDbRow = {
   photo_required?: boolean
   link_type?: string
   per_store?: boolean
+  employee_id?: number | null
 }
 
 export function mapTemplateItem(r: TemplateItemDbRow): RoutineTemplateItem {
+  const eid = Number(r.employee_id || 0)
   return {
     id: Number(r.id || 0) || undefined,
     sortOrder: Number(r.sort_order || 0),
@@ -274,15 +282,46 @@ export function mapTemplateItem(r: TemplateItemDbRow): RoutineTemplateItem {
     photoRequired: !!r.photo_required,
     linkType: String(r.link_type || 'none'),
     perStore: !!r.per_store,
+    employeeId: Number.isFinite(eid) && eid > 0 ? eid : 0,
+  }
+}
+
+function mapRoutineTemplateRow(r: TemplateDbRow, items: RoutineTemplateItem[]): RoutineTemplate {
+  const eid = Number(r.employee_id || 0)
+  return {
+    id: Number(r.id || 0),
+    name: String(r.name || ''),
+    roleScope: String(r.role_scope || 'supervisor'),
+    position: String(r.position || 'all'),
+    storeName: String(r.store_name || ''),
+    employeeId: Number.isFinite(eid) && eid > 0 ? eid : 0,
+    status: String(r.status || 'draft'),
+    version: Number(r.version || 1),
+    note: String(r.note || ''),
+    travelMinutes: travelOf(r.travel_minutes),
+    updatedBy: String(r.updated_by || ''),
+    updatedAt: String(r.updated_at || ''),
+    items,
   }
 }
 
 export async function loadRoutineTemplates(opts: { usableOnly?: boolean } = {}): Promise<RoutineTemplate[]> {
   const filter = opts.usableOnly ? 'status=in.(pilot,active)' : 'id=gt.0'
-  const rows = ((await supabaseSelectFilter('routine_templates', filter, {
-    order: 'role_scope.asc,id.asc',
-    limit: 500,
-  })) || []) as TemplateDbRow[]
+  let rows: TemplateDbRow[]
+  try {
+    rows = ((await supabaseSelectFilter('routine_templates', filter, {
+      order: 'role_scope.asc,id.asc',
+      limit: 500,
+    })) || []) as TemplateDbRow[]
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!/employee_id/.test(msg)) throw e
+    rows = ((await supabaseSelectFilter('routine_templates', filter, {
+      select: 'id,name,role_scope,position,store_name,status,version,note,travel_minutes,updated_by,updated_at',
+      order: 'role_scope.asc,id.asc',
+      limit: 500,
+    })) || []) as TemplateDbRow[]
+  }
   if (rows.length === 0) return []
   const ids = rows.map((r) => Number(r.id)).filter((n) => n > 0)
   const items = ((await supabaseSelectFilter('routine_template_items', `template_id=in.(${ids.join(',')})`, {
@@ -296,20 +335,7 @@ export async function loadRoutineTemplates(opts: { usableOnly?: boolean } = {}):
     list.push(mapTemplateItem(it))
     byTpl.set(tid, list)
   }
-  return rows.map((r) => ({
-    id: Number(r.id || 0),
-    name: String(r.name || ''),
-    roleScope: String(r.role_scope || 'supervisor'),
-    position: String(r.position || 'all'),
-    storeName: String(r.store_name || ''),
-    status: String(r.status || 'draft'),
-    version: Number(r.version || 1),
-    note: String(r.note || ''),
-    travelMinutes: travelOf(r.travel_minutes),
-    updatedBy: String(r.updated_by || ''),
-    updatedAt: String(r.updated_at || ''),
-    items: byTpl.get(Number(r.id || 0)) || [],
-  }))
+  return rows.map((r) => mapRoutineTemplateRow(r, byTpl.get(Number(r.id || 0)) || []))
 }
 
 /** 템플릿별 매장 간 이동 분 (컬럼 미배포면 기본값) */
@@ -607,7 +633,12 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   const routeStores = (p.routeStores ?? existing?.route_stores ?? []).map((s) => String(s || '').trim()).filter(Boolean)
   const homeStore = String(p.store ?? existing?.store_name ?? p.employee.store).trim()
   const position = String(p.position ?? existing?.position ?? 'all').toLowerCase() || 'all'
-  const picked = pickRoutineTemplatesForPlan(ctx.templates, { role: p.role, position, store: homeStore })
+  const picked = pickRoutineTemplatesForPlan(ctx.templates, {
+    role: p.role,
+    position,
+    store: homeStore,
+    employeeId: p.employee.id,
+  })
   const template = mergeRoutineTemplatesForPlan(picked)
 
   let carry: CarryLite[] = []
@@ -986,6 +1017,167 @@ export async function publishDailyPlansForDate(date: string, pushTitle: string, 
     await pushStoreActionNotice({ title: pushTitle, body: pushBody, recipients: plans.map(planRecipient) })
   }
   return plans.length
+}
+
+/**
+ * 선택한 일정표 id만 공개 + 푸시.
+ * 권한·마감·이미 공개된 건은 건너뜀. { published, skipped }
+ */
+export async function publishDailyPlansByIds(
+  planIds: number[],
+  scope: DailyPlanScope,
+  pushTitle: string,
+  pushBody: string
+): Promise<{ published: number; skipped: number }> {
+  const ids = [...new Set(planIds.map((n) => Math.floor(Number(n))).filter((n) => Number.isFinite(n) && n > 0))].slice(
+    0,
+    200
+  )
+  if (ids.length === 0) return { published: 0, skipped: 0 }
+
+  const rows = ((await supabaseSelectFilter('daily_plans', `id=in.(${ids.join(',')})`, {
+    limit: ids.length,
+  })) || []) as Record<string, unknown>[]
+  const plans = rows.map(normalizePlanRow)
+  const allowed: DailyPlanRow[] = []
+  let skipped = 0
+  for (const plan of plans) {
+    if (plan.published_at || plan.status === 'closed') {
+      skipped += 1
+      continue
+    }
+    if (!canViewDailyPlan(scope, plan)) {
+      skipped += 1
+      continue
+    }
+    const role = (DAILY_PLAN_ROLES.includes(plan.role_scope as DailyPlanRole)
+      ? plan.role_scope
+      : dailyPlanRoleOf({
+          role: plan.role_scope,
+          job: '',
+          store: plan.employee_store,
+        }) || 'staff') as DailyPlanRole
+    if (
+      !canAssignDailyPlan(scope, {
+        role,
+        store: plan.employee_store || plan.store_name,
+        employeeId: plan.employee_id,
+      })
+    ) {
+      skipped += 1
+      continue
+    }
+    allowed.push(plan)
+  }
+  if (allowed.length === 0) return { published: 0, skipped: skipped + (ids.length - plans.length) }
+
+  const now = new Date().toISOString()
+  const updated = ((await supabaseUpdateByFilterReturning(
+    'daily_plans',
+    `id=in.(${allowed.map((p) => p.id).join(',')})&published_at=is.null&status=neq.closed`,
+    { published_at: now, updated_at: now }
+  )) || []) as Record<string, unknown>[]
+  const publishedPlans = updated.map(normalizePlanRow)
+  if (publishedPlans.length > 0) {
+    await pushStoreActionNotice({
+      title: pushTitle,
+      body: pushBody,
+      recipients: publishedPlans.map(planRecipient),
+    })
+  }
+  skipped += allowed.length - publishedPlans.length + (ids.length - plans.length)
+  return { published: publishedPlans.length, skipped }
+}
+
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * 주간 보기: 빈 칸은 생성, 미공개는 공개.
+ * targets = { employeeId, date }[] (오늘 이후만).
+ */
+export async function ensureAndPublishDailyPlanTargets(
+  targets: { employeeId: number; date: string }[],
+  scope: DailyPlanScope,
+  opts: { publish?: boolean; actor?: string } = {}
+): Promise<{ created: number; published: number; skipped: number; failed: number }> {
+  const today = getBangkokTodayDateString()
+  const publish = opts.publish !== false
+  const actor = String(opts.actor || scope.actorName || '').trim() || 'system'
+  const uniq = new Map<string, { employeeId: number; date: string }>()
+  for (const t of targets) {
+    const employeeId = Math.floor(Number(t.employeeId) || 0)
+    const date = String(t.date || '').trim()
+    if (!(employeeId > 0) || !YMD_RE.test(date) || date < today) continue
+    uniq.set(`${employeeId}|${date}`, { employeeId, date })
+  }
+  const list = [...uniq.values()].slice(0, 120)
+  let created = 0
+  let skipped = 0
+  let failed = 0
+  const toPublish: number[] = []
+
+  for (const t of list) {
+    try {
+      const emp = await loadPlanEmployeeById(t.employeeId)
+      if (!emp) {
+        skipped += 1
+        continue
+      }
+      const role = dailyPlanRoleOf(emp)
+      if (!role) {
+        skipped += 1
+        continue
+      }
+      if (!canAssignDailyPlan(scope, { role, store: emp.store, employeeId: emp.id })) {
+        skipped += 1
+        continue
+      }
+      const before = await getDailyPlanFor(t.date, emp.id)
+      if (before?.status === 'closed') {
+        skipped += 1
+        continue
+      }
+      const plan =
+        before ||
+        (await ensureDailyPlanOnDemand(t.date, emp, actor)) ||
+        (
+          await ensureDailyPlan({
+            date: t.date,
+            employee: emp,
+            role,
+            actor,
+            force: true,
+            knownMissing: true,
+          })
+        ).plan
+      if (!plan) {
+        failed += 1
+        continue
+      }
+      if (!before) created += 1
+      if (publish && !plan.published_at && plan.status !== 'closed') {
+        toPublish.push(plan.id)
+      } else if (!publish || plan.published_at) {
+        /* already published or save-only */
+      }
+    } catch (e) {
+      failed += 1
+      console.warn('ensureAndPublishDailyPlanTargets:', t.employeeId, t.date, e instanceof Error ? e.message : e)
+    }
+  }
+
+  let published = 0
+  if (publish && toPublish.length > 0) {
+    const r = await publishDailyPlansByIds(
+      toPublish,
+      scope,
+      '📅 일정표 배정 · มีตารางงานใหม่ครับ',
+      `공개 ${toPublish.length}건 · เผยแพร่ตารางงานครับ`.slice(0, 180)
+    )
+    published = r.published
+    skipped += r.skipped
+  }
+  return { created, published, skipped, failed }
 }
 
 // ─── 마감 ──────────────────────────────────────────

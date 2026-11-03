@@ -281,6 +281,8 @@ export type RoutineTemplateItemDto = {
   photoRequired: boolean
   linkType: string
   perStore: boolean
+  /** 0 = 전원 */
+  employeeId: number
 }
 
 export type RoutineTemplateDto = {
@@ -289,6 +291,8 @@ export type RoutineTemplateDto = {
   roleScope: string
   position: string
   storeName: string
+  /** 0 = 직급·매장 공통 */
+  employeeId: number
   status: string
   version: number
   note: string
@@ -300,16 +304,63 @@ export type RoutineTemplateDto = {
 
 export async function getRoutineTemplates() {
   const res = await apiFetchWithOffline("/api/getRoutineTemplates")
-  return (await res.json()) as { success?: boolean; list: RoutineTemplateDto[]; canEdit?: boolean; notReady?: boolean }
+  return (await res.json()) as {
+    success?: boolean
+    list: RoutineTemplateDto[]
+    canEdit?: boolean
+    canCopy?: boolean
+    storeLeadOnly?: boolean
+    allowedStores?: string[]
+    notReady?: boolean
+  }
 }
 
-export async function saveRoutineTemplate(data: Partial<RoutineTemplateDto> & { deleteTemplate?: boolean }) {
+export async function saveRoutineTemplate(
+  data: Partial<RoutineTemplateDto> & { deleteTemplate?: boolean; employeeId?: number | null }
+) {
   const res = await apiFetch("/api/saveRoutineTemplate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   })
   return (await res.json()) as { success?: boolean; message?: string; id?: number }
+}
+
+/** 주간 보기 — 기존 일정 id 일괄 공개 */
+export async function publishDailyPlansBulk(planIds: number[]) {
+  const res = await apiFetch("/api/store/publish-daily-plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ planIds }),
+  })
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    published?: number
+    skipped?: number
+    created?: number
+    failed?: number
+  }
+}
+
+/** 주간 보기 — 빈 칸 생성 + (기본) 공개 */
+export async function ensurePublishDailyPlanTargets(
+  targets: { employeeId: number; date: string }[],
+  opts: { publish?: boolean } = {}
+) {
+  const res = await apiFetch("/api/store/publish-daily-plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targets, publish: opts.publish !== false }),
+  })
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    created?: number
+    published?: number
+    skipped?: number
+    failed?: number
+  }
 }
 
 /** 시간 분석 제안 적용 — 같은 직급 템플릿의 같은 이름 항목 예상 분 변경 */
