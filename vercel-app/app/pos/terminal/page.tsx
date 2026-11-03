@@ -9062,6 +9062,33 @@ export default function PosTerminalPage() {
     return null
   }
 
+  const enterDeliveryAddOrderMode = useCallback(
+    (order: Order) => {
+      const oid = Number(order.id)
+      if (!Number.isFinite(oid) || oid <= 0) return
+      if (isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))) return
+      if (isPosOrderPaidLikeStatus(String(order.status ?? ''))) return
+      if (orderPaymentsSum(order) > 0.005) return
+      clearCartFromTerminal()
+      const label =
+        String(order.customerName ?? '').trim() ||
+        String(order.tableName ?? '').trim() ||
+        selectedDeliveryTargetLabel ||
+        (t('posOrderTypeDelivery') || '배달')
+      const matchedApp = resolveMatchedDeliveryAppForOrder(order)
+      if (matchedApp) setDeliveryApp(matchedApp.code)
+      const parsedNo = detectDeliveryOrderNo(
+        [label, String(order.orderNo ?? ''), String(order.tableName ?? '')].join(' ')
+      )
+      if (parsedNo) setDeliveryOrderNo(parsedNo)
+      setPendingDeliveryOrderId(oid)
+      setPendingReceiptOrderNo(order.orderNo ?? null)
+      setSelectedDeliveryTargetLabel(label)
+      setSelectedDeliveryTargetId('delivery-draft')
+    },
+    [clearCartFromTerminal, selectedDeliveryTargetLabel, t, deliveryAppsFromApi]
+  )
+
   const cookElapsedBarFields = (
     order: Order,
     barStatus: OrderBarStatus
@@ -11208,21 +11235,33 @@ export default function PosTerminalPage() {
                 if (!(await ensureBusinessOpenForOrder())) return false
                 /** `await` 사이에 카트가 비면 터미널 보정이 불가 → 링크포스/결제 대기 전에 스냅샷 */
                 const payloadItemsNormalized = reconcilePayloadItemsWithTerminalCart(payload.items, terminalCartLines)
-                const paymentSumForTakeoutAddCheck =
+                const paymentSumForNondineAddCheck =
                   Math.max(0, Number(payload.payment?.paymentCash ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentCard ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentQr ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentOther ?? 0)) +
                   Math.max(0, Number(payload.payment?.paymentDeliveryApp ?? 0))
                 const existingTakeoutId = Number(pendingTakeoutOrderId ?? 0)
+                const existingDeliveryId = Number(pendingDeliveryOrderId ?? 0)
                 const isTakeoutAddOrder =
                   payload.orderType === 'takeout' &&
                   Number.isFinite(existingTakeoutId) &&
                   existingTakeoutId > 0 &&
-                  paymentSumForTakeoutAddCheck <= 0.0001
-                if (isTakeoutAddOrder) {
+                  paymentSumForNondineAddCheck <= 0.0001
+                const isDeliveryAddOrder =
+                  payload.orderType === 'delivery' &&
+                  Number.isFinite(existingDeliveryId) &&
+                  existingDeliveryId > 0 &&
+                  paymentSumForNondineAddCheck <= 0.0001
+                const isNondineAddOrder = isTakeoutAddOrder || isDeliveryAddOrder
+                const existingNondineAddId = isTakeoutAddOrder
+                  ? existingTakeoutId
+                  : isDeliveryAddOrder
+                    ? existingDeliveryId
+                    : 0
+                if (isNondineAddOrder) {
                   const rows = await getPosOrders({
-                    orderId: existingTakeoutId,
+                    orderId: existingNondineAddId,
                     storeCode: currentStoreId,
                     limit: 1,
                   })
@@ -11231,18 +11270,24 @@ export default function PosTerminalPage() {
                   const hitStatus = String(hit?.status ?? '').trim().toLowerCase()
                   const hitPaySum = hit ? posOrderPaymentSum(hit) : 0
                   const hitItems = Array.isArray(hit?.items) ? hit!.items! : []
-                  const openForTakeoutAdd =
+                  const expectedType = isTakeoutAddOrder ? 'takeout' : 'delivery'
+                  const openForNondineAdd =
                     Boolean(hit?.id) &&
-                    hitType === 'takeout' &&
+                    hitType === expectedType &&
                     hitItems.length > 0 &&
                     !isPosOrderPaidLikeStatus(hitStatus) &&
                     hitStatus !== 'completed' &&
                     hitStatus !== 'cancelled' &&
                     hitStatus !== 'canceled' &&
                     hitStatus !== 'refunded' &&
-                    hitPaySum <= 0.0001
-                  if (!openForTakeoutAdd) {
-                    setPendingTakeoutOrderId(null)
+                    hitPaySum <= 0.0001 &&
+                    !(
+                      isDeliveryAddOrder &&
+                      isApiInboundDeliveryOrderMemo(String(hit?.memo ?? ''))
+                    )
+                  if (!openForNondineAdd) {
+                    if (isTakeoutAddOrder) setPendingTakeoutOrderId(null)
+                    if (isDeliveryAddOrder) setPendingDeliveryOrderId(null)
                     await appAlert(t('posOrderSaveFailed') || '주문 저장에 실패했습니다.')
                     return false
                   }
@@ -11273,10 +11318,14 @@ export default function PosTerminalPage() {
                     ...(String(it.servedAt ?? '').trim() ? { servedAt: String(it.servedAt) } : {}),
                     ...(String(it.servedBy ?? '').trim() ? { servedBy: String(it.servedBy) } : {}),
                   }))
+                  const orderLabelFallback = isTakeoutAddOrder
+                    ? t('posOrderTypeTakeout') || '포장'
+                    : t('posOrderTypeDelivery') || '배달'
                   const orderLabelFromDb =
                     String(hit!.tableName ?? '').trim() ||
                     String(payload.orderLabel ?? '').trim() ||
-                    (t('posOrderTypeTakeout') || '포장')
+                    orderLabelFallback
+                  const nondineOrderTypeKey = isTakeoutAddOrder ? 'takeout' : 'delivery'
                   const incomingItems = cartLinesToPosOrderItems(payloadItemsNormalized)
                   const existingItemsBeforeAdd = orderUiItemsToPosOrderItems(existingUiItems)
                   const posItemsForSave = mergeDineInAddonCartPosItemsWithExisting(
@@ -11285,13 +11334,13 @@ export default function PosTerminalPage() {
                   )
                   if (isMainPosDevice) {
                     mainPosSelfDineInUpdateSuppressUntilRef.current.set(
-                      existingTakeoutId,
+                      existingNondineAddId,
                       Date.now() + DINE_IN_LOCAL_SUBMIT_PRINT_SUPPRESS_MS
                     )
                     markPosTerminalOrderSubmitInFlight()
                   }
                   const updateRes = await updatePosOrder({
-                    id: existingTakeoutId,
+                    id: existingNondineAddId,
                     terminalStoreCode: currentStoreId,
                     items: posItemsForSave,
                     tableName: orderLabelFromDb,
@@ -11385,10 +11434,13 @@ export default function PosTerminalPage() {
                     : await resolveStoreAutoPrintFlags(currentStoreId)
                   const shouldAutoPrintReceipt = storeAutoPrint.receiptOnAddOrder
                   const autoPrintKitchenForSubmit = storeAutoPrint.kitchenOnOrder
+                  const receiptOrderTypeLabel = isTakeoutAddOrder
+                    ? t('posOrderTypeTakeout') || '포장'
+                    : t('posOrderTypeDelivery') || '배달'
                   const receiptPayloadSubmit = {
                     orderNo: savedOrderNo,
                     storeCode: currentStoreId,
-                    orderType: t('posOrderTypeTakeout') || '포장',
+                    orderType: receiptOrderTypeLabel,
                     tableName: orderLabelFromDb,
                     memo: String(hit!.memo ?? payload.memo ?? '').trim() || undefined,
                     items: receiptPrintItems,
@@ -11409,7 +11461,7 @@ export default function PosTerminalPage() {
                     cardFeeMode: pricing.cardFeeMode,
                     otherFeeAmt: pricing.otherFeeAmt,
                     otherFeeMode: pricing.otherFeeMode,
-                    _autoPrintDedupeKey: `order:${existingTakeoutId}:takeout:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
+                    _autoPrintDedupeKey: `order:${existingNondineAddId}:${nondineOrderTypeKey}:add:${buildDineInAddKitchenPrintDedupeSuffix(kitchenCartLines, { formatNote: formatLineNoteForPrint })}`,
                   }
                   const kitchenDelayAfterReceiptMs =
                     typeof window !== 'undefined' && window.cmPosShell
@@ -11417,11 +11469,16 @@ export default function PosTerminalPage() {
                       : POS_THERMAL_AFTER_RECEIPT_TO_KITCHEN_MS
                   if (isMainPosDevice) {
                     if (shouldAutoPrintReceipt) {
-                      logPosPrintDebug('takeout_add_receipt_autoprint_dispatch', {
-                        orderId: existingTakeoutId,
-                        orderNo: savedOrderNo,
-                        receiptItems: receiptPrintItems.length,
-                      })
+                      logPosPrintDebug(
+                        isTakeoutAddOrder
+                          ? 'takeout_add_receipt_autoprint_dispatch'
+                          : 'delivery_add_receipt_autoprint_dispatch',
+                        {
+                          orderId: existingNondineAddId,
+                          orderNo: savedOrderNo,
+                          receiptItems: receiptPrintItems.length,
+                        }
+                      )
                       void printReceiptNow(receiptPayloadSubmit, null, false, undefined, true)
                     }
                     if (autoPrintKitchenForSubmit && kitchenCartLines.length > 0) {
@@ -11429,7 +11486,7 @@ export default function PosTerminalPage() {
                         dispatchDineInAddonKitchenPrint({
                           kitchenCartLines,
                           dedupeKey: buildDineInAddKitchenAutoPrintDedupeKey(
-                            existingTakeoutId,
+                            existingNondineAddId,
                             kitchenCartLines,
                             { formatNote: formatLineNoteForPrint }
                           ),
@@ -11437,8 +11494,10 @@ export default function PosTerminalPage() {
                           storeCode: currentStoreId,
                           tableName: orderLabelFromDb,
                           memo: String(hit!.memo ?? payload.memo ?? '').trim() || undefined,
-                          logEvent: 'takeout_add_kitchen_autoprint_dispatch',
-                          orderTypeKey: 'takeout',
+                          logEvent: isTakeoutAddOrder
+                            ? 'takeout_add_kitchen_autoprint_dispatch'
+                            : 'delivery_add_kitchen_autoprint_dispatch',
+                          orderTypeKey: nondineOrderTypeKey,
                         })
                       }
                       setTimeout(
@@ -11453,14 +11512,20 @@ export default function PosTerminalPage() {
                       })
                     }
                   }
-                  const barLabel = translateTakeoutOrderDisplayLabel(orderLabelFromDb, t, {
-                    fallbackOrderId: existingTakeoutId,
-                  })
-                  setPendingTakeoutOrderId(null)
                   setPendingReceiptOrderNo(null)
-                  setSelectedTakeoutTargetId(`takeout-order-${existingTakeoutId}`)
-                  setSelectedTakeoutTargetLabel(barLabel)
                   clearCartFromTerminal()
+                  if (isTakeoutAddOrder) {
+                    const barLabel = translateTakeoutOrderDisplayLabel(orderLabelFromDb, t, {
+                      fallbackOrderId: existingNondineAddId,
+                    })
+                    setPendingTakeoutOrderId(null)
+                    setSelectedTakeoutTargetId(`takeout-order-${existingNondineAddId}`)
+                    setSelectedTakeoutTargetLabel(barLabel)
+                  } else {
+                    setPendingDeliveryOrderId(null)
+                    setSelectedDeliveryTargetId(`delivery-order-${existingNondineAddId}`)
+                    setSelectedDeliveryTargetLabel(orderLabelFromDb)
+                  }
                   /** Omni: 목록 재조회는 버튼 잠금 밖(홀 주문과 동일). 저장 성공은 이미 확인됨 */
                   if (isOmniPaymentFastPath) {
                     void refetchCurrentStore()
@@ -12325,6 +12390,9 @@ export default function PosTerminalPage() {
                       if (!deliveryApp) return
                       const orderNo = deliveryOrderNo.trim()
                       if (!orderNo) return
+                      setPendingDeliveryOrderId(null)
+                      setPendingReceiptOrderNo(null)
+                      clearCartFromTerminal()
                       setSelectedDeliveryTargetId('delivery-draft')
                       const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
                       setSelectedDeliveryTargetLabel(`${appLabelEn} #${orderNo}`)
@@ -12611,7 +12679,17 @@ export default function PosTerminalPage() {
                     storeCode={currentStoreId}
                     parentCatalog={terminalParentCatalog}
                     selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
-                    onBack={() => setSelectedDeliveryTargetId(null)}
+                    onBack={() => {
+                      const pendingOid = pendingDeliveryOrderId
+                      if (pendingOid) {
+                        setPendingDeliveryOrderId(null)
+                        setPendingReceiptOrderNo(null)
+                        clearCartFromTerminal()
+                        setSelectedDeliveryTargetId(`delivery-order-${pendingOid}`)
+                        return
+                      }
+                      setSelectedDeliveryTargetId(null)
+                    }}
                     backButtonLabel={t('posBack') || '뒤로가기'}
                     onAddItem={handleAddItemToCart}
                     orderType="delivery"
@@ -12904,6 +12982,10 @@ export default function PosTerminalPage() {
               onCancel={refetchCurrentStore}
               onOrderDismissed={dismissTerminalOrder}
               storeCode={currentStoreId}
+              onAddOrder={() => {
+                if (!selectedDeliveryOrder) return
+                enterDeliveryAddOrderMode(selectedDeliveryOrder)
+              }}
               onPay={() => {
                 if (!selectedDeliveryOrder) return
                 setPendingDeliveryOrderId(Number(selectedDeliveryOrder.id))

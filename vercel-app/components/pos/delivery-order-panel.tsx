@@ -49,7 +49,8 @@ import {
 } from '@/components/pos/pos-tax-invoice-form-ui'
 import { buildPosSetChildKey, listPosSetChildKeys, readPosSetChildrenState } from '@/lib/pos-set-children-state'
 import { buildPosOrderLineKeys, getPosOrderLineByKey } from '@/lib/pos-order-line-keys'
-import { canStartPosLinePartialCancel } from '@/lib/pos-order-line-update'
+import { canStartPosLinePartialCancel, orderPaymentsSum } from '@/lib/pos-order-line-update'
+import { isApiInboundDeliveryOrderMemo } from '@/lib/pos-delivery-platform'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
   alertPosLineCancelBlocked,
@@ -81,6 +82,8 @@ export interface DeliveryOrderPanelProps {
     deliveryAppCode?: string
   }) => void | Promise<void>
   onPay?: () => void
+  /** 수동 배달 미결제 주문의 추가 주문(메뉴 화면). API 유입(Grab 등)은 노출하지 않음 */
+  onAddOrder?: () => void
   onOpenTaxInvoice?: () => void
   /** 주문 취소 시 */
   onCancel?: () => void
@@ -105,6 +108,7 @@ export function DeliveryOrderPanel({
   onPackaged,
   onAccepted,
   onPay,
+  onAddOrder,
   onOpenTaxInvoice,
   onCancel,
   onOrderDismissed,
@@ -433,6 +437,20 @@ export function DeliveryOrderPanel({
   const canCancel =
     order &&
     !['completed', 'cancelled', 'paid', 'refunded'].includes(normalizedStatus)
+  /** Grab/Lineman 등 API 유입은 플랫폼 금액과 어긋나므로 매장 추가 주문 비허용 */
+  const isApiInboundDelivery = Boolean(
+    order && isApiInboundDeliveryOrderMemo(String(order.memo ?? ''))
+  )
+  const canAddOrder = Boolean(
+    order &&
+      onAddOrder &&
+      !isApiInboundDelivery &&
+      !isCompleted &&
+      !isPaid &&
+      normalizedStatus !== 'cancelled' &&
+      normalizedStatus !== 'refunded' &&
+      orderPaymentsSum(order) <= 0.005
+  )
   const [cancelling, setCancelling] = useState(false)
   const [deciding, setDeciding] = useState(false)
   const [removingItemId, setRemovingItemId] = useState<string | null>(null)
@@ -1009,11 +1027,28 @@ export function DeliveryOrderPanel({
                 </div>
               )}
 
-              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
-                {isPaid
-                  ? (t('posPaymentComplete') || '결제 완료')
-                  : (t('posTablePayInStore') || '매장 결제')}
-              </Button>
+              {canAddOrder ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    className="h-11 text-base font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                    onClick={() => onAddOrder?.()}
+                  >
+                    {t('posAddOrderButton') || ti('posAddOrderButton') || '추가 주문'}
+                  </Button>
+                  <Button
+                    className="h-11 text-base font-semibold"
+                    onClick={() => onPay?.()}
+                  >
+                    {t('posTablePayInStore') || '매장 결제'}
+                  </Button>
+                </div>
+              ) : (
+                <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
+                  {isPaid
+                    ? (t('posPaymentComplete') || '결제 완료')
+                    : (t('posTablePayInStore') || '매장 결제')}
+                </Button>
+              )}
               {canCancel && (
                 <div className="grid grid-cols-2 gap-2">
                   <Button

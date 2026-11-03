@@ -5369,6 +5369,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </span>
                   </span>
                 </div>
+                {normalizeExistingPosOrderId(pendingOrderId) != null && (
+                  <Badge
+                    variant="secondary"
+                    className="h-7 max-w-[9rem] shrink-0 truncate border border-sky-500/40 bg-sky-100/90 px-2 text-[11px] font-semibold text-sky-950 dark:bg-sky-950/50 dark:text-sky-50"
+                    title={
+                      (t('posTakeoutAddOrderModeBadge') || '{{label}} 추가 주문 중').replace(
+                        /\{\{label\}\}/g,
+                        [
+                          deliveryAppLabel,
+                          deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || (t('posOrderTypeDelivery') || '배달')
+                      )
+                    }
+                  >
+                    {(t('posTakeoutAddOrderModeBadge') || '{{label}} 추가 주문 중').replace(
+                      /\{\{label\}\}/g,
+                      [
+                        deliveryAppLabel,
+                        deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || (t('posOrderTypeDelivery') || '배달')
+                    )}
+                  </Badge>
+                )}
               </>
             )}
 
