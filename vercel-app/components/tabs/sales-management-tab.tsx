@@ -95,6 +95,7 @@ import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-util
 import { addDaysYmd } from "@/lib/pos-business-day"
 import {
   buildMomDayCompareRows,
+  buildMomStoreCompareRows,
   buildYoyMonthCompareRows,
   computeSalesForecast,
   monthRangeYmd,
@@ -106,12 +107,14 @@ import {
   yearRangeYmd,
   type ForecastHorizon,
   type MomDayCompareRow,
+  type MomStoreCompareRow,
   type SalesForecastSummary,
   type YoyMonthCompareRow,
 } from "@/lib/pos-sales-forecast-compare"
 import {
   SalesForecastPanel,
   SalesMomComparePanel,
+  SalesMomStoreComparePanel,
   SalesYoyComparePanel,
 } from "@/components/tabs/sales-forecast-report-panels"
 import {
@@ -242,6 +245,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [loading, setLoading] = React.useState(false)
   /** 조회 실패를 매출 0으로 보여 주지 않기 위한 메시지. 성공 시 빈 문자열. */
   const [salesQueryError, setSalesQueryError] = React.useState("")
+  /** 본표는 나왔는데 부가 표만 실패한 경우. 화면 전체를 막지 않는다. */
+  const [salesQueryWarning, setSalesQueryWarning] = React.useState("")
   /** 마지막으로「조회」로 성공 적용된 필터 키(자동 로드 없음; 키가 바뀌면 결과 비움) */
   const [fetchedAnalyticsKey, setFetchedAnalyticsKey] = React.useState("")
   const fetchedAnalyticsKeyRef = React.useRef(fetchedAnalyticsKey)
@@ -380,6 +385,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [savedPresets, setSavedPresets] = React.useState<SalesFilterPreset[]>([])
   const [yoyCompareRows, setYoyCompareRows] = React.useState<YoyMonthCompareRow[]>([])
   const [momCompareRows, setMomCompareRows] = React.useState<MomDayCompareRow[]>([])
+  const [momStoreCompareRows, setMomStoreCompareRows] = React.useState<MomStoreCompareRow[]>([])
   const [forecastSummary, setForecastSummary] = React.useState<SalesForecastSummary | null>(null)
   const [forecastHorizon, setForecastHorizon] = React.useState<ForecastHorizon>("month")
   const [forecastLookbackRows, setForecastLookbackRows] = React.useState<PosSalesPeriodRow[]>([])
@@ -727,7 +733,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     (selectedView === "period" ||
       selectedView === "store-period" ||
       selectedView === "store" ||
-      selectedView === "store-category" ||
+      (selectedView === "store-category" && !isLongRangeSalesQuery) ||
       selectedView === "payment")
   const insightShowMenu = selectedView === "menu" && !isLongRangeSalesQuery
   const insightShowChannel = selectedView === "channel"
@@ -1067,6 +1073,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       storeData,
       yoyCompareRows,
       momCompareRows,
+      momStoreCompareRows,
       forecastSummary,
       forecastLookbackRows,
       forecastActualRows,
@@ -1105,6 +1112,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     storeData,
     yoyCompareRows,
     momCompareRows,
+    momStoreCompareRows,
     forecastSummary,
     forecastLookbackRows,
     forecastActualRows,
@@ -1150,6 +1158,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "discount-all" ||
       selectedView === "yoy-compare" ||
       selectedView === "mom-compare" ||
+      selectedView === "mom-store-compare" ||
       selectedView === "forecast" ||
       (isLongRangeSalesQuery && (selectedView === "period" || selectedView === "store-period")))
 
@@ -1192,12 +1201,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const t = sumStoreSalesTotals(scopedStoreData)
       return { ...t, gross: salesWaterfallGross(t) }
     }
-    if (
-      selectedView === "store" ||
-      selectedView === "store-category" ||
-      selectedView === "store-period"
-    )
-      return storeTotalsSummary
+    if (selectedView === "store-category") {
+      if (storeTotalsSummary.total > 0) return storeTotalsSummary
+      const total = storeChannelCompareRows.reduce((sum, row) => sum + row.total, 0)
+      return { subtotal: 0, vat: 0, discount: 0, service: 0, total, gross: total }
+    }
+    if (selectedView === "store-period") {
+      if (storeTotalsSummary.total > 0) return storeTotalsSummary
+      return totalsSummary
+    }
+    if (selectedView === "store") return storeTotalsSummary
     if (selectedView === "payment") return paymentTotalsSummary
     return totalsSummary
   }, [
@@ -1205,6 +1218,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     scopedStoreData,
     selectedStoresParam,
     selectedView,
+    storeChannelCompareRows,
     storeTotalsSummary,
     paymentTotalsSummary,
     totalsSummary,
@@ -1219,12 +1233,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     ) {
       return scopedStoreSalesTotal
     }
-    if (
-      selectedView === "store" ||
-      selectedView === "store-category" ||
-      (selectedView === "store-period" && !dowsKey)
-    )
-      return storeTotalsSummary.total
+    if (selectedView === "store-category") {
+      if (storeTotalsSummary.total > 0) return storeTotalsSummary.total
+      return storeChannelCompareRows.reduce((sum, row) => sum + row.total, 0)
+    }
+    if (selectedView === "store-period" && !dowsKey) {
+      if (storeTotalsSummary.total > 0) return storeTotalsSummary.total
+      return summaryCards.current
+    }
+    if (selectedView === "store") return storeTotalsSummary.total
     if (selectedView === "payment") return paymentTotalsSummary.total
     if (selectedView === "promo-bundle") return promoBundleData.totals.saleAmount
     if (selectedView === "payment-discount") return promoBundleData.payment?.totals.discountAmount ?? 0
@@ -1236,6 +1253,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     scopedStoreSalesTotal,
     selectedStoresParam,
     selectedView,
+    storeChannelCompareRows,
     storeTotalsSummary.total,
     paymentTotalsSummary.total,
     summaryCards.current,
@@ -1299,12 +1317,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setStoreData([])
     setYoyCompareRows([])
     setMomCompareRows([])
+    setMomStoreCompareRows([])
     setForecastSummary(null)
     setForecastLookbackRows([])
     setForecastActualRows([])
     setForecastMonthActualTotal(null)
     setSummaryCards({ current: 0, prevRange: 0, prevWeek: 0 })
     setSalesQueryError("")
+    setSalesQueryWarning("")
     setFetchedAnalyticsKey("")
     viewCacheRestoreKeyRef.current = null
   }, [dataFilterKey, pageActiveRef])
@@ -1384,6 +1404,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setStoreData(snap.storeData)
     setYoyCompareRows(snap.yoyCompareRows)
     setMomCompareRows(snap.momCompareRows)
+    setMomStoreCompareRows(snap.momStoreCompareRows ?? [])
     setForecastSummary(snap.forecastSummary)
     setForecastLookbackRows(snap.forecastLookbackRows)
     setForecastActualRows(snap.forecastActualRows)
@@ -1492,6 +1513,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         return yoyCompareRows.length > 0
       case "mom-compare":
         return momCompareRows.length > 0
+      case "mom-store-compare":
+        return momStoreCompareRows.length > 0
       case "forecast":
         return forecastSummary != null
       default:
@@ -1520,6 +1543,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     scopedStoreDeliveryPlatformRows.length,
     yoyCompareRows.length,
     momCompareRows.length,
+    momStoreCompareRows.length,
     forecastSummary,
   ])
 
@@ -1549,6 +1573,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       yoyCompareRows,
       endStr,
       momCompareRows,
+      momStoreCompareRows,
       forecastSummary,
     })
 
@@ -1579,6 +1604,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     scopedStoreDeliveryPlatformRows,
     yoyCompareRows,
     momCompareRows,
+    momStoreCompareRows,
     forecastSummary,
     posStoreDisplayName,
     selectedTopic?.id,
@@ -1993,10 +2019,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needDelivery = selectedView === "delivery"
     const needChannelReconcile =
       selectedView === "channel-reconcile" || selectedView === "app-reconcile"
-    const needChannel =
-      selectedView === "channel" ||
-      selectedView === "overview" ||
-      selectedView === "store-category"
+    const needChannel = selectedView === "channel" || selectedView === "overview"
     const needStoreChannel = selectedView === "store-category"
     const needStoreDeliveryPlatform = selectedView === "store-category"
     const needMenu = selectedView === "menu"
@@ -2007,11 +2030,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const needPayment = selectedView === "payment" || selectedView === "overview"
     const needStore =
       selectedView === "store" ||
-      selectedView === "store-category" ||
-      selectedView === "store-period" ||
+      (selectedView === "store-category" && !isLongRangeSalesQuery) ||
+      (selectedView === "store-period" && !isLongRangeSalesQuery) ||
       selectedView === "overview"
     const needYoyCompare = selectedView === "yoy-compare"
     const needMomCompare = selectedView === "mom-compare"
+    const needMomStoreCompare = selectedView === "mom-store-compare"
     const needForecast = selectedView === "forecast"
     const needPeriodChart =
       selectedView != null &&
@@ -2029,6 +2053,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "overview" ||
       needYoyCompare ||
       needMomCompare ||
+      needMomStoreCompare ||
       needForecast
     const needCurrentSummaryOnly =
       !needFullSummary &&
@@ -2053,6 +2078,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gPromoBundle = guarded(setPromoBundleData)
     const gYoy = guarded(setYoyCompareRows)
     const gMom = guarded(setMomCompareRows)
+    const gMomStore = guarded(setMomStoreCompareRows)
     const gForecast = guarded(setForecastSummary)
     const gForecastLookback = guarded(setForecastLookbackRows)
     const gForecastActual = guarded(setForecastActualRows)
@@ -2068,6 +2094,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       setSalesQueryError((prev) => prev || msg)
     }
     setSalesQueryError("")
+    setSalesQueryWarning("")
     if (!opts?.silent) setLoading(true)
     if (isLongRangeSalesQuery && isSalesHeavyTopicSkippedOnLongRange(selectedView)) {
       setPeriodSplitSeries(null)
@@ -2218,6 +2245,50 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       )
     }
 
+    if (needMomStoreCompare) {
+      const { year, month } = parseYearMonthFromYmd(endStr)
+      const currRange = monthRangeYmd(year, month)
+      const prev = prevCalendarMonth(year, month)
+      const prevRange = monthRangeYmd(prev.year, prev.month)
+      const storeFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
+      tasks.push(
+        Promise.all([
+          storeFetcher({
+            startStr: currRange.startStr,
+            endStr: currRange.endStr,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          storeFetcher({
+            startStr: prevRange.startStr,
+            endStr: prevRange.endStr,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([currRows, prevRows]) => {
+            if (loadIdRef.current !== id) return
+            const currScoped = filterStoreRowsBySalesSelection(currRows, salesFetchStoresParam)
+            const prevScoped = filterStoreRowsBySalesSelection(prevRows, salesFetchStoresParam)
+            const rows = buildMomStoreCompareRows({
+              prevMonthRows: prevScoped,
+              currMonthRows: currScoped,
+            })
+            gMomStore(rows)
+            gSummary({
+              current: rows.reduce((a, r) => a + r.currMonth.total, 0),
+              prevRange: rows.reduce((a, r) => a + r.prevMonth.total, 0),
+              prevWeek: 0,
+            })
+          })
+          .catch((err) => {
+            noteQueryFailure(err)
+            gMomStore([])
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
+      )
+    }
+
     if (needForecast) {
       const anchor = endStr
       const plan = resolveForecastFetchPlan({ horizon: forecastHorizon, anchorYmd: anchor })
@@ -2356,51 +2427,78 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           })
       )
     }
+    const runStoreDeliveryPlatform = () =>
+      (offlineAware
+        ? getPosSalesByStoreDeliveryPlatformWithCache
+        : getPosSalesByStoreDeliveryPlatform)({
+        startStr,
+        endStr,
+        stores: salesFetchStoresParam,
+        orderTypes: orderTypesParam,
+      })
+        .then((rows) => {
+          const scoped = salesFetchStoresParam?.length
+            ? rows.filter((r) =>
+                salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+              )
+            : rows
+          gStoreDeliveryPlatform(scoped)
+        })
+        .catch((err) => {
+          gStoreDeliveryPlatform([])
+          if (loadIdRef.current !== id) return
+          if (selectedView === "store-category") {
+            setSalesQueryWarning(
+              (prev) =>
+                prev ||
+                tr(
+                  "salesStoreCategoryDeliveryTimeout",
+                  "배달앱 표만 가져오지 못했습니다. 홀·배달·포장 표는 아래에 있습니다. 앱별 표는 기간을 한 달 이내로 줄이면 볼 수 있습니다."
+                )
+            )
+            return
+          }
+          noteQueryFailure(err)
+        })
+
     if (needStoreChannel) {
-      tasks.push(
-        (offlineAware ? getPosSalesByStoreChannelWithCache : getPosSalesByStoreChannel)({
-          startStr,
-          endStr,
-          stores: salesFetchStoresParam,
-          orderTypes: orderTypesParam,
+      const channelTask = (
+        offlineAware ? getPosSalesByStoreChannelWithCache : getPosSalesByStoreChannel
+      )({
+        startStr,
+        endStr,
+        stores: salesFetchStoresParam,
+        orderTypes: orderTypesParam,
+      })
+        .then((rows) => {
+          const scoped = salesFetchStoresParam?.length
+            ? rows.filter((r) =>
+                salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
+              )
+            : rows
+          gStoreChannel(scoped)
+          if (isLongRangeSalesQuery && selectedView === "store-category") {
+            const total = scoped.reduce(
+              (sum, row) =>
+                sum + (Number(row.dineIn) || 0) + (Number(row.delivery) || 0) + (Number(row.takeout) || 0),
+              0
+            )
+            gSummary({ current: total, prevRange: 0, prevWeek: 0 })
+          }
         })
-          .then((rows) => {
-            const scoped = salesFetchStoresParam?.length
-              ? rows.filter((r) =>
-                  salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
-                )
-              : rows
-            gStoreChannel(scoped)
-          })
-          .catch((err) => {
-            noteQueryFailure(err)
-            gStoreChannel([])
-          })
-      )
-    }
-    if (needStoreDeliveryPlatform) {
-      tasks.push(
-        (offlineAware
-          ? getPosSalesByStoreDeliveryPlatformWithCache
-          : getPosSalesByStoreDeliveryPlatform)({
-          startStr,
-          endStr,
-          stores: salesFetchStoresParam,
-          orderTypes: orderTypesParam,
+        .catch((err) => {
+          noteQueryFailure(err)
+          gStoreChannel([])
         })
-          .then((rows) => {
-            const scoped = salesFetchStoresParam?.length
-              ? rows.filter((r) =>
-                  salesFetchStoresParam.some((code) => rowMatchesSalesStoreSelection(r.storeName, code))
-                )
-              : rows
-            gStoreDeliveryPlatform(scoped)
-          })
-          .catch((err) => {
-            noteQueryFailure(err)
-            gStoreDeliveryPlatform([])
-          })
-      )
+      // 두 달 이상은 매장×채널을 먼저 끝내고 배달앱을 이어서 돌린다. 같이 돌리면 DB가 막혀 둘 다 시간 초과가 난다.
+      if (needStoreDeliveryPlatform && isLongRangeSalesQuery) {
+        tasks.push(channelTask.then(() => runStoreDeliveryPlatform()))
+      } else {
+        tasks.push(channelTask)
+        if (needStoreDeliveryPlatform) tasks.push(runStoreDeliveryPlatform())
+      }
+    } else if (needStoreDeliveryPlatform) {
+      tasks.push(runStoreDeliveryPlatform())
     }
     if (needPayment) {
       tasks.push(
@@ -2926,6 +3024,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </p>
           ) : null}
 
+          {showSalesResults && salesQueryWarning && !salesQueryError ? (
+            <p className={`mb-3 ${ADMIN_PANEL_WARNING_CN}`} role="status">
+              {salesQueryWarning}
+            </p>
+          ) : null}
+
           {showSalesResults &&
           periodTruncated &&
           selectedView !== "channel-reconcile" &&
@@ -3256,6 +3360,23 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   year={parseYearMonthFromYmd(endStr).year}
                   month={parseYearMonthFromYmd(endStr).month}
                   storeLabel={compareStoreLabel}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                />
+              )
+            )}
+
+            {selectedView === "mom-store-compare" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : momStoreCompareRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+              ) : (
+                <SalesMomStoreComparePanel
+                  rows={momStoreCompareRows}
+                  year={parseYearMonthFromYmd(endStr).year}
+                  month={parseYearMonthFromYmd(endStr).month}
+                  storeDisplayName={posStoreDisplayName}
                   tr={tr}
                   formatAmount={formatSalesAmount}
                 />

@@ -19,6 +19,7 @@ import type { StoreChannelCompareRow } from "@/components/tabs/sales-management-
 import {
   parseYearFromYmd,
   type MomDayCompareRow,
+  type MomStoreCompareRow,
   type SalesForecastSummary,
   type YoyMonthCompareRow,
 } from "@/lib/pos-sales-forecast-compare"
@@ -58,6 +59,7 @@ export interface SalesExcelSheetsInput {
   yoyCompareRows: YoyMonthCompareRow[]
   endStr: string
   momCompareRows: MomDayCompareRow[]
+  momStoreCompareRows?: MomStoreCompareRow[]
   forecastSummary: SalesForecastSummary | null
 }
 
@@ -86,6 +88,7 @@ export function buildSalesExcelSheets({
   yoyCompareRows,
   endStr,
   momCompareRows,
+  momStoreCompareRows = [],
   forecastSummary,
 }: SalesExcelSheetsInput): SalesExcelSheet[] {
   const numCell = (n: number) => Math.round(Number(n || 0) * 100) / 100
@@ -808,6 +811,31 @@ export function buildSalesExcelSheets({
         r.changePct.total ?? "",
       ]),
       colFormats: [salesExcelCol.text, salesExcelCol.money, salesExcelCol.money, salesExcelCol.money],
+    })
+  } else if (selectedView === "mom-store-compare" && momStoreCompareRows.length > 0) {
+    sheets.push({
+      name: tr("salesTopicCompareStoreMom", "매장별 전월대비"),
+      headers: [
+        tr("salesStoreName", "매장명"),
+        `${tr("salesAmount", "매출액")} (${tr("salesCompareExcelPrevMonth", "전월")})`,
+        `${tr("salesAmount", "매출액")} (${tr("salesCompareExcelCurrMonth", "당월")})`,
+        tr("salesCompareMomDiff", "증감"),
+        tr("salesCompareMomPct", "전월대비(%)"),
+      ],
+      rows: momStoreCompareRows.map((r) => [
+        posStoreDisplayName(r.storeName),
+        numCell(r.prevMonth.total),
+        numCell(r.currMonth.total),
+        numCell(r.changeAbs.total),
+        r.changePct.total ?? "",
+      ]),
+      colFormats: [
+        salesExcelCol.text,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+      ],
     })
   } else if (selectedView === "forecast" && forecastSummary) {
     sheets.push({

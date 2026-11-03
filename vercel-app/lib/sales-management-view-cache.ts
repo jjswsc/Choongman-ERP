@@ -19,6 +19,7 @@ import type {
 import type {
   ForecastHorizon,
   MomDayCompareRow,
+  MomStoreCompareRow,
   SalesForecastSummary,
   YoyMonthCompareRow,
 } from "@/lib/pos-sales-forecast-compare"
@@ -102,6 +103,8 @@ export type SalesManagementViewCache = {
   storeDeliveryPlatformData?: PosSalesStoreDeliveryPlatformRow[]
   yoyCompareRows: YoyMonthCompareRow[]
   momCompareRows: MomDayCompareRow[]
+  /** 매장별 전월대비 — 구 캐시 호환 optional */
+  momStoreCompareRows?: MomStoreCompareRow[]
   forecastSummary: SalesForecastSummary | null
   forecastLookbackRows: PosSalesPeriodRow[]
   forecastActualRows: PosSalesPeriodRow[]

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
 import {
   buildMomDayCompareRows,
+  buildMomStoreCompareRows,
   buildYoyMonthCompareRows,
   computeDowAverageMap,
   computeSalesForecast,
@@ -62,6 +63,30 @@ describe('buildMomDayCompareRows', () => {
     expect(rows[0]?.prevMonth.total).toBe(50)
     expect(rows[0]?.currMonth.total).toBe(60)
     expect(rows[0]?.changePct.total).toBe(20)
+  })
+})
+
+describe('buildMomStoreCompareRows', () => {
+  it('joins stores across months and computes MoM %', () => {
+    const rows = buildMomStoreCompareRows({
+      prevMonthRows: [
+        { storeName: 'Bangkok', count: 10, total: 1000, dineInGuestSum: 80 },
+        { storeName: 'Silom', count: 5, total: 500, dineInGuestSum: 40 },
+      ],
+      currMonthRows: [
+        { storeName: 'Bangkok', count: 12, total: 1200, dineInGuestSum: 90 },
+        { storeName: 'Chiangmai', count: 3, total: 300, dineInGuestSum: 20 },
+      ],
+    })
+    expect(rows.map((r) => r.storeName)).toEqual(['Bangkok', 'Chiangmai', 'Silom'])
+    expect(rows[0]?.currMonth.total).toBe(1200)
+    expect(rows[0]?.prevMonth.total).toBe(1000)
+    expect(rows[0]?.changePct.total).toBe(20)
+    expect(rows[0]?.changeAbs.total).toBe(200)
+    expect(rows[1]?.prevMonth.total).toBe(0)
+    expect(rows[1]?.changePct.total).toBeNull()
+    expect(rows[2]?.currMonth.total).toBe(0)
+    expect(rows[2]?.changePct.total).toBe(-100)
   })
 })
 
