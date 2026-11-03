@@ -4925,7 +4925,7 @@ Only matters the employee must handle personally on a working day:
   salesManagementTabPeriodCompare: 'Period Compare',
   salesManagementTabSalesGrouped: 'Sales Grouped',
   salesManagementTabPivotAnalysis: 'Aggregate/Analysis',
-  salesManagementTabForecast: 'Forecast Sales',
+  salesManagementTabForecast: 'Compare·Forecast',
   salesManagementSubmenuAppReconcile: 'Channel check',
   salesManagementSubmenuChannelReconcile: 'Channel check',
   salesTopicAppReconcile: 'Channel check',
@@ -5145,7 +5145,7 @@ Only matters the employee must handle personally on a working day:
     'With all stores, only branches with orders in the range appear. Use “Period granularity” above for year/month/week/day/DOW/hour. Year, month, week, day, and weekday use each store’s POS business day; hour buckets use Bangkok wall-clock time.',
   salesTopicPivotStoreCategory: 'Sales (Store & Category)',
   salesTopicPivotStoreCategoryHint:
-    'One total for the selected period: dine-in, delivery, and takeout by store, plus delivery apps. For a month-by-month split, open Store × period and choose Monthly. Year-over-year months are under Forecast → YoY comparison.',
+    'One total for the selected period: dine-in, delivery, and takeout by store, plus delivery apps. For a month-by-month split, open Store × period and choose Monthly. Year-over-year months are under Compare·Forecast → YoY comparison.',
   salesStoreCategoryDeliveryTimeout:
     'Only the delivery-app table failed to load. The dine-in, delivery, and takeout table is still below. Shorten the range to one month or less to load the app breakdown.',
   salesByStoreChannelMatrix: 'By store (dine-in·delivery·takeout)',
@@ -5184,12 +5184,29 @@ Only matters the employee must handle personally on a working day:
   salesTopicCompareMonthMomHint: 'Daily comparison by month',
   salesTopicCompareStoreMom: 'Store MoM',
   salesTopicCompareStoreMomHint: 'This month vs last month by store',
+  salesTopicCompareStoreYoy: 'Store YoY',
+  salesTopicCompareStoreYoyHint: 'Same month this year vs last year by store',
+  salesTopicCompareStoreChannelMom: 'Store channel MoM',
+  salesTopicCompareStoreChannelMomHint: 'Dine-in / takeout / delivery mix vs last month',
+  salesTopicCompareStoreMomDecomp: 'Store MoM drivers',
+  salesTopicCompareStoreMomDecompHint: 'Split sales change into order count vs ticket size',
   salesTopicForecastMonthly: 'Forecast sales',
   salesTopicForecastMonthlyHint: 'Expected sales from weekday averages',
   salesCompareBusinessDays: 'Business days',
   salesCompareYoyPct: 'YoY (%)',
   salesCompareMomPct: 'MoM (%)',
   salesCompareMomDiff: 'Change',
+  salesCompareDeliveryShareDiff: 'Delivery share change',
+  salesCompareOrderCountMomPct: 'Orders (%)',
+  salesCompareSalesPerOrderMomPct: 'Per order (%)',
+  salesCompareGuestMomPct: 'Per guest (%)',
+  salesMomStoreDriver: 'Driver',
+  salesMomStoreDriverVolume: 'Volume-led',
+  salesMomStoreDriverTicket: 'Ticket-led',
+  salesMomStoreDriverMixed: 'Mixed',
+  salesMomStoreDriverFlat: 'Flat',
+  salesMomStoreDriverNew: 'New (no prior month)',
+  salesMomStoreDriverClosed: 'No current month',
   salesCompareMonthColumn: 'Month',
   salesCompareDayColumn: 'Day',
   salesCompareExcelPrevMonth: 'Prev month',
@@ -5198,6 +5215,12 @@ Only matters the employee must handle personally on a working day:
   salesMomReportHint: 'Compares each calendar day to the same day in the previous month.',
   salesMomStoreReportHint:
     'Compares each store’s full-month totals for the end-date month vs the previous calendar month.',
+  salesYoyStoreReportHint:
+    'Compares each store’s totals for the end-date month vs the same month last year.',
+  salesMomStoreChannelReportHint:
+    'Compares each store’s dine-in / takeout / delivery sales mix vs the previous calendar month.',
+  salesMomStoreDecompReportHint:
+    'Splits each store’s MoM sales change into order-count vs per-order ticket drivers.',
   salesForecastReportHint:
     'Weekday averages from recent daily sales are applied to remaining days after the anchor date.',
   salesForecastHorizonWeek: 'Week',
@@ -7968,7 +7991,7 @@ orderItemQty: 'Qty',
   helpSum_admin_sales_management:
     'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check matches delivery apps, QR, and card on Bangkok calendar dates (QR uses bank deposit date; delivery/card use recognition date for next-day payout) so you can find mismatched days.',
   helpHow_admin_sales_management:
-    '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, forecast, channel check) and a report topic, then Query again whenever you change them; read the hint under the topic buttons.\n③ Store compare → Sales by store & category is one total for the selected period (dine-in, delivery, takeout, and delivery apps; unpaid open tables excluded). For a month-by-month split, open Store × period and choose Monthly. Year-over-year months are Forecast → YoY comparison; this month vs last month by day is MoM comparison; per-store month totals are Store MoM.\n④ On Date/Time trend and Store × period, choose year, month, week, day, hour, or weekday. Use Weekday to keep only selected days of week (business day).\n⑤ Reuse filters via URL or Save preset.\n⑥ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑦ Business hours tab adjusts POS business-day boundaries.\n⑧ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑨ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑩ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑪ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑫ Channel check → Cash: POS cash uses open/sale business day—overnight pay still counts on the open day. Match till/withdraw and store bank 4140 on payment day vs recognition date. Click cash count or amount for the order list.\n⑬ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑭ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
+    '① Set period, store(s), and order type, then Query.\n② Pick a submenu (snapshot, store compare, discounts, compare·forecast, channel check) and a report topic, then Query again whenever you change them; read the hint under the topic buttons.\n③ Store compare → Sales by store & category is one total for the selected period (dine-in, delivery, takeout, and delivery apps; unpaid open tables excluded). For a month-by-month split, open Store × period and choose Monthly. Year-over-year months are Compare·Forecast → YoY comparison; this month vs last month by day is MoM comparison; per-store month totals are Store MoM; same-month last year by store is Store YoY; dine-in/takeout/delivery mix is Store channel MoM; order-count vs ticket drivers are Store MoM drivers.\n④ On Date/Time trend and Store × period, choose year, month, week, day, hour, or weekday. Use Weekday to keep only selected days of week (business day).\n⑤ Reuse filters via URL or Save preset.\n⑥ Overview report summarizes KPIs, channels, stores, payments, and daily trend — drill into Total Sales or detailed topics.\n⑦ Business hours tab adjusts POS business-day boundaries.\n⑧ If payment tender gap warning appears, fix missing payments in POS receipt management.\n⑨ Channel check → Delivery apps: expand a row to compare estimated payout vs store bank 4111/4112/4113 on Bangkok calendar date vs bank recognition date (usually next-day payout); use Mismatched dates only.\n⑩ Channel check → KBank QR: same-day close uses POS QR; bank is store account subject 4130 matched on deposit date (calendar). After-midnight sales may differ from the POS business-day close.\n⑪ Channel check → Card: match POS card vs store bank 4120–4124 on Bangkok calendar date vs bank recognition date (settlement is usually next day).\n⑫ Channel check → Cash: POS cash uses open/sale business day—overnight pay still counts on the open day. Match till/withdraw and store bank 4140 on payment day vs recognition date. Click cash count or amount for the order list.\n⑬ Ranges longer than 31 days still allow year/month/week/day/hour/weekday aggregation. Prior-period / prior-week comparison, menu, and channel check are skipped — split those into one month or less.\n⑭ Payment/Card lists completed-order sales by tender: Cash, Credit, QR PromptPay, WeChat, Alipay, TrueMoney, and other saved methods.',
   salesSubnavAria: 'Sales menu',
   salesTopicHintLabel: 'This report',
   salesOverviewIntro:

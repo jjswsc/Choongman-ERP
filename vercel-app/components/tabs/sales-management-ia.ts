@@ -13,6 +13,9 @@ export type AnalyticsView =
   | "yoy-compare"
   | "mom-compare"
   | "mom-store-compare"
+  | "yoy-store-compare"
+  | "mom-store-channel"
+  | "mom-store-decomp"
   | "forecast"
   | "overview"
   | "channel-reconcile"
@@ -141,7 +144,7 @@ export const SALES_IA: SalesSubMenuConfig[] = [
   {
     id: "sales-forecast-report",
     labelKey: "salesManagementTabForecast",
-    fallbackLabel: "예측·리포트",
+    fallbackLabel: "비교·예측",
     topics: [
       {
         id: "report-month-year",
@@ -160,6 +163,24 @@ export const SALES_IA: SalesSubMenuConfig[] = [
         labelKey: "salesTopicCompareStoreMom",
         hintKey: "salesTopicCompareStoreMomHint",
         view: "mom-store-compare",
+      },
+      {
+        id: "report-store-yoy",
+        labelKey: "salesTopicCompareStoreYoy",
+        hintKey: "salesTopicCompareStoreYoyHint",
+        view: "yoy-store-compare",
+      },
+      {
+        id: "report-store-channel-mom",
+        labelKey: "salesTopicCompareStoreChannelMom",
+        hintKey: "salesTopicCompareStoreChannelMomHint",
+        view: "mom-store-channel",
+      },
+      {
+        id: "report-store-mom-decomp",
+        labelKey: "salesTopicCompareStoreMomDecomp",
+        hintKey: "salesTopicCompareStoreMomDecompHint",
+        view: "mom-store-decomp",
       },
       {
         id: "report-forecast-monthly",

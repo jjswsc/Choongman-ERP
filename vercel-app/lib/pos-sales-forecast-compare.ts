@@ -43,6 +43,9 @@ export type MomStoreCompareInputRow = {
   salesPerGuest?: number
 }
 
+/** 매출 증감 원인 — 건수 주도 / 객단가(건당) 주도 */
+export type MomStoreDriver = 'volume' | 'ticket' | 'mixed' | 'flat' | 'new' | 'closed'
+
 export type MomStoreCompareRow = {
   storeName: string
   prevMonth: SalesCompareMetrics
@@ -54,7 +57,50 @@ export type MomStoreCompareRow = {
     total: number | null
     guest: number | null
     salesPerGuest: number | null
+    orderCount: number | null
+    salesPerOrder: number | null
   }
+  driver: MomStoreDriver
+}
+
+/** 매장별 전년동월 — 당월 vs 전년 동월 */
+export type YoyStoreCompareRow = {
+  storeName: string
+  prevYear: SalesCompareMetrics
+  currYear: SalesCompareMetrics
+  changeAbs: {
+    total: number
+  }
+  changePct: {
+    total: number | null
+    guest: number | null
+    salesPerGuest: number | null
+  }
+}
+
+export type StoreChannelAmountRow = {
+  storeName: string
+  dineIn?: number
+  takeout?: number
+  delivery?: number
+}
+
+export type StoreChannelShareMetrics = {
+  dineIn: number
+  takeout: number
+  delivery: number
+  total: number
+  dineInPct: number | null
+  takeoutPct: number | null
+  deliveryPct: number | null
+}
+
+/** 매장별 홀/포장/배달 비중 전월대비 */
+export type MomStoreChannelCompareRow = {
+  storeName: string
+  prevMonth: StoreChannelShareMetrics
+  currMonth: StoreChannelShareMetrics
+  deliveryShareDiffPp: number | null
 }
 
 export type ForecastHorizon = 'week' | 'month' | 'year'
@@ -250,6 +296,29 @@ function indexStoreRowsByName(rows: MomStoreCompareInputRow[]): Map<string, MomS
   return map
 }
 
+function salesPerOrderOf(m: SalesCompareMetrics): number {
+  return m.orderCount > 0 ? Math.round((m.total / m.orderCount) * 100) / 100 : 0
+}
+
+export function resolveMomStoreDriver(params: {
+  prevTotal: number
+  currTotal: number
+  orderCountPct: number | null
+  salesPerOrderPct: number | null
+}): MomStoreDriver {
+  const { prevTotal, currTotal, orderCountPct, salesPerOrderPct } = params
+  if (prevTotal <= 0 && currTotal > 0) return 'new'
+  if (currTotal <= 0 && prevTotal > 0) return 'closed'
+  if (prevTotal <= 0 && currTotal <= 0) return 'flat'
+  const vol = orderCountPct == null || !Number.isFinite(orderCountPct) ? 0 : Math.abs(orderCountPct)
+  const ticket =
+    salesPerOrderPct == null || !Number.isFinite(salesPerOrderPct) ? 0 : Math.abs(salesPerOrderPct)
+  if (vol < 0.5 && ticket < 0.5) return 'flat'
+  if (vol >= ticket * 1.25) return 'volume'
+  if (ticket >= vol * 1.25) return 'ticket'
+  return 'mixed'
+}
+
 /** 매장별 전월대비 — 당월·전월 달력월 합계 (POS 매장별 전월대비) */
 export function buildMomStoreCompareRows(params: {
   prevMonthRows: MomStoreCompareInputRow[]
@@ -263,6 +332,8 @@ export function buildMomStoreCompareRows(params: {
   return keys.map((storeName) => {
     const prevMonth = metricsFromStoreRow(prevMap.get(storeName))
     const currMonth = metricsFromStoreRow(currMap.get(storeName))
+    const orderCountPct = pctChange(currMonth.orderCount, prevMonth.orderCount)
+    const salesPerOrderPct = pctChange(salesPerOrderOf(currMonth), salesPerOrderOf(prevMonth))
     return {
       storeName,
       prevMonth,
@@ -274,9 +345,127 @@ export function buildMomStoreCompareRows(params: {
         total: pctChange(currMonth.total, prevMonth.total),
         guest: pctChange(currMonth.guestSum, prevMonth.guestSum),
         salesPerGuest: pctChange(currMonth.salesPerGuest, prevMonth.salesPerGuest),
+        orderCount: orderCountPct,
+        salesPerOrder: salesPerOrderPct,
+      },
+      driver: resolveMomStoreDriver({
+        prevTotal: prevMonth.total,
+        currTotal: currMonth.total,
+        orderCountPct,
+        salesPerOrderPct,
+      }),
+    }
+  })
+}
+
+/** 매장별 전년동월 — 종료일 월 기준 당해 vs 전년 동월 */
+export function buildYoyStoreCompareRows(params: {
+  prevYearRows: MomStoreCompareInputRow[]
+  currYearRows: MomStoreCompareInputRow[]
+}): YoyStoreCompareRow[] {
+  const prevMap = indexStoreRowsByName(params.prevYearRows)
+  const currMap = indexStoreRowsByName(params.currYearRows)
+  const keys = Array.from(new Set([...prevMap.keys(), ...currMap.keys()])).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  )
+  return keys.map((storeName) => {
+    const prevYear = metricsFromStoreRow(prevMap.get(storeName))
+    const currYear = metricsFromStoreRow(currMap.get(storeName))
+    return {
+      storeName,
+      prevYear,
+      currYear,
+      changeAbs: {
+        total: Math.round((currYear.total - prevYear.total) * 100) / 100,
+      },
+      changePct: {
+        total: pctChange(currYear.total, prevYear.total),
+        guest: pctChange(currYear.guestSum, prevYear.guestSum),
+        salesPerGuest: pctChange(currYear.salesPerGuest, prevYear.salesPerGuest),
       },
     }
   })
+}
+
+function channelShareMetrics(row?: StoreChannelAmountRow | null): StoreChannelShareMetrics {
+  const dineIn = Number(row?.dineIn ?? 0) || 0
+  const takeout = Number(row?.takeout ?? 0) || 0
+  const delivery = Number(row?.delivery ?? 0) || 0
+  const total = Math.round((dineIn + takeout + delivery) * 100) / 100
+  const pct = (v: number): number | null =>
+    total > 0 ? Math.round((v / total) * 10000) / 100 : null
+  return {
+    dineIn,
+    takeout,
+    delivery,
+    total,
+    dineInPct: pct(dineIn),
+    takeoutPct: pct(takeout),
+    deliveryPct: pct(delivery),
+  }
+}
+
+function indexChannelRowsByName(rows: StoreChannelAmountRow[]): Map<string, StoreChannelAmountRow> {
+  const map = new Map<string, StoreChannelAmountRow>()
+  for (const r of rows) {
+    const k = String(r.storeName ?? '').trim()
+    if (!k) continue
+    const prev = map.get(k)
+    if (!prev) {
+      map.set(k, {
+        storeName: k,
+        dineIn: Number(r.dineIn) || 0,
+        takeout: Number(r.takeout) || 0,
+        delivery: Number(r.delivery) || 0,
+      })
+      continue
+    }
+    map.set(k, {
+      storeName: k,
+      dineIn: (Number(prev.dineIn) || 0) + (Number(r.dineIn) || 0),
+      takeout: (Number(prev.takeout) || 0) + (Number(r.takeout) || 0),
+      delivery: (Number(prev.delivery) || 0) + (Number(r.delivery) || 0),
+    })
+  }
+  return map
+}
+
+/** 매장별 홀·포장·배달 비중 전월대비 (pp) */
+export function buildMomStoreChannelCompareRows(params: {
+  prevMonthRows: StoreChannelAmountRow[]
+  currMonthRows: StoreChannelAmountRow[]
+}): MomStoreChannelCompareRow[] {
+  const prevMap = indexChannelRowsByName(params.prevMonthRows)
+  const currMap = indexChannelRowsByName(params.currMonthRows)
+  const keys = Array.from(new Set([...prevMap.keys(), ...currMap.keys()])).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  )
+  return keys.map((storeName) => {
+    const prevMonth = channelShareMetrics(prevMap.get(storeName))
+    const currMonth = channelShareMetrics(currMap.get(storeName))
+    const deliveryShareDiffPp =
+      prevMonth.deliveryPct == null || currMonth.deliveryPct == null
+        ? null
+        : Math.round((currMonth.deliveryPct - prevMonth.deliveryPct) * 100) / 100
+    return { storeName, prevMonth, currMonth, deliveryShareDiffPp }
+  })
+}
+
+export function sumYoyStoreMetrics(
+  rows: YoyStoreCompareRow[],
+  side: 'prevYear' | 'currYear'
+): SalesCompareMetrics {
+  const acc = emptyMetrics()
+  for (const r of rows) {
+    const m = r[side]
+    acc.orderCount += m.orderCount
+    acc.total += m.total
+    acc.guestSum += m.guestSum
+  }
+  acc.total = Math.round(acc.total * 100) / 100
+  acc.salesPerGuest =
+    acc.guestSum > 0 ? Math.round((acc.total / acc.guestSum) * 100) / 100 : 0
+  return acc
 }
 
 function indexDailyTotals(rows: PeriodAggRow[]): Map<string, number> {

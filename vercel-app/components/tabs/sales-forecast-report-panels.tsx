@@ -5,11 +5,19 @@ import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import type {
   ForecastHorizon,
   MomDayCompareRow,
+  MomStoreChannelCompareRow,
   MomStoreCompareRow,
+  MomStoreDriver,
   SalesForecastSummary,
   YoyMonthCompareRow,
+  YoyStoreCompareRow,
 } from "@/lib/pos-sales-forecast-compare"
-import { sumMomDayMetrics, sumMomStoreMetrics, sumYoyMonthMetrics } from "@/lib/pos-sales-forecast-compare"
+import {
+  sumMomDayMetrics,
+  sumMomStoreMetrics,
+  sumYoyMonthMetrics,
+  sumYoyStoreMetrics,
+} from "@/lib/pos-sales-forecast-compare"
 import { Button } from "@/components/ui/button"
 
 type TrFn = (key: string, fallback: string) => string
@@ -307,6 +315,284 @@ export function SalesMomStoreComparePanel({
                 )}
               </td>
             </tr>
+          </tbody>
+        </table>
+      </AdminTableScroll>
+    </div>
+  )
+}
+
+export function SalesYoyStoreComparePanel({
+  rows,
+  year,
+  month,
+  storeDisplayName,
+  tr,
+  formatAmount,
+}: {
+  rows: YoyStoreCompareRow[]
+  year: number
+  month: number
+  storeDisplayName: (code: string) => string
+  tr: TrFn
+  formatAmount: (n: number) => string
+}) {
+  const prevTotal = sumYoyStoreMetrics(rows, "prevYear")
+  const currTotal = sumYoyStoreMetrics(rows, "currYear")
+  const totalDiff = Math.round((currTotal.total - prevTotal.total) * 100) / 100
+  const formatDiff = (v: number): string => {
+    const sign = v > 0 ? "+" : ""
+    return `${sign}${formatAmount(v)}`
+  }
+  const mm = String(month).padStart(2, "0")
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        {tr(
+          "salesYoyStoreReportHint",
+          "매출일자(종료일)의 월 기준으로 매장별 당해·전년 동월 합계를 비교합니다."
+        )}
+      </p>
+      <AdminTableScroll className="rounded-md border" hint={false}>
+        <table className="w-full min-w-[1100px] text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-muted-foreground">
+              <th className="px-2 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
+              <th colSpan={4} className="border-l bg-slate-100/80 px-2 py-2 text-center dark:bg-slate-800/40">
+                {year - 1}/{mm}
+              </th>
+              <th colSpan={4} className="border-l bg-emerald-50/80 px-2 py-2 text-center dark:bg-emerald-950/30">
+                {year}/{mm}
+              </th>
+              <th colSpan={2} className="border-l bg-sky-50/80 px-2 py-2 text-center dark:bg-sky-950/30">
+                {tr("salesCompareYoyPct", "전년대비(%)")}
+              </th>
+            </tr>
+            <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+              <th />
+              <th className="px-2 py-1 text-right">{tr("salesOccupancy", "주문건수")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesAmount", "매출액")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesGuestCount", "손님 수(홀)")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesPerGuest", "객단가")}</th>
+              <th className="border-l px-2 py-1 text-right">{tr("salesOccupancy", "주문건수")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesAmount", "매출액")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesGuestCount", "손님 수(홀)")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesPerGuest", "객단가")}</th>
+              <th className="border-l px-2 py-1 text-right">{tr("salesCompareMomDiff", "증감")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesCompareYoyPct", "전년대비(%)")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.storeName} className="border-b border-border/60">
+                <td className="px-2 py-1.5 font-medium">{storeDisplayName(r.storeName)}</td>
+                <CompareMetricsCells m={r.prevYear} formatAmount={formatAmount} sectionStart />
+                <CompareMetricsCells m={r.currYear} formatAmount={formatAmount} sectionStart />
+                <td className="border-l px-2 py-1.5 text-right font-erp-numeric">
+                  {formatDiff(r.changeAbs.total)}
+                </td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatPct(r.changePct.total)}</td>
+              </tr>
+            ))}
+            <tr className="bg-muted/30 font-semibold">
+              <td className="px-2 py-2">{tr("salesTotal", "합계")}</td>
+              <CompareMetricsCells m={prevTotal} formatAmount={formatAmount} sectionStart />
+              <CompareMetricsCells m={currTotal} formatAmount={formatAmount} sectionStart />
+              <td className="border-l px-2 py-2 text-right font-erp-numeric">{formatDiff(totalDiff)}</td>
+              <td className="px-2 py-2 text-right font-erp-numeric">
+                {formatPct(
+                  prevTotal.total === 0
+                    ? currTotal.total === 0
+                      ? 0
+                      : null
+                    : Math.round(((currTotal.total - prevTotal.total) / prevTotal.total) * 10000) / 100
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </AdminTableScroll>
+    </div>
+  )
+}
+
+function formatSharePct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—"
+  return `${v.toFixed(1)}%`
+}
+
+function formatPp(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—"
+  const sign = v > 0 ? "+" : ""
+  return `${sign}${v.toFixed(1)}p`
+}
+
+export function SalesMomStoreChannelComparePanel({
+  rows,
+  year,
+  month,
+  storeDisplayName,
+  tr,
+}: {
+  rows: MomStoreChannelCompareRow[]
+  year: number
+  month: number
+  storeDisplayName: (code: string) => string
+  tr: TrFn
+}) {
+  const prevMonth = month <= 1 ? 12 : month - 1
+  const prevYear = month <= 1 ? year - 1 : year
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        {tr(
+          "salesMomStoreChannelReportHint",
+          "매출일자(종료일)의 월 기준으로 매장별 홀·포장·배달 매출 비중을 전월과 비교합니다."
+        )}
+      </p>
+      <AdminTableScroll className="rounded-md border" hint={false}>
+        <table className="w-full min-w-[1000px] text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-muted-foreground">
+              <th className="px-2 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
+              <th colSpan={3} className="border-l bg-slate-100/80 px-2 py-2 text-center dark:bg-slate-800/40">
+                {prevYear}/{String(prevMonth).padStart(2, "0")}
+              </th>
+              <th colSpan={3} className="border-l bg-emerald-50/80 px-2 py-2 text-center dark:bg-emerald-950/30">
+                {year}/{String(month).padStart(2, "0")}
+              </th>
+              <th className="border-l bg-sky-50/80 px-2 py-2 text-center dark:bg-sky-950/30">
+                {tr("salesCompareDeliveryShareDiff", "배달비중 증감")}
+              </th>
+            </tr>
+            <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+              <th />
+              <th className="px-2 py-1 text-right">{tr("salesAmountKindDineIn", "홀")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesAmountKindTakeout", "포장")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
+              <th className="border-l px-2 py-1 text-right">{tr("salesAmountKindDineIn", "홀")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesAmountKindTakeout", "포장")}</th>
+              <th className="px-2 py-1 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
+              <th className="border-l px-2 py-1 text-right">{tr("salesCompareDeliveryShareDiff", "배달비중 증감")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.storeName} className="border-b border-border/60">
+                <td className="px-2 py-1.5 font-medium">{storeDisplayName(r.storeName)}</td>
+                <td className="border-l px-2 py-1.5 text-right font-erp-numeric">
+                  {formatSharePct(r.prevMonth.dineInPct)}
+                </td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">
+                  {formatSharePct(r.prevMonth.takeoutPct)}
+                </td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">
+                  {formatSharePct(r.prevMonth.deliveryPct)}
+                </td>
+                <td className="border-l px-2 py-1.5 text-right font-erp-numeric">
+                  {formatSharePct(r.currMonth.dineInPct)}
+                </td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">
+                  {formatSharePct(r.currMonth.takeoutPct)}
+                </td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">
+                  {formatSharePct(r.currMonth.deliveryPct)}
+                </td>
+                <td className="border-l px-2 py-1.5 text-right font-erp-numeric">
+                  {formatPp(r.deliveryShareDiffPp)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </AdminTableScroll>
+    </div>
+  )
+}
+
+function momStoreDriverLabel(driver: MomStoreDriver, tr: TrFn): string {
+  switch (driver) {
+    case "volume":
+      return tr("salesMomStoreDriverVolume", "건수 주도")
+    case "ticket":
+      return tr("salesMomStoreDriverTicket", "객단가 주도")
+    case "mixed":
+      return tr("salesMomStoreDriverMixed", "혼합")
+    case "new":
+      return tr("salesMomStoreDriverNew", "신규(전월 없음)")
+    case "closed":
+      return tr("salesMomStoreDriverClosed", "당월 없음")
+    case "flat":
+    default:
+      return tr("salesMomStoreDriverFlat", "변화 미미")
+  }
+}
+
+export function SalesMomStoreDecompPanel({
+  rows,
+  year,
+  month,
+  storeDisplayName,
+  tr,
+  formatAmount,
+}: {
+  rows: MomStoreCompareRow[]
+  year: number
+  month: number
+  storeDisplayName: (code: string) => string
+  tr: TrFn
+  formatAmount: (n: number) => string
+}) {
+  const prevMonth = month <= 1 ? 12 : month - 1
+  const prevYear = month <= 1 ? year - 1 : year
+  const formatDiff = (v: number): string => {
+    const sign = v > 0 ? "+" : ""
+    return `${sign}${formatAmount(v)}`
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        {tr(
+          "salesMomStoreDecompReportHint",
+          "매장별 매출 전월대비를 주문건수·건당매출 변화로 나눠, 건수 주도인지 객단가 주도인지 봅니다."
+        )}
+      </p>
+      <AdminTableScroll className="rounded-md border" hint={false}>
+        <table className="w-full min-w-[980px] text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50 text-muted-foreground">
+              <th className="px-2 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
+              <th className="px-2 py-2 text-right">
+                {tr("salesAmount", "매출액")} ({prevYear}/{String(prevMonth).padStart(2, "0")})
+              </th>
+              <th className="px-2 py-2 text-right">
+                {tr("salesAmount", "매출액")} ({year}/{String(month).padStart(2, "0")})
+              </th>
+              <th className="px-2 py-2 text-right">{tr("salesCompareMomDiff", "증감")}</th>
+              <th className="px-2 py-2 text-right">{tr("salesCompareMomPct", "전월대비(%)")}</th>
+              <th className="px-2 py-2 text-right">{tr("salesCompareOrderCountMomPct", "건수(%)")}</th>
+              <th className="px-2 py-2 text-right">{tr("salesCompareSalesPerOrderMomPct", "건당(%)")}</th>
+              <th className="px-2 py-2 text-right">{tr("salesCompareGuestMomPct", "객단가(%)")}</th>
+              <th className="px-2 py-2 text-left">{tr("salesMomStoreDriver", "원인")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.storeName} className="border-b border-border/60">
+                <td className="px-2 py-1.5 font-medium">{storeDisplayName(r.storeName)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatAmount(r.prevMonth.total)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatAmount(r.currMonth.total)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatDiff(r.changeAbs.total)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatPct(r.changePct.total)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatPct(r.changePct.orderCount)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatPct(r.changePct.salesPerOrder)}</td>
+                <td className="px-2 py-1.5 text-right font-erp-numeric">{formatPct(r.changePct.salesPerGuest)}</td>
+                <td className="px-2 py-1.5">{momStoreDriverLabel(r.driver, tr)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </AdminTableScroll>

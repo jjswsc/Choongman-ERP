@@ -95,8 +95,10 @@ import { todayStrBangkok, diffDaysInclusiveBangkok } from "@/lib/attendance-util
 import { addDaysYmd } from "@/lib/pos-business-day"
 import {
   buildMomDayCompareRows,
+  buildMomStoreChannelCompareRows,
   buildMomStoreCompareRows,
   buildYoyMonthCompareRows,
+  buildYoyStoreCompareRows,
   computeSalesForecast,
   monthRangeYmd,
   parseYearFromYmd,
@@ -107,15 +109,20 @@ import {
   yearRangeYmd,
   type ForecastHorizon,
   type MomDayCompareRow,
+  type MomStoreChannelCompareRow,
   type MomStoreCompareRow,
   type SalesForecastSummary,
   type YoyMonthCompareRow,
+  type YoyStoreCompareRow,
 } from "@/lib/pos-sales-forecast-compare"
 import {
   SalesForecastPanel,
   SalesMomComparePanel,
+  SalesMomStoreChannelComparePanel,
   SalesMomStoreComparePanel,
+  SalesMomStoreDecompPanel,
   SalesYoyComparePanel,
+  SalesYoyStoreComparePanel,
 } from "@/components/tabs/sales-forecast-report-panels"
 import {
   SALES_IA,
@@ -386,6 +393,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [yoyCompareRows, setYoyCompareRows] = React.useState<YoyMonthCompareRow[]>([])
   const [momCompareRows, setMomCompareRows] = React.useState<MomDayCompareRow[]>([])
   const [momStoreCompareRows, setMomStoreCompareRows] = React.useState<MomStoreCompareRow[]>([])
+  const [yoyStoreCompareRows, setYoyStoreCompareRows] = React.useState<YoyStoreCompareRow[]>([])
+  const [momStoreChannelCompareRows, setMomStoreChannelCompareRows] = React.useState<
+    MomStoreChannelCompareRow[]
+  >([])
   const [forecastSummary, setForecastSummary] = React.useState<SalesForecastSummary | null>(null)
   const [forecastHorizon, setForecastHorizon] = React.useState<ForecastHorizon>("month")
   const [forecastLookbackRows, setForecastLookbackRows] = React.useState<PosSalesPeriodRow[]>([])
@@ -1074,6 +1085,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       yoyCompareRows,
       momCompareRows,
       momStoreCompareRows,
+      yoyStoreCompareRows,
+      momStoreChannelCompareRows,
       forecastSummary,
       forecastLookbackRows,
       forecastActualRows,
@@ -1113,6 +1126,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     yoyCompareRows,
     momCompareRows,
     momStoreCompareRows,
+    yoyStoreCompareRows,
+    momStoreChannelCompareRows,
     forecastSummary,
     forecastLookbackRows,
     forecastActualRows,
@@ -1159,6 +1174,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "yoy-compare" ||
       selectedView === "mom-compare" ||
       selectedView === "mom-store-compare" ||
+      selectedView === "yoy-store-compare" ||
+      selectedView === "mom-store-channel" ||
+      selectedView === "mom-store-decomp" ||
       selectedView === "forecast" ||
       (isLongRangeSalesQuery && (selectedView === "period" || selectedView === "store-period")))
 
@@ -1318,6 +1336,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setYoyCompareRows([])
     setMomCompareRows([])
     setMomStoreCompareRows([])
+    setYoyStoreCompareRows([])
+    setMomStoreChannelCompareRows([])
     setForecastSummary(null)
     setForecastLookbackRows([])
     setForecastActualRows([])
@@ -1405,6 +1425,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     setYoyCompareRows(snap.yoyCompareRows)
     setMomCompareRows(snap.momCompareRows)
     setMomStoreCompareRows(snap.momStoreCompareRows ?? [])
+    setYoyStoreCompareRows(snap.yoyStoreCompareRows ?? [])
+    setMomStoreChannelCompareRows(snap.momStoreChannelCompareRows ?? [])
     setForecastSummary(snap.forecastSummary)
     setForecastLookbackRows(snap.forecastLookbackRows)
     setForecastActualRows(snap.forecastActualRows)
@@ -1514,7 +1536,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       case "mom-compare":
         return momCompareRows.length > 0
       case "mom-store-compare":
+      case "mom-store-decomp":
         return momStoreCompareRows.length > 0
+      case "yoy-store-compare":
+        return yoyStoreCompareRows.length > 0
+      case "mom-store-channel":
+        return momStoreChannelCompareRows.length > 0
       case "forecast":
         return forecastSummary != null
       default:
@@ -1544,6 +1571,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     yoyCompareRows.length,
     momCompareRows.length,
     momStoreCompareRows.length,
+    yoyStoreCompareRows.length,
+    momStoreChannelCompareRows.length,
     forecastSummary,
   ])
 
@@ -1574,6 +1603,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       endStr,
       momCompareRows,
       momStoreCompareRows,
+      yoyStoreCompareRows,
+      momStoreChannelCompareRows,
       forecastSummary,
     })
 
@@ -1605,6 +1636,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     yoyCompareRows,
     momCompareRows,
     momStoreCompareRows,
+    yoyStoreCompareRows,
+    momStoreChannelCompareRows,
     forecastSummary,
     posStoreDisplayName,
     selectedTopic?.id,
@@ -2035,7 +2068,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       selectedView === "overview"
     const needYoyCompare = selectedView === "yoy-compare"
     const needMomCompare = selectedView === "mom-compare"
-    const needMomStoreCompare = selectedView === "mom-store-compare"
+    const needMomStoreCompare =
+      selectedView === "mom-store-compare" || selectedView === "mom-store-decomp"
+    const needYoyStoreCompare = selectedView === "yoy-store-compare"
+    const needMomStoreChannel = selectedView === "mom-store-channel"
     const needForecast = selectedView === "forecast"
     const needPeriodChart =
       selectedView != null &&
@@ -2054,6 +2090,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       needYoyCompare ||
       needMomCompare ||
       needMomStoreCompare ||
+      needYoyStoreCompare ||
+      needMomStoreChannel ||
       needForecast
     const needCurrentSummaryOnly =
       !needFullSummary &&
@@ -2079,6 +2117,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const gYoy = guarded(setYoyCompareRows)
     const gMom = guarded(setMomCompareRows)
     const gMomStore = guarded(setMomStoreCompareRows)
+    const gYoyStore = guarded(setYoyStoreCompareRows)
+    const gMomStoreChannel = guarded(setMomStoreChannelCompareRows)
     const gForecast = guarded(setForecastSummary)
     const gForecastLookback = guarded(setForecastLookbackRows)
     const gForecastActual = guarded(setForecastActualRows)
@@ -2284,6 +2324,95 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
           .catch((err) => {
             noteQueryFailure(err)
             gMomStore([])
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
+      )
+    }
+
+    if (needYoyStoreCompare) {
+      const { year, month } = parseYearMonthFromYmd(endStr)
+      const currRange = monthRangeYmd(year, month)
+      const prevRange = monthRangeYmd(year - 1, month)
+      const storeFetcher = offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore
+      tasks.push(
+        Promise.all([
+          storeFetcher({
+            startStr: currRange.startStr,
+            endStr: currRange.endStr,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          storeFetcher({
+            startStr: prevRange.startStr,
+            endStr: prevRange.endStr,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([currRows, prevRows]) => {
+            if (loadIdRef.current !== id) return
+            const currScoped = filterStoreRowsBySalesSelection(currRows, salesFetchStoresParam)
+            const prevScoped = filterStoreRowsBySalesSelection(prevRows, salesFetchStoresParam)
+            const rows = buildYoyStoreCompareRows({
+              prevYearRows: prevScoped,
+              currYearRows: currScoped,
+            })
+            gYoyStore(rows)
+            gSummary({
+              current: rows.reduce((a, r) => a + r.currYear.total, 0),
+              prevRange: rows.reduce((a, r) => a + r.prevYear.total, 0),
+              prevWeek: 0,
+            })
+          })
+          .catch((err) => {
+            noteQueryFailure(err)
+            gYoyStore([])
+            gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
+          })
+      )
+    }
+
+    if (needMomStoreChannel) {
+      const { year, month } = parseYearMonthFromYmd(endStr)
+      const currRange = monthRangeYmd(year, month)
+      const prev = prevCalendarMonth(year, month)
+      const prevRange = monthRangeYmd(prev.year, prev.month)
+      const channelFetcher = offlineAware
+        ? getPosSalesByStoreChannelWithCache
+        : getPosSalesByStoreChannel
+      tasks.push(
+        Promise.all([
+          channelFetcher({
+            startStr: currRange.startStr,
+            endStr: currRange.endStr,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+          channelFetcher({
+            startStr: prevRange.startStr,
+            endStr: prevRange.endStr,
+            stores: salesFetchStoresParam,
+            orderTypes: orderTypesParam,
+          }),
+        ])
+          .then(([currRows, prevRows]) => {
+            if (loadIdRef.current !== id) return
+            const currScoped = filterStoreRowsBySalesSelection(currRows, salesFetchStoresParam)
+            const prevScoped = filterStoreRowsBySalesSelection(prevRows, salesFetchStoresParam)
+            const rows = buildMomStoreChannelCompareRows({
+              prevMonthRows: prevScoped,
+              currMonthRows: currScoped,
+            })
+            gMomStoreChannel(rows)
+            gSummary({
+              current: rows.reduce((a, r) => a + r.currMonth.total, 0),
+              prevRange: rows.reduce((a, r) => a + r.prevMonth.total, 0),
+              prevWeek: 0,
+            })
+          })
+          .catch((err) => {
+            noteQueryFailure(err)
+            gMomStoreChannel([])
             gSummary({ current: 0, prevRange: 0, prevWeek: 0 })
           })
       )
@@ -3373,6 +3502,56 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
               ) : (
                 <SalesMomStoreComparePanel
+                  rows={momStoreCompareRows}
+                  year={parseYearMonthFromYmd(endStr).year}
+                  month={parseYearMonthFromYmd(endStr).month}
+                  storeDisplayName={posStoreDisplayName}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                />
+              )
+            )}
+
+            {selectedView === "yoy-store-compare" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : yoyStoreCompareRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+              ) : (
+                <SalesYoyStoreComparePanel
+                  rows={yoyStoreCompareRows}
+                  year={parseYearMonthFromYmd(endStr).year}
+                  month={parseYearMonthFromYmd(endStr).month}
+                  storeDisplayName={posStoreDisplayName}
+                  tr={tr}
+                  formatAmount={formatSalesAmount}
+                />
+              )
+            )}
+
+            {selectedView === "mom-store-channel" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : momStoreChannelCompareRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+              ) : (
+                <SalesMomStoreChannelComparePanel
+                  rows={momStoreChannelCompareRows}
+                  year={parseYearMonthFromYmd(endStr).year}
+                  month={parseYearMonthFromYmd(endStr).month}
+                  storeDisplayName={posStoreDisplayName}
+                  tr={tr}
+                />
+              )
+            )}
+
+            {selectedView === "mom-store-decomp" && (
+              salesAnalyticsPlaceholder ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{salesAnalyticsPlaceholder}</p>
+              ) : momStoreCompareRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">{tr("salesDataNone", "데이터 없음")}</p>
+              ) : (
+                <SalesMomStoreDecompPanel
                   rows={momStoreCompareRows}
                   year={parseYearMonthFromYmd(endStr).year}
                   month={parseYearMonthFromYmd(endStr).month}

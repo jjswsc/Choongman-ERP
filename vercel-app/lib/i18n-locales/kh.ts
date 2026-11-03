@@ -1146,7 +1146,7 @@ export const I18N_BASE_KH = {
   salesManagementSubmenuQuickSales: 'រូបភាពរលក់',
   salesManagementSubmenuAggregateInfo: 'ព័ត៌មានសង្ខេប',
   salesManagementTabDiscount: 'ស្ថានភាពបញ្ចុះ',
-  salesManagementTabForecast: 'ទស្សន៍ទាយរលក់',
+  salesManagementTabForecast: 'ប្រៀបធៀប·ទស្សន៍ទាយ',
   salesExplorerLabel: 'រុករករលក់',
   salesPivotLabel: 'ទិន្នន័យសង្ខេប',
   salesCompareLabel: 'ប្រៀបធៀប·ទស្សន៍ទាយ',

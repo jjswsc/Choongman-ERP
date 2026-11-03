@@ -1129,7 +1129,7 @@ export const I18N_BASE_MS = {
   salesManagementSubmenuQuickSales: 'Gambaran jualan',
   salesManagementSubmenuAggregateInfo: 'Maklumat agregat',
   salesManagementTabDiscount: 'Status diskaun',
-  salesManagementTabForecast: 'Ramalan jualan',
+  salesManagementTabForecast: 'Banding·Ramalan',
   salesExplorerLabel: 'Terokai jualan',
   salesPivotLabel: 'Data rumusan',
   salesCompareLabel: 'Banding·Ramalan',
