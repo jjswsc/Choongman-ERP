@@ -94,6 +94,11 @@ function pick<T extends string>(v: unknown, allowed: readonly T[], fallback: T):
   return allowed.includes(s) ? s : fallback
 }
 
+function isMissingEmployeeIdColumn(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /employee_id/i.test(msg) && /(column|schema cache|Could not find|does not exist|42703)/i.test(msg)
+}
+
 async function withEmployeeFallback<T>(
   header: Record<string, unknown>,
   run: (h: Record<string, unknown>) => Promise<T>
@@ -101,11 +106,52 @@ async function withEmployeeFallback<T>(
   try {
     return await withTravelFallback(header, run)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (!/employee_id/.test(msg)) throw e
+    if (!isMissingEmployeeIdColumn(e) && !/employee_id/i.test(e instanceof Error ? e.message : String(e))) {
+      throw e
+    }
     const rest = { ...header }
     delete rest.employee_id
     return withTravelFallback(rest, run)
+  }
+}
+
+/** employee_id 컬럼 미배포(daily_plans_06 전)여도 권한 검사용 조회가 되도록 */
+async function loadTemplateAccessRow(id: number): Promise<{
+  id?: number
+  role_scope?: string
+  store_name?: string
+  employee_id?: number | null
+} | null> {
+  try {
+    const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
+      select: 'id,role_scope,store_name,employee_id',
+      limit: 1,
+    })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
+    return cur?.[0] ?? null
+  } catch (e) {
+    if (!/employee_id/i.test(e instanceof Error ? e.message : String(e))) throw e
+    const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
+      select: 'id,role_scope,store_name',
+      limit: 1,
+    })) as { id?: number; role_scope?: string; store_name?: string }[]
+    return cur?.[0] ? { ...cur[0], employee_id: null } : null
+  }
+}
+
+async function insertTemplateItems(templateId: number, items: Record<string, unknown>[]) {
+  if (items.length === 0) return
+  const rows = items.map((it) => ({ ...it, template_id: templateId }))
+  try {
+    await supabaseInsertMany('routine_template_items', rows)
+  } catch (e) {
+    if (!/employee_id/i.test(e instanceof Error ? e.message : String(e))) throw e
+    await supabaseInsertMany(
+      'routine_template_items',
+      rows.map((it) => {
+        const { employee_id: _drop, ...rest } = it
+        return rest
+      })
+    )
   }
 }
 
@@ -133,11 +179,7 @@ export async function POST(request: NextRequest) {
 
     if (body.deleteTemplate) {
       if (!id) return NextResponse.json({ success: false, message: 'id required' }, { status: 400 })
-      const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
-        select: 'id,role_scope,store_name,employee_id',
-        limit: 1,
-      })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
-      const row = cur?.[0]
+      const row = await loadTemplateAccessRow(id)
       if (!row) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
       if (
         !canEditRoutineTemplate(scope, {
@@ -187,11 +229,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (id) {
-      const curCheck = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
-        select: 'id,role_scope,store_name,employee_id',
-        limit: 1,
-      })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
-      const existing = curCheck?.[0]
+      const existing = await loadTemplateAccessRow(id)
       if (!existing) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
       if (
         !canEditRoutineTemplate(scope, {
@@ -261,27 +299,15 @@ export async function POST(request: NextRequest) {
       if (!templateId) return NextResponse.json({ success: false, message: '저장 실패' }, { status: 500 })
     }
 
-    if (items.length > 0) {
-      try {
-        await supabaseInsertMany(
-          'routine_template_items',
-          items.map((it) => ({ ...it, template_id: templateId }))
-        )
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (!/employee_id/.test(msg)) throw e
-        await supabaseInsertMany(
-          'routine_template_items',
-          items.map((it) => {
-            const { employee_id: _drop, ...rest } = it
-            return { ...rest, template_id: templateId }
-          })
-        )
-      }
-    }
+    await insertTemplateItems(templateId, items)
     return NextResponse.json({ success: true, id: templateId })
   } catch (e) {
     console.error('saveRoutineTemplate:', e)
-    return NextResponse.json({ success: false, message: '저장 실패' }, { status: 500 })
+    const detail = e instanceof Error ? e.message : String(e)
+    // 클라이언트에는 짧은 안내 + 원인 힌트(컬럼 미배포 등)
+    const hint = /employee_id/i.test(detail)
+      ? ' (DB: daily_plans_06·07 SQL 실행 필요할 수 있음)'
+      : ''
+    return NextResponse.json({ success: false, message: `저장 실패${hint}` }, { status: 500 })
   }
 }
