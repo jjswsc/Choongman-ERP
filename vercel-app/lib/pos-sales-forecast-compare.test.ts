@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import type { PeriodAggRow } from '@/lib/pos-sales-period-aggregate'
 import {
   buildMomDayCompareRows,
+  buildMomStoreChannelCompareRows,
   buildMomStoreCompareRows,
   buildYoyMonthCompareRows,
+  buildYoyStoreCompareRows,
   computeDowAverageMap,
   computeSalesForecast,
   pctChange,
   resolveForecastFetchPlan,
+  resolveMomStoreDriver,
   sumPeriodRowTotals,
 } from '@/lib/pos-sales-forecast-compare'
 
@@ -83,10 +86,67 @@ describe('buildMomStoreCompareRows', () => {
     expect(rows[0]?.prevMonth.total).toBe(1000)
     expect(rows[0]?.changePct.total).toBe(20)
     expect(rows[0]?.changeAbs.total).toBe(200)
+    expect(rows[0]?.changePct.orderCount).toBe(20)
+    expect(rows[0]?.driver).toBe('volume')
     expect(rows[1]?.prevMonth.total).toBe(0)
     expect(rows[1]?.changePct.total).toBeNull()
+    expect(rows[1]?.driver).toBe('new')
     expect(rows[2]?.currMonth.total).toBe(0)
     expect(rows[2]?.changePct.total).toBe(-100)
+    expect(rows[2]?.driver).toBe('closed')
+  })
+})
+
+describe('buildYoyStoreCompareRows', () => {
+  it('joins stores across years for same calendar month', () => {
+    const rows = buildYoyStoreCompareRows({
+      prevYearRows: [{ storeName: 'Silom', count: 10, total: 1000, dineInGuestSum: 80 }],
+      currYearRows: [{ storeName: 'Silom', count: 11, total: 1100, dineInGuestSum: 88 }],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.changePct.total).toBe(10)
+    expect(rows[0]?.changeAbs.total).toBe(100)
+  })
+})
+
+describe('buildMomStoreChannelCompareRows', () => {
+  it('computes channel share and delivery pp change', () => {
+    const rows = buildMomStoreChannelCompareRows({
+      prevMonthRows: [{ storeName: 'A', dineIn: 70, takeout: 10, delivery: 20 }],
+      currMonthRows: [{ storeName: 'A', dineIn: 50, takeout: 10, delivery: 40 }],
+    })
+    expect(rows[0]?.prevMonth.deliveryPct).toBe(20)
+    expect(rows[0]?.currMonth.deliveryPct).toBe(40)
+    expect(rows[0]?.deliveryShareDiffPp).toBe(20)
+  })
+})
+
+describe('resolveMomStoreDriver', () => {
+  it('classifies volume vs ticket vs mixed', () => {
+    expect(
+      resolveMomStoreDriver({
+        prevTotal: 100,
+        currTotal: 120,
+        orderCountPct: 20,
+        salesPerOrderPct: 0,
+      })
+    ).toBe('volume')
+    expect(
+      resolveMomStoreDriver({
+        prevTotal: 100,
+        currTotal: 120,
+        orderCountPct: 0,
+        salesPerOrderPct: 20,
+      })
+    ).toBe('ticket')
+    expect(
+      resolveMomStoreDriver({
+        prevTotal: 100,
+        currTotal: 120,
+        orderCountPct: 10,
+        salesPerOrderPct: 10,
+      })
+    ).toBe('mixed')
   })
 })
 

@@ -4915,7 +4915,7 @@ export const I18N_BASE_KO = {
   incomeStatementTitle: '손익계산서',
   salesManagementTitle: '매출 관리',
   salesManagementPageSub:
-    '기간·매장·채널·메뉴·할인·예측 리포트 — 조건 저장·엑셀·URL 공유를 지원합니다.',
+    '기간·매장·채널·메뉴·할인·비교·예측 리포트 — 조건 저장·엑셀·URL 공유를 지원합니다.',
   salesMainTabReports: '매출 리포트',
   salesMainTabBusinessHours: '영업시간 설정',
   salesManagementSubmenuQuickSales: '영업속보',
@@ -4929,7 +4929,7 @@ export const I18N_BASE_KO = {
   salesManagementTabPeriodCompare: '기간비교',
   salesManagementTabSalesGrouped: '매출집계(유형별)',
   salesManagementTabPivotAnalysis: '집계/분석',
-  salesManagementTabForecast: '예상 매출',
+  salesManagementTabForecast: '비교·예측',
   salesManagementSubmenuAppReconcile: '채널 확인',
   salesManagementSubmenuChannelReconcile: '채널 확인',
   salesTopicAppReconcile: '채널 확인',
@@ -5150,7 +5150,7 @@ export const I18N_BASE_KO = {
     '매장을 전체로 두면 이 기간에 주문이 있는 매장만 행으로 나옵니다. 위쪽「집계 기간」으로 년·월·주·일·요일·시간대를 바꿀 수 있습니다. 연·월·주·일·요일은 매장 POS 영업일 기준이며, 시간대만 방콕 벽시계 시각입니다.',
   salesTopicPivotStoreCategory: '매출 집계(매장&분류)',
   salesTopicPivotStoreCategoryHint:
-    '선택 기간을 한 덩어리로 본 매장별 홀·배달·포장 표와 배달앱 표입니다. 월별로 나눠 보려면 「매장·기간 목록」에서 월별을 고르세요. 올해·작년 월 비교는 「예상 매출 → 전년대비표」입니다.',
+    '선택 기간을 한 덩어리로 본 매장별 홀·배달·포장 표와 배달앱 표입니다. 월별로 나눠 보려면 「매장·기간 목록」에서 월별을 고르세요. 올해·작년 월 비교는 「비교·예측 → 전년대비표」입니다.',
   salesStoreCategoryDeliveryTimeout:
     '배달앱 표만 가져오지 못했습니다. 홀·배달·포장 표는 아래에 있습니다. 앱별 표는 기간을 한 달 이내로 줄이면 볼 수 있습니다.',
   salesByStoreChannelMatrix: '매장별 홀·배달·포장',
@@ -5189,12 +5189,29 @@ export const I18N_BASE_KO = {
   salesTopicCompareMonthMomHint: '월별 일간 비교',
   salesTopicCompareStoreMom: '매장별 전월대비',
   salesTopicCompareStoreMomHint: '매장마다 당월·전월 매출 비교',
+  salesTopicCompareStoreYoy: '매장별 전년대비',
+  salesTopicCompareStoreYoyHint: '매장마다 당해·전년 동월 매출 비교',
+  salesTopicCompareStoreChannelMom: '매장별 채널 전월대비',
+  salesTopicCompareStoreChannelMomHint: '홀·포장·배달 비중 전월 비교',
+  salesTopicCompareStoreMomDecomp: '매장별 원인 분해',
+  salesTopicCompareStoreMomDecompHint: '건수 vs 객단가로 매출 증감 원인 분리',
   salesTopicForecastMonthly: '예상 매출',
   salesTopicForecastMonthlyHint: '요일 평균 기반 예상 매출',
   salesCompareBusinessDays: '영업일수',
   salesCompareYoyPct: '전년대비(%)',
   salesCompareMomPct: '전월대비(%)',
   salesCompareMomDiff: '증감',
+  salesCompareDeliveryShareDiff: '배달비중 증감',
+  salesCompareOrderCountMomPct: '건수(%)',
+  salesCompareSalesPerOrderMomPct: '건당(%)',
+  salesCompareGuestMomPct: '객단가(%)',
+  salesMomStoreDriver: '원인',
+  salesMomStoreDriverVolume: '건수 주도',
+  salesMomStoreDriverTicket: '객단가 주도',
+  salesMomStoreDriverMixed: '혼합',
+  salesMomStoreDriverFlat: '변화 미미',
+  salesMomStoreDriverNew: '신규(전월 없음)',
+  salesMomStoreDriverClosed: '당월 없음',
   salesCompareMonthColumn: '월',
   salesCompareDayColumn: '일자',
   salesCompareExcelPrevMonth: '전월',
@@ -5202,6 +5219,11 @@ export const I18N_BASE_KO = {
   salesYoyReportHint: '매출일자(종료일)의 연도 기준으로 전년 동월과 비교합니다.',
   salesMomReportHint: '매출일자(종료일)의 월 기준으로 전월 같은 일자와 비교합니다.',
   salesMomStoreReportHint: '매출일자(종료일)의 월 기준으로 매장별 당월·전월 합계를 비교합니다.',
+  salesYoyStoreReportHint: '매출일자(종료일)의 월 기준으로 매장별 당해·전년 동월 합계를 비교합니다.',
+  salesMomStoreChannelReportHint:
+    '매출일자(종료일)의 월 기준으로 매장별 홀·포장·배달 매출 비중을 전월과 비교합니다.',
+  salesMomStoreDecompReportHint:
+    '매장별 매출 전월대비를 주문건수·건당매출 변화로 나눠, 건수 주도인지 객단가 주도인지 봅니다.',
   salesForecastReportHint:
     '최근 일별 매출로 요일별 평균을 구하고, 기준일 이후 남은 기간에 적용해 예상 매출을 산출합니다.',
   salesForecastHorizonWeek: '주간',
@@ -7969,9 +7991,9 @@ export const I18N_BASE_KO = {
   helpHow_admin_total_sales:
     '① 매장(본사)·기간(오늘/이번 달/지정)을 정한 뒤 「주문 유형」(전체·홀·포장·배달)으로 범위를 맞추고, 필요하면 메뉴 검색어를 입력한 뒤 「조회」합니다.\n② 「채널별 비교」를 켜면 같은 품목을 홀·포장·배달 열로 나란히 비교합니다(주문 유형 선택 시 해당 채널만).\n③ 상단 탭으로 대분류·카테고리·메인 메뉴·옵션 집계를 바꿉니다.\n④ 검색 시 상단 카드에 오늘·이번 달 메인 메뉴 합계가 함께 표시됩니다(방콕 영업일).\n⑤ 주문이 많으면 일부만 반영될 수 있으니 기간을 나누어 조회하세요.',
   helpSum_admin_sales_management:
-    '기간·매장·채널·메뉴·할인·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 「채널 확인」에서 배달앱·QR·카드는 방콕 달력일로 맞추고, QR은 통장 입금일·배달/카드는 인식일(익일 입금)로 틀린 날을 찾습니다.',
+    '기간·매장·채널·메뉴·할인·비교·예측까지 POS 완료 주문 기준 매출을 분석하는 리포트 허브입니다. 조건 저장·엑셀·오프라인 캐시를 지원합니다. 「채널 확인」에서 배달앱·QR·카드는 방콕 달력일로 맞추고, QR은 통장 입금일·배달/카드는 인식일(익일 입금)로 틀린 날을 찾습니다.',
   helpHow_admin_sales_management:
-    '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·예측·채널 확인)와 주제 버튼으로 리포트를 고른 뒤, 바꿀 때마다 다시 「조회」합니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「집계 정보 → 매출 집계(매장&분류)」는 선택 기간 합계입니다. 매장별 홀·배달·포장과 배달앱을 비교합니다(미결제 테이블 제외). 월별로 나누려면 「매장·기간 목록」에서 월별을 고르세요. 올해·작년 같은 달 비교는 「예상 매출 → 전년대비표」, 이번 달·지난달 날짜 비교는 「전월대비표」, 매장마다 당월·전월 합계는 「매장별 전월대비」입니다.\n④ 「일자/시간 추이」·「매장·기간 목록」에서는 연·월·주·일·시간대·요일 단위를 고릅니다. 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n⑤ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑥ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑦ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑧ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑨ 채널 확인 → 배달앱: 행을 펼쳐 방콕 달력일과 통장 인식일(익일 입금)의 POS 예상입금 vs 매장 통장 4111/4112/4113을 비교하고, 「틀린 날짜만」으로 차이를 찾습니다.\n⑩ 채널 확인 → KBank QR: 당일 마감은 POS QR, 통장은 매장 통장 4130을 입금일(달력)로 맞춰 틀린 날을 찾습니다. 자정 이후는 영업일 마감과 날짜가 다를 수 있습니다.\n⑪ 채널 확인 → 카드: POS 카드와 매장 통장 4120~4124를 방콕 달력일 vs 통장 인식일로 비교합니다(정산은 보통 익일).\n⑫ 채널 확인 → 현금: POS 현금은 오픈(판매) 영업일 기준입니다(다음날 결제도 연 날에 포함). 시재·출금과 맞추고, 매장 통장 4140을 오픈(판매) 영업일·인식일로 비교합니다. 현금 건수·금액을 클릭하면 주문 목록을 볼 수 있습니다.\n⑬ 기간이 31일을 넘어도 연·월·주·일·시간대·요일 집계는 선택할 수 있습니다. 직전·전주 비교와 메뉴·채널 확인은 생략하니, 그 리포트는 한 달 이내로 나눠 조회하세요.\n⑭ 「결제/카드」는 완료 주문 기준 현금·신용카드·QR PromptPay·WeChat·Alipay·TrueMoney 등 결제수단별 매출을 보여 줍니다.',
+    '① 기간·매장(본사는 복수 선택 가능)·주문 유형(홀/포장/배달)을 정한 뒤 「조회」합니다.\n② 상단 서브메뉴(영업속보·집계 정보·할인·비교·예측·채널 확인)와 주제 버튼으로 리포트를 고른 뒤, 바꿀 때마다 다시 「조회」합니다. 주제 아래 힌트로 용도를 확인하세요.\n③ 「집계 정보 → 매출 집계(매장&분류)」는 선택 기간 합계입니다. 매장별 홀·배달·포장과 배달앱을 비교합니다(미결제 테이블 제외). 월별로 나누려면 「매장·기간 목록」에서 월별을 고르세요. 올해·작년 같은 달 비교는 「비교·예측 → 전년대비표」, 이번 달·지난달 날짜 비교는 「전월대비표」, 매장마다 당월·전월 합계는 「매장별 전월대비」, 전년 동월은 「매장별 전년대비」, 홀·포장·배달 비중은 「매장별 채널 전월대비」, 건수·객단가 분리는 「매장별 원인 분해」입니다.\n④ 「일자/시간 추이」·「매장·기간 목록」에서는 연·월·주·일·시간대·요일 단위를 고릅니다. 「요일」로 특정 요일만 골라 비교할 수 있습니다(영업일 기준).\n⑤ URL·「조건 저장」으로 자주 쓰는 필터를 재사용합니다.\n⑥ 「종합 매출 리포트」는 KPI·채널·매장·결제·일별 추이 요약 — 상세는 Total Sales·각 분석 주제로 이동합니다.\n⑦ 「영업시간 설정」탭에서 POS 영업일 경계를 조정합니다(본사·매장 권한에 따름).\n⑧ 결제 합계 경고가 뜨면 POS 영수증 관리에서 미기록 결제를 정정하세요.\n⑨ 채널 확인 → 배달앱: 행을 펼쳐 방콕 달력일과 통장 인식일(익일 입금)의 POS 예상입금 vs 매장 통장 4111/4112/4113을 비교하고, 「틀린 날짜만」으로 차이를 찾습니다.\n⑩ 채널 확인 → KBank QR: 당일 마감은 POS QR, 통장은 매장 통장 4130을 입금일(달력)로 맞춰 틀린 날을 찾습니다. 자정 이후는 영업일 마감과 날짜가 다를 수 있습니다.\n⑪ 채널 확인 → 카드: POS 카드와 매장 통장 4120~4124를 방콕 달력일 vs 통장 인식일로 비교합니다(정산은 보통 익일).\n⑫ 채널 확인 → 현금: POS 현금은 오픈(판매) 영업일 기준입니다(다음날 결제도 연 날에 포함). 시재·출금과 맞추고, 매장 통장 4140을 오픈(판매) 영업일·인식일로 비교합니다. 현금 건수·금액을 클릭하면 주문 목록을 볼 수 있습니다.\n⑬ 기간이 31일을 넘어도 연·월·주·일·시간대·요일 집계는 선택할 수 있습니다. 직전·전주 비교와 메뉴·채널 확인은 생략하니, 그 리포트는 한 달 이내로 나눠 조회하세요.\n⑭ 「결제/카드」는 완료 주문 기준 현금·신용카드·QR PromptPay·WeChat·Alipay·TrueMoney 등 결제수단별 매출을 보여 줍니다.',
   salesSubnavAria: '매출 관리 메뉴',
   salesTopicHintLabel: '이 리포트',
   salesOverviewIntro:

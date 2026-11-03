@@ -1108,7 +1108,7 @@ export const I18N_BASE_VI = {
   salesManagementSubmenuQuickSales: 'Tổng quan doanh thu',
   salesManagementSubmenuAggregateInfo: 'Thông tin tổng hợp',
   salesManagementTabDiscount: 'Tình trạng giảm giá',
-  salesManagementTabForecast: 'Dự báo doanh thu',
+  salesManagementTabForecast: 'So sánh·Dự báo',
   salesExplorerLabel: 'Khám phá doanh thu',
   salesPivotLabel: 'Dữ liệu tổng hợp',
   salesCompareLabel: 'So sánh·Dự báo',

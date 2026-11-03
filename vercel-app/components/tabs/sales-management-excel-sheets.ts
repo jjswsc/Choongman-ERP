@@ -19,9 +19,11 @@ import type { StoreChannelCompareRow } from "@/components/tabs/sales-management-
 import {
   parseYearFromYmd,
   type MomDayCompareRow,
+  type MomStoreChannelCompareRow,
   type MomStoreCompareRow,
   type SalesForecastSummary,
   type YoyMonthCompareRow,
+  type YoyStoreCompareRow,
 } from "@/lib/pos-sales-forecast-compare"
 import type { AnalyticsView, PeriodGroupValue } from "@/components/tabs/sales-management-ia"
 import { PERIOD_PAYMENT_COLUMNS, periodPaymentAmount } from "@/components/tabs/sales-management-shared"
@@ -60,6 +62,8 @@ export interface SalesExcelSheetsInput {
   endStr: string
   momCompareRows: MomDayCompareRow[]
   momStoreCompareRows?: MomStoreCompareRow[]
+  yoyStoreCompareRows?: YoyStoreCompareRow[]
+  momStoreChannelCompareRows?: MomStoreChannelCompareRow[]
   forecastSummary: SalesForecastSummary | null
 }
 
@@ -89,6 +93,8 @@ export function buildSalesExcelSheets({
   endStr,
   momCompareRows,
   momStoreCompareRows = [],
+  yoyStoreCompareRows = [],
+  momStoreChannelCompareRows = [],
   forecastSummary,
 }: SalesExcelSheetsInput): SalesExcelSheet[] {
   const numCell = (n: number) => Math.round(Number(n || 0) * 100) / 100
@@ -835,6 +841,119 @@ export function buildSalesExcelSheets({
         salesExcelCol.money,
         salesExcelCol.money,
         salesExcelCol.money,
+      ],
+    })
+  } else if (selectedView === "yoy-store-compare" && yoyStoreCompareRows.length > 0) {
+    sheets.push({
+      name: tr("salesTopicCompareStoreYoy", "매장별 전년대비"),
+      headers: [
+        tr("salesStoreName", "매장명"),
+        `${tr("salesAmount", "매출액")} (${parseYearFromYmd(endStr) - 1})`,
+        `${tr("salesAmount", "매출액")} (${parseYearFromYmd(endStr)})`,
+        tr("salesCompareMomDiff", "증감"),
+        tr("salesCompareYoyPct", "전년대비(%)"),
+      ],
+      rows: yoyStoreCompareRows.map((r) => [
+        posStoreDisplayName(r.storeName),
+        numCell(r.prevYear.total),
+        numCell(r.currYear.total),
+        numCell(r.changeAbs.total),
+        r.changePct.total ?? "",
+      ]),
+      colFormats: [
+        salesExcelCol.text,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+      ],
+    })
+  } else if (selectedView === "mom-store-channel" && momStoreChannelCompareRows.length > 0) {
+    sheets.push({
+      name: tr("salesTopicCompareStoreChannelMom", "매장별 채널 전월대비"),
+      headers: [
+        tr("salesStoreName", "매장명"),
+        `${tr("salesAmountKindDineIn", "홀")}% (${tr("salesCompareExcelPrevMonth", "전월")})`,
+        `${tr("salesAmountKindTakeout", "포장")}% (${tr("salesCompareExcelPrevMonth", "전월")})`,
+        `${tr("salesAmountKindDelivery", "배달")}% (${tr("salesCompareExcelPrevMonth", "전월")})`,
+        `${tr("salesAmountKindDineIn", "홀")}% (${tr("salesCompareExcelCurrMonth", "당월")})`,
+        `${tr("salesAmountKindTakeout", "포장")}% (${tr("salesCompareExcelCurrMonth", "당월")})`,
+        `${tr("salesAmountKindDelivery", "배달")}% (${tr("salesCompareExcelCurrMonth", "당월")})`,
+        tr("salesCompareDeliveryShareDiff", "배달비중 증감"),
+      ],
+      rows: momStoreChannelCompareRows.map((r) => [
+        posStoreDisplayName(r.storeName),
+        r.prevMonth.dineInPct ?? "",
+        r.prevMonth.takeoutPct ?? "",
+        r.prevMonth.deliveryPct ?? "",
+        r.currMonth.dineInPct ?? "",
+        r.currMonth.takeoutPct ?? "",
+        r.currMonth.deliveryPct ?? "",
+        r.deliveryShareDiffPp ?? "",
+      ]),
+      colFormats: [
+        salesExcelCol.text,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+      ],
+    })
+  } else if (selectedView === "mom-store-decomp" && momStoreCompareRows.length > 0) {
+    const driverLabel = (d: MomStoreCompareRow["driver"]) => {
+      switch (d) {
+        case "volume":
+          return tr("salesMomStoreDriverVolume", "건수 주도")
+        case "ticket":
+          return tr("salesMomStoreDriverTicket", "객단가 주도")
+        case "mixed":
+          return tr("salesMomStoreDriverMixed", "혼합")
+        case "new":
+          return tr("salesMomStoreDriverNew", "신규(전월 없음)")
+        case "closed":
+          return tr("salesMomStoreDriverClosed", "당월 없음")
+        case "flat":
+        default:
+          return tr("salesMomStoreDriverFlat", "변화 미미")
+      }
+    }
+    sheets.push({
+      name: tr("salesTopicCompareStoreMomDecomp", "매장별 원인 분해"),
+      headers: [
+        tr("salesStoreName", "매장명"),
+        `${tr("salesAmount", "매출액")} (${tr("salesCompareExcelPrevMonth", "전월")})`,
+        `${tr("salesAmount", "매출액")} (${tr("salesCompareExcelCurrMonth", "당월")})`,
+        tr("salesCompareMomDiff", "증감"),
+        tr("salesCompareMomPct", "전월대비(%)"),
+        tr("salesCompareOrderCountMomPct", "건수(%)"),
+        tr("salesCompareSalesPerOrderMomPct", "건당(%)"),
+        tr("salesCompareGuestMomPct", "객단가(%)"),
+        tr("salesMomStoreDriver", "원인"),
+      ],
+      rows: momStoreCompareRows.map((r) => [
+        posStoreDisplayName(r.storeName),
+        numCell(r.prevMonth.total),
+        numCell(r.currMonth.total),
+        numCell(r.changeAbs.total),
+        r.changePct.total ?? "",
+        r.changePct.orderCount ?? "",
+        r.changePct.salesPerOrder ?? "",
+        r.changePct.salesPerGuest ?? "",
+        driverLabel(r.driver),
+      ]),
+      colFormats: [
+        salesExcelCol.text,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.money,
+        salesExcelCol.text,
       ],
     })
   } else if (selectedView === "forecast" && forecastSummary) {
