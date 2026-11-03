@@ -3,6 +3,7 @@ import {
   buildDailyPlanItems,
   buildDailyPlanWorkLogContent,
   computeActualMinutes,
+  diffPersonalAgainstSharedTemplate,
   isDailyPlanProgressDone,
   isoWeekdayOfYmd,
   managerDailyPlanPosition,
@@ -10,6 +11,7 @@ import {
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplate,
   pickRoutineTemplatesForPlan,
+  routineItemAppliesToEmployee,
   selectActionsForPlan,
   selectCarryItems,
   summarizePlanItems,
@@ -31,6 +33,7 @@ function item(p: Partial<RoutineTemplateItem>): RoutineTemplateItem {
     photoRequired: false,
     linkType: "none",
     perStore: false,
+    employeeId: 0,
     ...p,
   }
 }
@@ -42,6 +45,7 @@ function tpl(p: Partial<RoutineTemplate>): RoutineTemplate {
     roleScope: "supervisor",
     position: "all",
     storeName: "",
+    employeeId: 0,
     status: "pilot",
     version: 1,
     note: "",
@@ -126,6 +130,78 @@ describe("pickRoutineTemplate", () => {
       store: "CM Silom",
     })
     expect(picked.map((t) => t.id)).toEqual([5, 6])
+  })
+  it("prefers personal employee template over role/store templates", () => {
+    const withPersonal = [
+      ...list,
+      tpl({
+        id: 20,
+        roleScope: "staff",
+        position: "kitchen",
+        storeName: "Silom",
+        employeeId: 7,
+        status: "active",
+        items: [item({ title: "개인점검" })],
+      }),
+    ]
+    const picked = pickRoutineTemplatesForPlan(withPersonal, {
+      role: "staff",
+      position: "kitchen",
+      store: "Silom",
+      employeeId: 7,
+    })
+    expect(picked.map((t) => t.id)).toEqual([20])
+    expect(
+      pickRoutineTemplatesForPlan(withPersonal, {
+        role: "staff",
+        position: "kitchen",
+        store: "Silom",
+        employeeId: 99,
+      }).map((t) => t.id)
+    ).toEqual([3, 1])
+  })
+})
+
+describe("routineItemAppliesToEmployee / diffPersonalAgainstSharedTemplate", () => {
+  it("filters item-level employee ids", () => {
+    expect(routineItemAppliesToEmployee(item({ employeeId: 0 }), 7)).toBe(true)
+    expect(routineItemAppliesToEmployee(item({ employeeId: 7 }), 7)).toBe(true)
+    expect(routineItemAppliesToEmployee(item({ employeeId: 7 }), 9)).toBe(false)
+  })
+  it("excludes other-person items when building plan", () => {
+    const items = buildDailyPlanItems({
+      template: tpl({
+        roleScope: "staff",
+        items: [
+          item({ title: "공통", employeeId: 0 }),
+          item({ title: "개인만", employeeId: 7 }),
+          item({ title: "다른사람", employeeId: 99 }),
+        ],
+      }),
+      role: "staff",
+      dateYmd: "2026-10-08",
+      homeStore: "Silom",
+      routeStores: [],
+      employee: emp,
+      actions: [],
+      carry: [],
+      hqTasks: [],
+    })
+    expect(items.map((i) => i.title)).toEqual(["공통", "개인만"])
+  })
+  it("diffs personal vs shared by title", () => {
+    const personal = tpl({
+      employeeId: 7,
+      items: [item({ title: "A", estMinutes: 20 }), item({ title: "B", estMinutes: 10 })],
+    })
+    const shared = tpl({
+      employeeId: 0,
+      items: [item({ title: "A", estMinutes: 15 }), item({ title: "C", estMinutes: 5 })],
+    })
+    const diff = diffPersonalAgainstSharedTemplate(personal, shared)
+    expect(diff.find((d) => d.title === "A")?.kind).toBe("both_changed")
+    expect(diff.find((d) => d.title === "B")?.kind).toBe("personal_only")
+    expect(diff.find((d) => d.title === "C")?.kind).toBe("shared_only")
   })
 })
 

@@ -13,7 +13,7 @@ import {
   DAILY_PLAN_ROLES,
   ROUTINE_TEMPLATE_STATUSES,
 } from '@/lib/daily-plan-generate'
-import { resolveDailyPlanScope } from '@/lib/daily-plan-server'
+import { canEditRoutineTemplate, resolveDailyPlanScope } from '@/lib/daily-plan-server'
 
 type ItemIn = {
   timeSlot?: string
@@ -26,6 +26,7 @@ type ItemIn = {
   photoRequired?: boolean
   linkType?: string
   perStore?: boolean
+  employeeId?: number | string | null
 }
 
 type Body = {
@@ -35,6 +36,7 @@ type Body = {
   roleScope?: string
   position?: string
   storeName?: string
+  employeeId?: number | string | null
   status?: string
   note?: string
   travelMinutes?: number | string
@@ -92,7 +94,22 @@ function pick<T extends string>(v: unknown, allowed: readonly T[], fallback: T):
   return allowed.includes(s) ? s : fallback
 }
 
-/** 템플릿 저장 — 버전 +1, 항목은 전체 교체. 본사·슈퍼바이저만 */
+async function withEmployeeFallback<T>(
+  header: Record<string, unknown>,
+  run: (h: Record<string, unknown>) => Promise<T>
+): Promise<T> {
+  try {
+    return await withTravelFallback(header, run)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!/employee_id/.test(msg)) throw e
+    const rest = { ...header }
+    delete rest.employee_id
+    return withTravelFallback(rest, run)
+  }
+}
+
+/** 템플릿 저장 — 버전 +1, 항목은 전체 교체. 본사·SV 전체 / 매장 매니저는 자기 매장 manager·staff만 */
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
@@ -107,12 +124,30 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
 
     if (body.applyEstimate) {
+      if (!(scope.office || scope.supervisor)) {
+        return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+      }
       const r = await applyEstimate(body.applyEstimate, scope.actorName, now)
       return NextResponse.json({ success: true, ...r })
     }
 
     if (body.deleteTemplate) {
       if (!id) return NextResponse.json({ success: false, message: 'id required' }, { status: 400 })
+      const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
+        select: 'id,role_scope,store_name,employee_id',
+        limit: 1,
+      })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
+      const row = cur?.[0]
+      if (!row) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
+      if (
+        !canEditRoutineTemplate(scope, {
+          roleScope: String(row.role_scope || ''),
+          storeName: String(row.store_name || ''),
+          employeeId: Number(row.employee_id || 0) || null,
+        })
+      ) {
+        return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+      }
       await supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
         status: 'archived',
         updated_by: scope.actorName,
@@ -124,11 +159,57 @@ export async function POST(request: NextRequest) {
     const name = String(body.name || '').trim().slice(0, 120)
     if (!name) return NextResponse.json({ success: false, message: '이름을 입력해 주세요.' }, { status: 400 })
 
-    const header = {
+    const storeLeadOnly = scope.storeLead && !scope.office && !scope.supervisor
+    let roleScope = pick(body.roleScope, DAILY_PLAN_ROLES, storeLeadOnly ? 'staff' : 'supervisor')
+    let storeName = String(body.storeName || '').trim()
+    let employeeId = Math.floor(Number(body.employeeId || 0))
+    if (!Number.isFinite(employeeId) || employeeId < 0) employeeId = 0
+
+    if (storeLeadOnly) {
+      if (roleScope === 'supervisor') {
+        return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+      }
+      if (scope.stores.length === 0) {
+        return NextResponse.json({ success: false, message: '담당 매장이 없습니다.' }, { status: 403 })
+      }
+      const allowed = new Set(scope.stores.map((s) => s.trim().toLowerCase()))
+      if (!storeName || !allowed.has(storeName.toLowerCase())) {
+        storeName = scope.stores[0]
+      }
+      if (employeeId > 0 && scope.actorEmployeeId != null && employeeId === scope.actorEmployeeId) {
+        roleScope = 'manager'
+      }
+    }
+
+    const draftAccess = { roleScope, storeName, employeeId: employeeId || null }
+    if (!canEditRoutineTemplate(scope, draftAccess)) {
+      return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+    }
+
+    if (id) {
+      const curCheck = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
+        select: 'id,role_scope,store_name,employee_id',
+        limit: 1,
+      })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
+      const existing = curCheck?.[0]
+      if (!existing) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
+      if (
+        !canEditRoutineTemplate(scope, {
+          roleScope: String(existing.role_scope || ''),
+          storeName: String(existing.store_name || ''),
+          employeeId: Number(existing.employee_id || 0) || null,
+        })
+      ) {
+        return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+      }
+    }
+
+    const header: Record<string, unknown> = {
       name,
-      role_scope: pick(body.roleScope, DAILY_PLAN_ROLES, 'supervisor'),
+      role_scope: roleScope,
       position: pick(body.position, DAILY_PLAN_POSITIONS, 'all'),
-      store_name: String(body.storeName || '').trim(),
+      store_name: storeName,
+      employee_id: employeeId > 0 ? employeeId : null,
       status: pick(body.status, ROUTINE_TEMPLATE_STATUSES, 'draft'),
       note: String(body.note || '').trim().slice(0, 1000),
       travel_minutes: Math.max(0, Math.min(240, Math.round(Number(body.travelMinutes ?? 30) || 0))),
@@ -137,19 +218,23 @@ export async function POST(request: NextRequest) {
     }
 
     const items = (Array.isArray(body.items) ? body.items : [])
-      .map((it, idx) => ({
-        sort_order: (idx + 1) * 10,
-        time_slot: /^\d{2}:\d{2}$/.test(String(it.timeSlot || '').trim()) ? String(it.timeSlot).trim() : '',
-        block: String(it.block || '').trim().slice(0, 40),
-        category: String(it.category || '기타').trim().slice(0, 40),
-        title: String(it.title || '').trim().slice(0, 300),
-        description: String(it.description || '').trim().slice(0, 2000),
-        est_minutes: Math.max(0, Math.min(480, Math.round(Number(it.estMinutes) || 0))),
-        weekdays: String(it.weekdays ?? '1234567').replace(/[^1-7]/g, '') || '1234567',
-        photo_required: !!it.photoRequired,
-        link_type: pick(it.linkType, DAILY_PLAN_LINK_TYPES, 'none'),
-        per_store: !!it.perStore,
-      }))
+      .map((it, idx) => {
+        const itemEmp = Math.floor(Number(it.employeeId || 0))
+        return {
+          sort_order: (idx + 1) * 10,
+          time_slot: /^\d{2}:\d{2}$/.test(String(it.timeSlot || '').trim()) ? String(it.timeSlot).trim() : '',
+          block: String(it.block || '').trim().slice(0, 40),
+          category: String(it.category || '기타').trim().slice(0, 40),
+          title: String(it.title || '').trim().slice(0, 300),
+          description: String(it.description || '').trim().slice(0, 2000),
+          est_minutes: Math.max(0, Math.min(480, Math.round(Number(it.estMinutes) || 0))),
+          weekdays: String(it.weekdays ?? '1234567').replace(/[^1-7]/g, '') || '1234567',
+          photo_required: !!it.photoRequired,
+          link_type: pick(it.linkType, DAILY_PLAN_LINK_TYPES, 'none'),
+          per_store: !!it.perStore,
+          employee_id: Number.isFinite(itemEmp) && itemEmp > 0 ? itemEmp : null,
+        }
+      })
       .filter((it) => it.title)
       .slice(0, 80)
 
@@ -160,7 +245,7 @@ export async function POST(request: NextRequest) {
         limit: 1,
       })) as { id?: number; version?: number }[]
       if (!cur?.[0]) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
-      await withTravelFallback(header, (h) =>
+      await withEmployeeFallback(header, (h) =>
         supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
           ...h,
           version: Number(cur[0].version || 1) + 1,
@@ -168,7 +253,7 @@ export async function POST(request: NextRequest) {
       )
       await supabaseDeleteByFilter('routine_template_items', `template_id=eq.${id}`)
     } else {
-      const res = (await withTravelFallback(header, (h) =>
+      const res = (await withEmployeeFallback(header, (h) =>
         supabaseInsert('routine_templates', { ...h, version: 1, created_at: now })
       )) as Record<string, unknown>[] | Record<string, unknown>
       const row = Array.isArray(res) ? res[0] : res
@@ -177,10 +262,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (items.length > 0) {
-      await supabaseInsertMany(
-        'routine_template_items',
-        items.map((it) => ({ ...it, template_id: templateId }))
-      )
+      try {
+        await supabaseInsertMany(
+          'routine_template_items',
+          items.map((it) => ({ ...it, template_id: templateId }))
+        )
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!/employee_id/.test(msg)) throw e
+        await supabaseInsertMany(
+          'routine_template_items',
+          items.map((it) => {
+            const { employee_id: _drop, ...rest } = it
+            return { ...rest, template_id: templateId }
+          })
+        )
+      }
     }
     return NextResponse.json({ success: true, id: templateId })
   } catch (e) {

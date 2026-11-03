@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
   const scope = resolveDailyPlanScope(authResult.auth)
-  if (!scope.canEditTemplates) {
+  if (!scope.canCopyTemplates) {
     return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
   }
 

@@ -62,6 +62,19 @@ export type RoutineTemplateItem = {
   photoRequired: boolean
   linkType: string
   perStore: boolean
+  /** 0/없음 = 템플릿 적용 대상 전원. 있으면 해당 직원 일정에만 포함 */
+  employeeId: number
+}
+
+export type RoutineTemplateItemDiffKind = "personal_only" | "shared_only" | "both_same" | "both_changed"
+
+export type RoutineTemplateItemDiff = {
+  title: string
+  kind: RoutineTemplateItemDiffKind
+  personalEst?: number
+  sharedEst?: number
+  personalWeekdays?: string
+  sharedWeekdays?: string
 }
 
 export type RoutineTemplate = {
@@ -70,6 +83,8 @@ export type RoutineTemplate = {
   roleScope: string
   position: string
   storeName: string
+  /** 0/없음 = 직급·매장 공통. 있으면 해당 직원 전용(역할 템플릿보다 우선) */
+  employeeId: number
   status: string
   version: number
   note: string
@@ -178,17 +193,25 @@ export function managerDailyPlanPosition(job: string | null | undefined): string
   return "all"
 }
 
-/** 직급·포지션·매장에 가장 구체적으로 맞는 파일럿/운영 템플릿 */
+function templateEmployeeId(t: Pick<RoutineTemplate, "employeeId">): number {
+  const n = Number(t.employeeId || 0)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+/** 직급·포지션·매장·(선택)개인에 가장 구체적으로 맞는 파일럿/운영 템플릿 */
 export function pickRoutineTemplate(
   templates: RoutineTemplate[],
-  params: { role: DailyPlanRole; position: string; store: string }
+  params: { role: DailyPlanRole; position: string; store: string; employeeId?: number }
 ): RoutineTemplate | null {
   const pos = norm(params.position) || "all"
   const store = norm(params.store)
+  const empId = Number(params.employeeId || 0)
   let best: { t: RoutineTemplate; score: number } | null = null
   for (const t of templates) {
     if (t.status !== "pilot" && t.status !== "active") continue
     if (norm(t.roleScope) !== params.role) continue
+    const tid = templateEmployeeId(t)
+    if (tid > 0 && (!(empId > 0) || tid !== empId)) continue
     const tStore = norm(t.storeName)
     if (tStore && tStore !== store) continue
     const tPos = norm(t.position) || "all"
@@ -199,32 +222,48 @@ export function pickRoutineTemplate(
     } else if (tPos !== "all" && tPos !== pos) {
       continue
     }
-    const score = (tStore ? 4 : 0) + (tPos !== "all" ? 2 : 0) + (t.status === "active" ? 1 : 0)
+    const score =
+      (tid > 0 ? 8 : 0) + (tStore ? 4 : 0) + (tPos !== "all" ? 2 : 0) + (t.status === "active" ? 1 : 0)
     if (!best || score > best.score || (score === best.score && t.id > best.t.id)) best = { t, score }
   }
   return best?.t ?? null
 }
 
-/**
- * 일정표에 쓸 템플릿 목록.
- * 매니저 service/kitchen → 구역 전용 + 공통(all)을 함께 (중복 id 제거).
- * all/office → 단일 템플릿.
- */
-export function pickRoutineTemplatesForPlan(
-  templates: RoutineTemplate[],
-  params: { role: DailyPlanRole; position: string; store: string }
+function pickFromPool(
+  pool: RoutineTemplate[],
+  params: { role: DailyPlanRole; position: string; store: string; employeeId?: number }
 ): RoutineTemplate[] {
   const pos = norm(params.position) || "all"
   if (pos === "service" || pos === "kitchen") {
-    const area = pickRoutineTemplate(templates, { ...params, position: pos })
-    const shared = pickRoutineTemplate(templates, { ...params, position: "all" })
+    const area = pickRoutineTemplate(pool, { ...params, position: pos })
+    const shared = pickRoutineTemplate(pool, { ...params, position: "all" })
     const out: RoutineTemplate[] = []
     if (area) out.push(area)
     if (shared && shared.id !== area?.id) out.push(shared)
     return out
   }
-  const one = pickRoutineTemplate(templates, params)
+  const one = pickRoutineTemplate(pool, params)
   return one ? [one] : []
+}
+
+/**
+ * 일정표에 쓸 템플릿 목록.
+ * 해당 직원 전용 템플릿이 있으면 그것만 사용. 없으면 직급·매장 공통.
+ * 매니저 service/kitchen → 구역 전용 + 공통(all)을 함께 (중복 id 제거).
+ * all/office → 단일 템플릿.
+ */
+export function pickRoutineTemplatesForPlan(
+  templates: RoutineTemplate[],
+  params: { role: DailyPlanRole; position: string; store: string; employeeId?: number }
+): RoutineTemplate[] {
+  const empId = Number(params.employeeId || 0)
+  if (empId > 0) {
+    const personal = templates.filter((t) => templateEmployeeId(t) === empId)
+    const fromPersonal = pickFromPool(personal, params)
+    if (fromPersonal.length > 0) return fromPersonal
+  }
+  const shared = templates.filter((t) => templateEmployeeId(t) === 0)
+  return pickFromPool(shared, params)
 }
 
 /** 구역+공통 템플릿 아이템 병합. primary(첫 번째) id·메타 유지, title 중복 제거 */
@@ -246,6 +285,65 @@ export function mergeRoutineTemplatesForPlan(templates: RoutineTemplate[]): Rout
     sortBase += 1000
   }
   return { ...primary, items }
+}
+
+function itemEmployeeId(i: Pick<RoutineTemplateItem, "employeeId">): number {
+  const n = Number(i.employeeId || 0)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+/** 일정표 생성 시 항목이 이 직원에게 포함되는지 */
+export function routineItemAppliesToEmployee(
+  item: Pick<RoutineTemplateItem, "employeeId">,
+  employeeId: number
+): boolean {
+  const tid = itemEmployeeId(item)
+  return tid <= 0 || tid === Number(employeeId || 0)
+}
+
+/**
+ * 개인 전용 템플릿 vs 직급·매장 공통(병합) 항목 비교 — UI 미리보기용.
+ * title(정규화) 기준.
+ */
+export function diffPersonalAgainstSharedTemplate(
+  personal: RoutineTemplate | null | undefined,
+  shared: RoutineTemplate | null | undefined
+): RoutineTemplateItemDiff[] {
+  const pMap = new Map<string, RoutineTemplateItem>()
+  const sMap = new Map<string, RoutineTemplateItem>()
+  for (const it of personal?.items || []) {
+    const k = norm(it.title)
+    if (k) pMap.set(k, it)
+  }
+  for (const it of shared?.items || []) {
+    const k = norm(it.title)
+    if (k) sMap.set(k, it)
+  }
+  const keys = [...new Set([...pMap.keys(), ...sMap.keys()])].sort()
+  return keys.map((k) => {
+    const p = pMap.get(k)
+    const s = sMap.get(k)
+    const title = p?.title || s?.title || k
+    if (p && !s) {
+      return { title, kind: "personal_only" as const, personalEst: p.estMinutes, personalWeekdays: p.weekdays }
+    }
+    if (!p && s) {
+      return { title, kind: "shared_only" as const, sharedEst: s.estMinutes, sharedWeekdays: s.weekdays }
+    }
+    const same =
+      Number(p!.estMinutes) === Number(s!.estMinutes) &&
+      String(p!.weekdays || "") === String(s!.weekdays || "") &&
+      !!p!.perStore === !!s!.perStore &&
+      String(p!.timeSlot || "") === String(s!.timeSlot || "")
+    return {
+      title,
+      kind: same ? ("both_same" as const) : ("both_changed" as const),
+      personalEst: p!.estMinutes,
+      sharedEst: s!.estMinutes,
+      personalWeekdays: p!.weekdays,
+      sharedWeekdays: s!.weekdays,
+    }
+  })
 }
 
 function matchesPerson(
@@ -323,7 +421,12 @@ export function buildDailyPlanItems(params: {
 }): PlanItemDraft[] {
   const isoWd = isoWeekdayOfYmd(params.dateYmd)
   const tplItems = (params.template?.items || [])
-    .filter((i) => weekdayMatches(i.weekdays, isoWd) && String(i.title || "").trim())
+    .filter(
+      (i) =>
+        weekdayMatches(i.weekdays, isoWd) &&
+        String(i.title || "").trim() &&
+        routineItemAppliesToEmployee(i, params.employee.id)
+    )
     .sort((a, b) => a.sortOrder - b.sortOrder)
   const firstPerStore = tplItems.find((i) => i.perStore)
   const head = tplItems.filter((i) => !i.perStore && (!firstPerStore || i.sortOrder < firstPerStore.sortOrder))
