@@ -8,6 +8,7 @@ import {
   recoverFromChunkLoadError,
   shouldWipeCachesForChunkRecovery,
 } from "@/lib/chunk-load-recovery"
+import { getClientUiLang, getRuntimeUiString } from "@/lib/runtime-ui-strings"
 
 interface Props {
   children: React.ReactNode
@@ -95,16 +96,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (this.state.hasError && this.state.error) {
+      const lang = getClientUiLang()
       const staleBundle = isStaleClientBundleError(this.state.error)
       const hybrid = typeof window !== "undefined" && typeof window.cmPosShell?.resetCacheAndReload === "function"
       if (this.state.recovering) {
         return (
           <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
             <div className="max-w-lg rounded-lg border bg-card p-6 text-center">
-              <p className="text-sm font-medium">최신 버전을 불러오는 중입니다. 잠시만 기다려 주세요.</p>
-              <p className="mt-2 text-sm text-muted-foreground">กำลังโหลดเวอร์ชันใหม่ กรุณารอสักครู่ครับ</p>
+              <p className="text-sm font-medium">{getRuntimeUiString(lang, "appErrorRecovering")}</p>
               <p className="mt-3 text-xs text-muted-foreground">
-                5초 안에 안 열리면 버튼이 나옵니다. ถ้าไม่เปิดใน 5 วินาที จะมีปุ่มครับ
+                {getRuntimeUiString(lang, "appErrorRecoveringHint")}
               </p>
             </div>
           </div>
@@ -113,23 +114,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
           <div className="max-w-lg rounded-lg border border-destructive/50 bg-destructive/5 p-6">
-            <h1 className="text-lg font-bold text-destructive">응용 프로그램 오류</h1>
+            <h1 className="text-lg font-bold text-destructive">
+              {getRuntimeUiString(lang, "appErrorTitle")}
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              페이지를 로드하는 중 문제가 발생했습니다.
+              {getRuntimeUiString(lang, "appErrorBody")}
             </p>
             {staleBundle && (
-              <div className="mt-2 space-y-2 text-xs text-muted-foreground">
-                <p>
-                  업데이트 직후 휴대폰·브라우저 캐시가 섞이면 이 화면이 납니다. 「다시 시도」 또는 「캐시 지우고
-                  새로고침」을 눌러 주세요. Windows POS에서는{" "}
-                  <span className="font-semibold">Ctrl+Shift+R</span> 입니다.
-                </p>
-                <p>
-                  หลังอัปเดตแคชค้างได้ครับ กด「다시 시도」หรือ「캐시 지우고 새로고침」 หรือบนโปรแกรม POS กด{" "}
-                  <span className="font-semibold">Ctrl+Shift+R</span> เพื่อล้างแคชแล้วเปิดใหม่
-                  อย่าใช้เว็บบราวเซอร์รับเงินสด ลิ้นชักจะไม่เด้งครับ
-                </p>
-              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {getRuntimeUiString(lang, "appErrorStaleHint")}
+              </p>
             )}
             <pre className="mt-4 overflow-auto rounded bg-muted p-3 text-xs text-destructive">
               {this.state.error.message}
@@ -140,7 +134,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 onClick={this.handleRetry}
                 className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
               >
-                다시 시도
+                {getRuntimeUiString(lang, "appErrorRetry")}
               </button>
               {staleBundle && (
                 <button
@@ -148,7 +142,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
                   onClick={hybrid ? this.handleHybridCacheReset : this.handleRetry}
                   className="rounded border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
                 >
-                  {hybrid ? "캐시 초기화 (Ctrl+Shift+R)" : "캐시 지우고 새로고침"}
+                  {getRuntimeUiString(
+                    lang,
+                    hybrid ? "appErrorClearCacheHybrid" : "appErrorClearCacheWeb"
+                  )}
                 </button>
               )}
             </div>

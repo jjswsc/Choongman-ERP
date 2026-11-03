@@ -1,10 +1,18 @@
-import { isLangCode, type LangCode } from "@/lib/lang-context"
+import { guessLangFromNavigator, isLangCode, type LangCode } from "@/lib/lang-context"
 
 type RuntimeUiStringKey =
   | "cancel"
   | "btn_ok"
   | "appDialogAlertTitle"
   | "appDialogConfirmTitle"
+  | "appErrorTitle"
+  | "appErrorBody"
+  | "appErrorRecovering"
+  | "appErrorRecoveringHint"
+  | "appErrorStaleHint"
+  | "appErrorRetry"
+  | "appErrorClearCacheHybrid"
+  | "appErrorClearCacheWeb"
   | "posCustomerMemo"
   | "posTable"
   | "posOrderGuestCount"
@@ -38,6 +46,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "확인",
     appDialogAlertTitle: "알림",
     appDialogConfirmTitle: "확인",
+    appErrorTitle: "응용 프로그램 오류",
+    appErrorBody: "페이지를 로드하는 중 문제가 발생했습니다.",
+    appErrorRecovering: "최신 버전을 불러오는 중입니다. 잠시만 기다려 주세요.",
+    appErrorRecoveringHint: "5초 안에 안 열리면 버튼이 나옵니다.",
+    appErrorStaleHint:
+      "업데이트 직후 캐시가 섞이면 이 화면이 납니다. 「다시 시도」 또는 「캐시 지우고 새로고침」을 눌러 주세요. Windows POS에서는 Ctrl+Shift+R 입니다.",
+    appErrorRetry: "다시 시도",
+    appErrorClearCacheHybrid: "캐시 초기화 (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "캐시 지우고 새로고침",
     posCustomerMemo: "손님 메모",
     posTable: "테이블",
     posOrderGuestCount: "손님 수",
@@ -69,6 +86,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "OK",
     appDialogAlertTitle: "Notice",
     appDialogConfirmTitle: "Please confirm",
+    appErrorTitle: "Application error",
+    appErrorBody: "A problem occurred while loading the page.",
+    appErrorRecovering: "Loading the latest version. Please wait.",
+    appErrorRecoveringHint: "If it does not open within 5 seconds, buttons will appear.",
+    appErrorStaleHint:
+      "After an update, mixed cache can cause this screen. Tap Retry or Clear cache and refresh. On Windows POS use Ctrl+Shift+R.",
+    appErrorRetry: "Retry",
+    appErrorClearCacheHybrid: "Reset cache (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "Clear cache and refresh",
     posCustomerMemo: "Customer Memo",
     posTable: "Table",
     posOrderGuestCount: "Guests",
@@ -100,6 +126,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "ตกลง",
     appDialogAlertTitle: "แจ้ง",
     appDialogConfirmTitle: "ยืนยัน",
+    appErrorTitle: "เกิดข้อผิดพลาดของแอป",
+    appErrorBody: "เกิดปัญหาขณะโหลดหน้า",
+    appErrorRecovering: "กำลังโหลดเวอร์ชันใหม่ กรุณารอสักครู่",
+    appErrorRecoveringHint: "ถ้าไม่เปิดใน 5 วินาที จะมีปุ่มให้กด",
+    appErrorStaleHint:
+      "หลังอัปเดตแคชอาจค้างได้ กด「ลองอีกครั้ง」หรือล้างแคชแล้วเปิดใหม่ บน Windows POS กด Ctrl+Shift+R",
+    appErrorRetry: "ลองอีกครั้ง",
+    appErrorClearCacheHybrid: "ล้างแคช (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "ล้างแคชแล้วรีเฟรช",
     posCustomerMemo: "บันทึกลูกค้า",
     posTable: "โต๊ะ",
     posOrderGuestCount: "จำนวนลูกค้า",
@@ -133,6 +168,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "အတည်ပြု",
     appDialogAlertTitle: "အသိပေးချက်",
     appDialogConfirmTitle: "အတည်ပြုပါ",
+    appErrorTitle: "Application error",
+    appErrorBody: "A problem occurred while loading the page.",
+    appErrorRecovering: "Loading the latest version. Please wait.",
+    appErrorRecoveringHint: "If it does not open within 5 seconds, buttons will appear.",
+    appErrorStaleHint:
+      "After an update, mixed cache can cause this screen. Tap Retry or Clear cache and refresh. On Windows POS use Ctrl+Shift+R.",
+    appErrorRetry: "Retry",
+    appErrorClearCacheHybrid: "Reset cache (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "Clear cache and refresh",
     posCustomerMemo: "ဖောက်သည်မှတ်ချက်",
     posTable: "စားပွဲ",
     posOrderGuestCount: "ဧည့်သည်ဦးရေ",
@@ -164,6 +208,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "ຕົກລົງ",
     appDialogAlertTitle: "ແຈ້ງ",
     appDialogConfirmTitle: "ຢືນຢັນ",
+    appErrorTitle: "Application error",
+    appErrorBody: "A problem occurred while loading the page.",
+    appErrorRecovering: "Loading the latest version. Please wait.",
+    appErrorRecoveringHint: "If it does not open within 5 seconds, buttons will appear.",
+    appErrorStaleHint:
+      "After an update, mixed cache can cause this screen. Tap Retry or Clear cache and refresh. On Windows POS use Ctrl+Shift+R.",
+    appErrorRetry: "Retry",
+    appErrorClearCacheHybrid: "Reset cache (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "Clear cache and refresh",
     posCustomerMemo: "ໝາຍເຫດລູກຄ້າ",
     posTable: "ໂຕະ",
     posOrderGuestCount: "ຈຳນວນລູກຄ້າ",
@@ -195,6 +248,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "យល់ព្រម",
     appDialogAlertTitle: "ការជូនដំណឹង",
     appDialogConfirmTitle: "សូមបញ្ជាក់",
+    appErrorTitle: "កំហុសកម្មវិធី",
+    appErrorBody: "មានបញ្ហាពេលផ្ទុកទំព័រ។",
+    appErrorRecovering: "កំពុងផ្ទុកកំណែថ្មី។ សូមរង់ចាំ។",
+    appErrorRecoveringHint: "បើមិនបើកក្នុងរយៈពេល 5 វិនាទី នឹងមានប៊ូតុង។",
+    appErrorStaleHint:
+      "បន្ទាប់ពីធ្វើបច្ចុប្បន្នភាព ឃ្លាំងសម្ងាត់អាចជាប់។ ចុច Retry ឬសម្អាតឃ្លាំងសម្ងាត់។ នៅ Windows POS ប្រើ Ctrl+Shift+R។",
+    appErrorRetry: "ព្យាយាមម្តងទៀត",
+    appErrorClearCacheHybrid: "សម្អាតឃ្លាំងសម្ងាត់ (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "សម្អាតឃ្លាំងសម្ងាត់ រួចផ្ទុកឡើងវិញ",
     posCustomerMemo: "កំណត់ចំណាំអតិថិជន",
     posTable: "Table",
     posOrderGuestCount: "ចំនួនភ្ញៀវ",
@@ -226,6 +288,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "OK",
     appDialogAlertTitle: "Thông báo",
     appDialogConfirmTitle: "Xác nhận",
+    appErrorTitle: "Lỗi ứng dụng",
+    appErrorBody: "Đã xảy ra sự cố khi tải trang.",
+    appErrorRecovering: "Đang tải phiên bản mới. Vui lòng đợi.",
+    appErrorRecoveringHint: "Nếu không mở trong 5 giây, các nút sẽ hiện ra.",
+    appErrorStaleHint:
+      "Sau cập nhật, bộ nhớ đệm lẫn có thể gây màn hình này. Bấm Thử lại hoặc Xóa bộ nhớ đệm. Trên Windows POS dùng Ctrl+Shift+R.",
+    appErrorRetry: "Thử lại",
+    appErrorClearCacheHybrid: "Xóa bộ nhớ đệm (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "Xóa bộ nhớ đệm và tải lại",
     posCustomerMemo: "Ghi chú khách hàng",
     posTable: "Bàn",
     posOrderGuestCount: "Số khách",
@@ -257,6 +328,15 @@ const RUNTIME_UI_STRINGS: Record<LangCode, Record<RuntimeUiStringKey, string>> =
     btn_ok: "OK",
     appDialogAlertTitle: "Notis",
     appDialogConfirmTitle: "Sahkan",
+    appErrorTitle: "Ralat aplikasi",
+    appErrorBody: "Masalah berlaku semasa memuatkan halaman.",
+    appErrorRecovering: "Memuatkan versi terkini. Sila tunggu.",
+    appErrorRecoveringHint: "Jika tidak dibuka dalam 5 saat, butang akan muncul.",
+    appErrorStaleHint:
+      "Selepas kemas kini, cache bercampur boleh paparkan skrin ini. Ketik Cuba lagi atau Kosongkan cache. Pada Windows POS guna Ctrl+Shift+R.",
+    appErrorRetry: "Cuba lagi",
+    appErrorClearCacheHybrid: "Kosongkan cache (Ctrl+Shift+R)",
+    appErrorClearCacheWeb: "Kosongkan cache dan muat semula",
     posCustomerMemo: "Memo pelanggan",
     posTable: "Meja",
     posOrderGuestCount: "Bilangan tetamu",
@@ -322,11 +402,23 @@ export function getRuntimeDialogLabels(lang: string) {
   }
 }
 
+/**
+ * POS·손님 모니터 오류 UI용.
+ * sessionStorage → localStorage → OS 언어 순 (손님 창은 session이 비어 있을 수 있음).
+ */
 export function getClientUiLang(): LangCode {
   if (typeof window === "undefined") return "ko"
   try {
-    const stored = sessionStorage.getItem("cm_lang")
-    if (stored && isLangCode(stored)) return stored
+    const session = sessionStorage.getItem("cm_lang")
+    if (session && isLangCode(session)) return session
   } catch {}
+  try {
+    const local = localStorage.getItem("cm_lang")
+    if (local && isLangCode(local)) return local
+  } catch {}
+  const fromNav = guessLangFromNavigator(
+    typeof navigator !== "undefined" ? navigator.language : ""
+  )
+  if (fromNav) return fromNav
   return "ko"
 }
