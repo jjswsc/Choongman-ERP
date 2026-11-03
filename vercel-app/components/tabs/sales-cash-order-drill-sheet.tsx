@@ -16,6 +16,13 @@ import {
 } from "@/lib/api-client"
 import { normalizePosOrderTypeKey } from "@/lib/pos-sales-order-type-filter"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
+
+type CashDrillSortKey = "orderNo" | "store" | "orderType" | "cash" | "total"
 
 export type SalesCashOrderDrillContext = {
   startStr: string
@@ -73,6 +80,32 @@ export function useSalesCashOrderDrillSheet(ctx: SalesCashOrderDrillContext, tr:
   const [cashSales, setCashSales] = React.useState(0)
   const [truncated, setTruncated] = React.useState(false)
   const [error, setError] = React.useState("")
+  const { sortKey, sortDir, toggleSort } = useSalesTableSort<CashDrillSortKey>("cash", "desc")
+
+  const sortedOrders = React.useMemo(
+    () =>
+      sortSalesRows(
+        orders,
+        sortDir,
+        (row) => {
+          switch (sortKey) {
+            case "orderNo":
+              return row.orderNo || String(row.orderId)
+            case "store":
+              return row.storeCode || ""
+            case "orderType":
+              return orderTypeLabel(row.orderType, tr)
+            case "total":
+              return row.totalAmount
+            case "cash":
+            default:
+              return row.paymentCash
+          }
+        },
+        (a, b) => String(a.orderNo || "").localeCompare(String(b.orderNo || ""))
+      ),
+    [orders, sortKey, sortDir, tr]
+  )
 
   const openDrill = React.useCallback((next: SalesCashOrderDrillTarget) => {
     setTarget(next)
@@ -208,21 +241,43 @@ export function useSalesCashOrderDrillSheet(ctx: SalesCashOrderDrillContext, tr:
                 <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="border-b bg-muted/40 text-muted-foreground">
-                      <th className="px-3 py-2 text-left">
-                        {tr("salesCashDrillColOrderNo", "주문")}
-                      </th>
-                      <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
-                      <th className="px-3 py-2 text-left">
-                        {tr("salesCashDrillColOrderType", "종류")}
-                      </th>
-                      <th className="px-3 py-2 text-right">
-                        {tr("salesCashDrillColCash", "현금")}
-                      </th>
-                      <th className="px-3 py-2 text-right">{tr("salesAmount", "매출액")}</th>
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesCashDrillColOrderNo", "주문")}
+                        active={sortKey === "orderNo"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("orderNo")}
+                      />
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesStoreName", "매장명")}
+                        active={sortKey === "store"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("store")}
+                      />
+                      <SalesSortableTh
+                        align="left"
+                        label={tr("salesCashDrillColOrderType", "종류")}
+                        active={sortKey === "orderType"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("orderType")}
+                      />
+                      <SalesSortableTh
+                        label={tr("salesCashDrillColCash", "현금")}
+                        active={sortKey === "cash"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("cash")}
+                      />
+                      <SalesSortableTh
+                        label={tr("salesAmount", "매출액")}
+                        active={sortKey === "total"}
+                        dir={sortDir}
+                        onClick={() => toggleSort("total")}
+                      />
                     </tr>
                   </thead>
                   <tbody>
-                    {orders.map((row, idx) => (
+                    {sortedOrders.map((row, idx) => (
                       <tr
                         key={row.orderId > 0 ? String(row.orderId) : `${row.orderNo}-${idx}`}
                         className="border-b border-border/60"

@@ -19,17 +19,62 @@ import {
   sumYoyStoreMetrics,
 } from "@/lib/pos-sales-forecast-compare"
 import { Button } from "@/components/ui/button"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+  type SalesSortDir,
+} from "@/components/tabs/sales-management-sortable"
 
 type TrFn = (key: string, fallback: string) => string
 
+type CmpSort = {
+  sortKey: string
+  sortDir: SalesSortDir
+  toggleSort: (key: string) => void
+}
+
+/** null/비유한 값은 정렬 방향과 무관하게 항상 맨 아래 */
+function numOrLast(v: number | null | undefined, dir: SalesSortDir): number {
+  if (v == null || !Number.isFinite(v)) return dir === "asc" ? Number.MAX_VALUE : -Number.MAX_VALUE
+  return v
+}
+
+type MetricsLike = { orderCount: number; total: number; guestSum: number; salesPerGuest: number }
+
+function pickMetric(m: MetricsLike, field: string): number {
+  switch (field) {
+    case "orders":
+      return m.orderCount
+    case "total":
+      return m.total
+    case "guests":
+      return m.guestSum
+    default:
+      return m.salesPerGuest
+  }
+}
+
+function pickChangePct(
+  c: { total: number | null; guest: number | null; salesPerGuest: number | null },
+  key: string,
+  dir: SalesSortDir
+): number | undefined {
+  switch (key) {
+    case "pct.total":
+      return numOrLast(c.total, dir)
+    case "pct.guest":
+      return numOrLast(c.guest, dir)
+    case "pct.perGuest":
+      return numOrLast(c.salesPerGuest, dir)
+    default:
+      return undefined
+  }
+}
+
 /** 비교 표 헤더 — 태국어 등 긴 라벨이 칸을 깨지 않도록 nowrap + 최소폭 */
-const CMP_TH =
-  "px-1.5 py-1 text-right align-bottom whitespace-nowrap text-[11px] leading-tight min-w-[4.5rem]"
 const CMP_TH_L =
   "px-1.5 py-1 text-left align-bottom whitespace-nowrap text-[11px] leading-tight min-w-[6rem]"
-const CMP_TH_C =
-  "px-1.5 py-1 text-center align-bottom whitespace-nowrap text-[11px] leading-tight min-w-[3rem]"
-const CMP_TH_SEC = `border-l ${CMP_TH}`
 const CMP_GROUP =
   "border-l px-2 py-1.5 text-center align-middle whitespace-nowrap text-xs font-medium"
 const CMP_TD = "px-1.5 py-1.5 text-right font-erp-numeric whitespace-nowrap"
@@ -41,20 +86,55 @@ function formatPct(v: number | null | undefined): string {
   return `${sign}${v.toFixed(2)}%`
 }
 
+/** 정렬 가능 헤더 — CMP_TH 패딩/폭 유지 (SalesSortableTh 기본 px-2 py-2 덮어쓰기) */
+const CMP_SORT_BASE = "!px-1.5 !py-1 align-bottom whitespace-nowrap leading-tight"
+
+function CmpSortTh({
+  sort,
+  k,
+  label,
+  align = "right",
+  section,
+  className = "",
+}: {
+  sort: CmpSort
+  k: string
+  label: React.ReactNode
+  align?: "left" | "right" | "center"
+  section?: boolean
+  className?: string
+}) {
+  const minW = align === "left" ? "min-w-[6rem]" : align === "center" ? "min-w-[3rem]" : "min-w-[4.5rem]"
+  return (
+    <SalesSortableTh
+      label={label}
+      active={sort.sortKey === k}
+      dir={sort.sortDir}
+      align={align}
+      className={`${CMP_SORT_BASE} ${minW} ${section ? "border-l" : ""} ${className}`}
+      onClick={() => sort.toggleSort(k)}
+    />
+  )
+}
+
 function CompareMetricsHeaderCells({
   tr,
   sectionStart,
+  sort,
+  prefix,
 }: {
   tr: TrFn
   sectionStart?: boolean
+  sort: CmpSort
+  /** 정렬 키 접두사 (예: "prev" → "prev.orders") */
+  prefix: string
 }) {
-  const first = sectionStart ? CMP_TH_SEC : CMP_TH
   return (
     <>
-      <th className={first}>{tr("salesCompareColOrders", "건수")}</th>
-      <th className={CMP_TH}>{tr("salesCompareColSales", "매출")}</th>
-      <th className={CMP_TH}>{tr("salesCompareColGuests", "손님(홀)")}</th>
-      <th className={CMP_TH}>{tr("salesCompareColPerGuest", "객단가")}</th>
+      <CmpSortTh sort={sort} k={`${prefix}.orders`} section={sectionStart} label={tr("salesCompareColOrders", "건수")} />
+      <CmpSortTh sort={sort} k={`${prefix}.total`} label={tr("salesCompareColSales", "매출")} />
+      <CmpSortTh sort={sort} k={`${prefix}.guests`} label={tr("salesCompareColGuests", "손님(홀)")} />
+      <CmpSortTh sort={sort} k={`${prefix}.perGuest`} label={tr("salesCompareColPerGuest", "객단가")} />
     </>
   )
 }
@@ -94,6 +174,19 @@ export function SalesYoyComparePanel({
 }) {
   const prevTotal = sumYoyMonthMetrics(rows, "prevYear")
   const currTotal = sumYoyMonthMetrics(rows, "currYear")
+  const sort = useSalesTableSort<string>("month", "asc")
+  const sortedRows = React.useMemo(
+    () =>
+      sortSalesRows(rows, sort.sortDir, (r) => {
+        const k = sort.sortKey
+        if (k === "month") return r.month
+        if (k === "days") return r.calendarDays
+        if (k.startsWith("prev.")) return pickMetric(r.prevYear, k.slice(5))
+        if (k.startsWith("curr.")) return pickMetric(r.currYear, k.slice(5))
+        return pickChangePct(r.changePct, k, sort.sortDir) ?? r.month
+      }),
+    [rows, sort.sortKey, sort.sortDir]
+  )
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
@@ -104,8 +197,8 @@ export function SalesYoyComparePanel({
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
               <th className={CMP_TH_L}>{tr("salesStoreName", "매장명")}</th>
-              <th className={CMP_TH_C}>{tr("salesCompareMonthColumn", "월")}</th>
-              <th className={CMP_TH_C}>{tr("salesCompareBusinessDays", "영업일수")}</th>
+              <CmpSortTh sort={sort} k="month" align="center" label={tr("salesCompareMonthColumn", "월")} />
+              <CmpSortTh sort={sort} k="days" align="center" label={tr("salesCompareBusinessDays", "영업일수")} />
               <th colSpan={4} className={`${CMP_GROUP} bg-slate-100/80 dark:bg-slate-800/40`}>
                 {year - 1}
               </th>
@@ -118,15 +211,15 @@ export function SalesYoyComparePanel({
             </tr>
             <tr className="border-b bg-muted/30 text-muted-foreground">
               <th colSpan={3} />
-              <CompareMetricsHeaderCells tr={tr} />
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <th className={CMP_TH_SEC}>{tr("salesCompareColSales", "매출")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColGuests", "손님(홀)")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColPerGuest", "객단가")}</th>
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="prev" />
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="curr" sectionStart />
+              <CmpSortTh sort={sort} k="pct.total" section label={tr("salesCompareColSales", "매출")} />
+              <CmpSortTh sort={sort} k="pct.guest" label={tr("salesCompareColGuests", "손님(홀)")} />
+              <CmpSortTh sort={sort} k="pct.perGuest" label={tr("salesCompareColPerGuest", "객단가")} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.month} className="border-b border-border/60">
                 <td className="px-1.5 py-1.5 whitespace-nowrap">{storeLabel}</td>
                 <td className={`${CMP_TD} text-center`}>{r.month}</td>
@@ -182,6 +275,20 @@ export function SalesMomComparePanel({
   const prevTotal = sumMomDayMetrics(rows, "prevMonth")
   const currTotal = sumMomDayMetrics(rows, "currMonth")
   const dowLabel = (dow: number) => tr(DOW_KEYS[dow] ?? "salesWeekdaySun", "—")
+  const sort = useSalesTableSort<string>("day", "asc")
+  const sortedRows = React.useMemo(
+    () =>
+      sortSalesRows(rows, sort.sortDir, (r) => {
+        const k = sort.sortKey
+        if (k === "day") return r.day
+        if (k === "prevDow") return r.prevMonth.dow
+        if (k === "currDow") return r.currMonth.dow
+        if (k.startsWith("prev.")) return pickMetric(r.prevMonth, k.slice(5))
+        if (k.startsWith("curr.")) return pickMetric(r.currMonth, k.slice(5))
+        return pickChangePct(r.changePct, k, sort.sortDir) ?? r.day
+      }),
+    [rows, sort.sortKey, sort.sortDir]
+  )
 
   return (
     <div className="space-y-3">
@@ -193,7 +300,7 @@ export function SalesMomComparePanel({
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
               <th className={CMP_TH_L}>{tr("salesStoreName", "매장명")}</th>
-              <th className={CMP_TH_C}>{tr("salesCompareDayColumn", "일자")}</th>
+              <CmpSortTh sort={sort} k="day" align="center" label={tr("salesCompareDayColumn", "일자")} />
               <th colSpan={5} className={`${CMP_GROUP} bg-slate-100/80 dark:bg-slate-800/40`}>
                 {prevYear}/{String(prevMonth).padStart(2, "0")}
               </th>
@@ -206,17 +313,17 @@ export function SalesMomComparePanel({
             </tr>
             <tr className="border-b bg-muted/30 text-muted-foreground">
               <th colSpan={2} />
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <th className={CMP_TH_C}>{tr("salesCompareWeekdayColumn", "요일")}</th>
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <th className={CMP_TH_C}>{tr("salesCompareWeekdayColumn", "요일")}</th>
-              <th className={CMP_TH_SEC}>{tr("salesCompareColSales", "매출")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColGuests", "손님(홀)")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColPerGuest", "객단가")}</th>
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="prev" sectionStart />
+              <CmpSortTh sort={sort} k="prevDow" align="center" label={tr("salesCompareWeekdayColumn", "요일")} />
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="curr" sectionStart />
+              <CmpSortTh sort={sort} k="currDow" align="center" label={tr("salesCompareWeekdayColumn", "요일")} />
+              <CmpSortTh sort={sort} k="pct.total" section label={tr("salesCompareColSales", "매출")} />
+              <CmpSortTh sort={sort} k="pct.guest" label={tr("salesCompareColGuests", "손님(홀)")} />
+              <CmpSortTh sort={sort} k="pct.perGuest" label={tr("salesCompareColPerGuest", "객단가")} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.day} className="border-b border-border/60">
                 <td className="px-1.5 py-1.5 whitespace-nowrap">{storeLabel}</td>
                 <td className={`${CMP_TD} text-center`}>{r.dayLabel}</td>
@@ -269,6 +376,15 @@ export function SalesMomStoreComparePanel({
     const sign = v > 0 ? "+" : ""
     return `${sign}${formatAmount(v)}`
   }
+  const sort = useSalesTableSort<string>("curr.total", "desc")
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (r) => {
+    const k = sort.sortKey
+    if (k === "store") return storeDisplayName(r.storeName)
+    if (k === "diff") return r.changeAbs.total
+    if (k === "pct") return numOrLast(r.changePct.total, sort.sortDir)
+    if (k.startsWith("prev.")) return pickMetric(r.prevMonth, k.slice(5))
+    return pickMetric(r.currMonth, k.startsWith("curr.") ? k.slice(5) : "total")
+  })
 
   return (
     <div className="space-y-3">
@@ -282,7 +398,7 @@ export function SalesMomStoreComparePanel({
         <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
-              <th className={CMP_TH_L}>{tr("salesStoreName", "매장명")}</th>
+              <CmpSortTh sort={sort} k="store" align="left" label={tr("salesStoreName", "매장명")} />
               <th colSpan={4} className={`${CMP_GROUP} bg-slate-100/80 dark:bg-slate-800/40`}>
                 {prevYear}/{String(prevMonth).padStart(2, "0")}
               </th>
@@ -295,14 +411,14 @@ export function SalesMomStoreComparePanel({
             </tr>
             <tr className="border-b bg-muted/30 text-muted-foreground">
               <th />
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <th className={CMP_TH_SEC}>{tr("salesCompareColDiff", "증감")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColMomPct", "전월%")}</th>
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="prev" sectionStart />
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="curr" sectionStart />
+              <CmpSortTh sort={sort} k="diff" section label={tr("salesCompareColDiff", "증감")} />
+              <CmpSortTh sort={sort} k="pct" label={tr("salesCompareColMomPct", "전월%")} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.storeName} className="border-b border-border/60">
                 <td className="px-1.5 py-1.5 font-medium whitespace-nowrap">{storeDisplayName(r.storeName)}</td>
                 <CompareMetricsCells m={r.prevMonth} formatAmount={formatAmount} sectionStart />
@@ -356,6 +472,15 @@ export function SalesYoyStoreComparePanel({
     return `${sign}${formatAmount(v)}`
   }
   const mm = String(month).padStart(2, "0")
+  const sort = useSalesTableSort<string>("curr.total", "desc")
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (r) => {
+    const k = sort.sortKey
+    if (k === "store") return storeDisplayName(r.storeName)
+    if (k === "diff") return r.changeAbs.total
+    if (k === "pct") return numOrLast(r.changePct.total, sort.sortDir)
+    if (k.startsWith("prev.")) return pickMetric(r.prevYear, k.slice(5))
+    return pickMetric(r.currYear, k.startsWith("curr.") ? k.slice(5) : "total")
+  })
 
   return (
     <div className="space-y-3">
@@ -369,7 +494,7 @@ export function SalesYoyStoreComparePanel({
         <table className="w-full min-w-[1180px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
-              <th className={CMP_TH_L}>{tr("salesStoreName", "매장명")}</th>
+              <CmpSortTh sort={sort} k="store" align="left" label={tr("salesStoreName", "매장명")} />
               <th colSpan={4} className={`${CMP_GROUP} bg-slate-100/80 dark:bg-slate-800/40`}>
                 {year - 1}/{mm}
               </th>
@@ -382,14 +507,14 @@ export function SalesYoyStoreComparePanel({
             </tr>
             <tr className="border-b bg-muted/30 text-muted-foreground">
               <th />
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <CompareMetricsHeaderCells tr={tr} sectionStart />
-              <th className={CMP_TH_SEC}>{tr("salesCompareColDiff", "증감")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColYoyPct", "전년%")}</th>
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="prev" sectionStart />
+              <CompareMetricsHeaderCells tr={tr} sort={sort} prefix="curr" sectionStart />
+              <CmpSortTh sort={sort} k="diff" section label={tr("salesCompareColDiff", "증감")} />
+              <CmpSortTh sort={sort} k="pct" label={tr("salesCompareColYoyPct", "전년%")} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.storeName} className="border-b border-border/60">
                 <td className="px-1.5 py-1.5 font-medium whitespace-nowrap">{storeDisplayName(r.storeName)}</td>
                 <CompareMetricsCells m={r.prevYear} formatAmount={formatAmount} sectionStart />
@@ -446,6 +571,28 @@ export function SalesMomStoreChannelComparePanel({
 }) {
   const prevMonth = month <= 1 ? 12 : month - 1
   const prevYear = month <= 1 ? year - 1 : year
+  const sort = useSalesTableSort<string>("diff", "desc")
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (r) => {
+    const k = sort.sortKey
+    switch (k) {
+      case "store":
+        return storeDisplayName(r.storeName)
+      case "prev.dineIn":
+        return numOrLast(r.prevMonth.dineInPct, sort.sortDir)
+      case "prev.takeout":
+        return numOrLast(r.prevMonth.takeoutPct, sort.sortDir)
+      case "prev.delivery":
+        return numOrLast(r.prevMonth.deliveryPct, sort.sortDir)
+      case "curr.dineIn":
+        return numOrLast(r.currMonth.dineInPct, sort.sortDir)
+      case "curr.takeout":
+        return numOrLast(r.currMonth.takeoutPct, sort.sortDir)
+      case "curr.delivery":
+        return numOrLast(r.currMonth.deliveryPct, sort.sortDir)
+      default:
+        return numOrLast(r.deliveryShareDiffPp, sort.sortDir)
+    }
+  })
 
   return (
     <div className="space-y-3">
@@ -459,7 +606,7 @@ export function SalesMomStoreChannelComparePanel({
         <table className="w-full min-w-[960px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
-              <th className={CMP_TH_L}>{tr("salesStoreName", "매장명")}</th>
+              <CmpSortTh sort={sort} k="store" align="left" label={tr("salesStoreName", "매장명")} />
               <th colSpan={3} className={`${CMP_GROUP} bg-slate-100/80 dark:bg-slate-800/40`}>
                 {prevYear}/{String(prevMonth).padStart(2, "0")}
               </th>
@@ -472,17 +619,17 @@ export function SalesMomStoreChannelComparePanel({
             </tr>
             <tr className="border-b bg-muted/30 text-muted-foreground">
               <th />
-              <th className={CMP_TH_SEC}>{tr("salesAmountKindDineIn", "홀")}</th>
-              <th className={CMP_TH}>{tr("salesAmountKindTakeout", "포장")}</th>
-              <th className={CMP_TH}>{tr("salesAmountKindDelivery", "배달")}</th>
-              <th className={CMP_TH_SEC}>{tr("salesAmountKindDineIn", "홀")}</th>
-              <th className={CMP_TH}>{tr("salesAmountKindTakeout", "포장")}</th>
-              <th className={CMP_TH}>{tr("salesAmountKindDelivery", "배달")}</th>
-              <th className={CMP_TH_SEC}>{tr("salesCompareColDeliveryDiff", "배달Δ")}</th>
+              <CmpSortTh sort={sort} k="prev.dineIn" section label={tr("salesAmountKindDineIn", "홀")} />
+              <CmpSortTh sort={sort} k="prev.takeout" label={tr("salesAmountKindTakeout", "포장")} />
+              <CmpSortTh sort={sort} k="prev.delivery" label={tr("salesAmountKindDelivery", "배달")} />
+              <CmpSortTh sort={sort} k="curr.dineIn" section label={tr("salesAmountKindDineIn", "홀")} />
+              <CmpSortTh sort={sort} k="curr.takeout" label={tr("salesAmountKindTakeout", "포장")} />
+              <CmpSortTh sort={sort} k="curr.delivery" label={tr("salesAmountKindDelivery", "배달")} />
+              <CmpSortTh sort={sort} k="diff" section label={tr("salesCompareColDeliveryDiff", "배달Δ")} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.storeName} className="border-b border-border/60">
                 <td className="px-1.5 py-1.5 font-medium whitespace-nowrap">{storeDisplayName(r.storeName)}</td>
                 <td className={CMP_TD_SEC}>{formatSharePct(r.prevMonth.dineInPct)}</td>
@@ -540,6 +687,29 @@ export function SalesMomStoreDecompPanel({
     const sign = v > 0 ? "+" : ""
     return `${sign}${formatAmount(v)}`
   }
+  const sort = useSalesTableSort<string>("diff", "desc")
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (r) => {
+    switch (sort.sortKey) {
+      case "store":
+        return storeDisplayName(r.storeName)
+      case "prevTotal":
+        return r.prevMonth.total
+      case "currTotal":
+        return r.currMonth.total
+      case "pct":
+        return numOrLast(r.changePct.total, sort.sortDir)
+      case "orderPct":
+        return numOrLast(r.changePct.orderCount, sort.sortDir)
+      case "perOrderPct":
+        return numOrLast(r.changePct.salesPerOrder, sort.sortDir)
+      case "guestPct":
+        return numOrLast(r.changePct.salesPerGuest, sort.sortDir)
+      case "driver":
+        return momStoreDriverLabel(r.driver, tr)
+      default:
+        return r.changeAbs.total
+    }
+  })
 
   return (
     <div className="space-y-3">
@@ -553,23 +723,27 @@ export function SalesMomStoreDecompPanel({
         <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b bg-muted/50 text-muted-foreground">
-              <th className={CMP_TH_L}>{tr("salesStoreName", "매장명")}</th>
-              <th className={CMP_TH}>
-                {tr("salesCompareColSales", "매출")} {prevYear}/{String(prevMonth).padStart(2, "0")}
-              </th>
-              <th className={CMP_TH}>
-                {tr("salesCompareColSales", "매출")} {year}/{String(month).padStart(2, "0")}
-              </th>
-              <th className={CMP_TH}>{tr("salesCompareColDiff", "증감")}</th>
-              <th className={CMP_TH}>{tr("salesCompareColMomPct", "전월%")}</th>
-              <th className={CMP_TH}>{tr("salesCompareOrderCountMomPct", "건수(%)")}</th>
-              <th className={CMP_TH}>{tr("salesCompareSalesPerOrderMomPct", "건당(%)")}</th>
-              <th className={CMP_TH}>{tr("salesCompareGuestMomPct", "객단가(%)")}</th>
-              <th className={CMP_TH_L}>{tr("salesMomStoreDriver", "원인")}</th>
+              <CmpSortTh sort={sort} k="store" align="left" label={tr("salesStoreName", "매장명")} />
+              <CmpSortTh
+                sort={sort}
+                k="prevTotal"
+                label={`${tr("salesCompareColSales", "매출")} ${prevYear}/${String(prevMonth).padStart(2, "0")}`}
+              />
+              <CmpSortTh
+                sort={sort}
+                k="currTotal"
+                label={`${tr("salesCompareColSales", "매출")} ${year}/${String(month).padStart(2, "0")}`}
+              />
+              <CmpSortTh sort={sort} k="diff" label={tr("salesCompareColDiff", "증감")} />
+              <CmpSortTh sort={sort} k="pct" label={tr("salesCompareColMomPct", "전월%")} />
+              <CmpSortTh sort={sort} k="orderPct" label={tr("salesCompareOrderCountMomPct", "건수(%)")} />
+              <CmpSortTh sort={sort} k="perOrderPct" label={tr("salesCompareSalesPerOrderMomPct", "건당(%)")} />
+              <CmpSortTh sort={sort} k="guestPct" label={tr("salesCompareGuestMomPct", "객단가(%)")} />
+              <CmpSortTh sort={sort} k="driver" align="left" label={tr("salesMomStoreDriver", "원인")} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.storeName} className="border-b border-border/60">
                 <td className="px-1.5 py-1.5 font-medium whitespace-nowrap">{storeDisplayName(r.storeName)}</td>
                 <td className={CMP_TD}>{formatAmount(r.prevMonth.total)}</td>
@@ -607,6 +781,9 @@ export function SalesForecastPanel({
     { id: "month", key: "salesForecastHorizonMonth", fallback: "월간" },
     { id: "year", key: "salesForecastHorizonYear", fallback: "연간" },
   ]
+  const dowSort = useSalesTableSort<"dow" | "avg">("dow", "asc")
+  const dowRows = DOW_KEYS.map((key, dow) => ({ key, dow, avg: summary?.dowAverages[dow] ?? 0 }))
+  const sortedDowRows = sortSalesRows(dowRows, dowSort.sortDir, (r) => (dowSort.sortKey === "avg" ? r.avg : r.dow))
 
   return (
     <div className="space-y-4">
@@ -661,17 +838,28 @@ export function SalesForecastPanel({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40 text-muted-foreground">
-                  <th className="px-3 py-2 text-left">{tr("salesCompareWeekdayColumn", "요일")}</th>
-                  <th className="px-3 py-2 text-right">{tr("salesForecastDowAvgSales", "요일 평균 매출")}</th>
+                  <SalesSortableTh
+                    label={tr("salesCompareWeekdayColumn", "요일")}
+                    active={dowSort.sortKey === "dow"}
+                    dir={dowSort.sortDir}
+                    align="left"
+                    className="!px-3"
+                    onClick={() => dowSort.toggleSort("dow")}
+                  />
+                  <SalesSortableTh
+                    label={tr("salesForecastDowAvgSales", "요일 평균 매출")}
+                    active={dowSort.sortKey === "avg"}
+                    dir={dowSort.sortDir}
+                    className="!px-3"
+                    onClick={() => dowSort.toggleSort("avg")}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {DOW_KEYS.map((key, dow) => (
+                {sortedDowRows.map(({ key, avg }) => (
                   <tr key={key} className="border-b border-border/60">
                     <td className="px-3 py-1.5">{tr(key, "—")}</td>
-                    <td className="px-3 py-1.5 text-right font-erp-numeric">
-                      {formatAmount(summary.dowAverages[dow] ?? 0)}
-                    </td>
+                    <td className="px-3 py-1.5 text-right font-erp-numeric">{formatAmount(avg)}</td>
                   </tr>
                 ))}
               </tbody>

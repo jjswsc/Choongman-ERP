@@ -29,8 +29,38 @@ import type {
   PosSalesPromoRow,
 } from "@/lib/api-client"
 import type { SalesDiscountDrillTarget } from "@/components/tabs/sales-discount-drill-sheet"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+  type SalesSortDir,
+} from "@/components/tabs/sales-management-sortable"
 
 type TrFn = (key: string, fallback: string) => string
+
+/** 할인 분석 표 헤더 — 기존 px-3 py-2 유지, 열별 독립 정렬 훅 */
+function DiscTh<K extends string>({
+  sort,
+  k,
+  label,
+  align = "right",
+}: {
+  sort: { sortKey: K; sortDir: SalesSortDir; toggleSort: (key: K) => void }
+  k: K
+  label: React.ReactNode
+  align?: "left" | "right"
+}) {
+  return (
+    <SalesSortableTh
+      label={label}
+      active={sort.sortKey === k}
+      dir={sort.sortDir}
+      align={align}
+      className="!px-3 font-normal"
+      onClick={() => sort.toggleSort(k)}
+    />
+  )
+}
 
 type DrillProps = {
   onDrill?: (target: SalesDiscountDrillTarget) => void
@@ -184,6 +214,7 @@ export function SalesPromoBundleDiscountPanel({
             key: k.kind,
             label: promoKindLabel(k.kind, tr),
             col2: formatSalesAmount(k.saleAmount),
+            col2Num: k.saleAmount,
             col2Sub: formatSalesPct(k.saleSharePctOfGross),
             discount: k.bundleDiscount,
             pctGross: k.bundleDiscountPctOfGross,
@@ -322,6 +353,7 @@ export function SalesPaymentDiscountPanel({
             key: k.kind,
             label: paymentKindLabel(k.kind, tr),
             col2: `${k.orderCount.toLocaleString()} ${tr("salesOccupancy", "주문건수")}`,
+            col2Num: k.orderCount,
             discount: k.discountAmount,
             pctGross: k.discountPctOfGross,
             share: k.discountSharePct,
@@ -485,6 +517,7 @@ function KindTableChart({
     key: string
     label: string
     col2: string
+    col2Num: number
     col2Sub?: string
     discount: number
     pctGross: number
@@ -499,6 +532,21 @@ function KindTableChart({
   onDrill?: (target: SalesDiscountDrillTarget) => void
   drillHint?: string
 }) {
+  const sort = useSalesTableSort<"label" | "col2" | "discount" | "pctGross" | "share">("discount", "desc")
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (k) => {
+    switch (sort.sortKey) {
+      case "label":
+        return k.label
+      case "col2":
+        return k.col2Num
+      case "pctGross":
+        return k.pctGross
+      case "share":
+        return k.share
+      default:
+        return k.discount
+    }
+  })
   return (
     <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
       {onDrill && drillHint ? (
@@ -508,17 +556,15 @@ function KindTableChart({
         <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-muted-foreground">
-              <th className="px-3 py-2 text-left">{tr("salesPromoKindBreakdown", "유형별 분석")}</th>
-              <th className="px-3 py-2 text-right">{col2Header}</th>
-              <th className="px-3 py-2 text-right">{discountHeader}</th>
-              <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}</th>
-              <th className="px-3 py-2 text-right">
-                {tr(shareHeaderKey, shareHeaderFallback)}
-              </th>
+              <DiscTh sort={sort} k="label" align="left" label={tr("salesPromoKindBreakdown", "유형별 분석")} />
+              <DiscTh sort={sort} k="col2" label={col2Header} />
+              <DiscTh sort={sort} k="discount" label={discountHeader} />
+              <DiscTh sort={sort} k="pctGross" label={tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")} />
+              <DiscTh sort={sort} k="share" label={tr(shareHeaderKey, shareHeaderFallback)} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((k) => (
+            {sortedRows.map((k) => (
               <tr
                 key={k.key}
                 className={`border-b border-border/60 ${k.drillTarget && onDrill ? DRILLABLE_ROW_CN : ""}`}
@@ -575,6 +621,36 @@ function PromoDetailTable({
   onDrill?: (target: SalesDiscountDrillTarget) => void
   drillHint?: string
 }) {
+  const sort = useSalesTableSort<
+    "name" | "code" | "kind" | "qty" | "regular" | "sale" | "discount" | "pct" | "pctGross"
+  >("discount", "desc")
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (r) => {
+    switch (sort.sortKey) {
+      case "name":
+        return r.name
+      case "code":
+        return r.promoCode || r.promoId || ""
+      case "kind":
+        return promoKindLabel(r.kind, tr)
+      case "qty":
+        return r.qty
+      case "regular":
+        return r.regularAmount
+      case "sale":
+        return r.saleAmount
+      case "pct":
+        // "—" 표시 행은 항상 맨 아래
+        return r.regularAmount > 0
+          ? r.discountPct
+          : sort.sortDir === "asc"
+            ? Number.MAX_VALUE
+            : -Number.MAX_VALUE
+      case "pctGross":
+        return r.discountPctOfGross
+      default:
+        return r.bundleDiscount
+    }
+  })
   return (
     <div>
       {onDrill && drillHint ? (
@@ -584,19 +660,19 @@ function PromoDetailTable({
       <table className="w-full min-w-[1040px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
-            <th className="px-3 py-2 text-left">{tr("salesMenu", "메뉴")}</th>
-            <th className="px-3 py-2 text-left">{tr("salesPromoCode", "프로모 코드")}</th>
-            <th className="px-3 py-2 text-left">{tr("salesDiscountKindColumn", "유형")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesQuantity", "수량")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoRegularAmount", "정가 합계")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoSaleAmount", "판매액")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoBundleDiscount", "세트 할인")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPct", "할인율")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}</th>
+            <DiscTh sort={sort} k="name" align="left" label={tr("salesMenu", "메뉴")} />
+            <DiscTh sort={sort} k="code" align="left" label={tr("salesPromoCode", "프로모 코드")} />
+            <DiscTh sort={sort} k="kind" align="left" label={tr("salesDiscountKindColumn", "유형")} />
+            <DiscTh sort={sort} k="qty" label={tr("salesQuantity", "수량")} />
+            <DiscTh sort={sort} k="regular" label={tr("salesPromoRegularAmount", "정가 합계")} />
+            <DiscTh sort={sort} k="sale" label={tr("salesPromoSaleAmount", "판매액")} />
+            <DiscTh sort={sort} k="discount" label={tr("salesPromoBundleDiscount", "세트 할인")} />
+            <DiscTh sort={sort} k="pct" label={tr("salesPromoDiscountPct", "할인율")} />
+            <DiscTh sort={sort} k="pctGross" label={tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {sortedRows.map((r) => (
             <tr
               key={r.key}
               className={`border-b border-border/60 ${onDrill ? DRILLABLE_ROW_CN : ""}`}
@@ -678,6 +754,28 @@ function PaymentDetailTable({
   onDrill?: (target: SalesDiscountDrillTarget) => void
   drillHint?: string
 }) {
+  const sort = useSalesTableSort<"reason" | "code" | "kind" | "orders" | "discount" | "pctGross" | "share">(
+    "discount",
+    "desc"
+  )
+  const sortedRows = sortSalesRows(rows, sort.sortDir, (r) => {
+    switch (sort.sortKey) {
+      case "reason":
+        return paymentDiscountRowLabel(r, tr)
+      case "code":
+        return r.code || ""
+      case "kind":
+        return paymentKindLabel(r.kind, tr)
+      case "orders":
+        return r.orderCount
+      case "pctGross":
+        return r.discountPctOfGross
+      case "share":
+        return r.discountSharePct
+      default:
+        return r.discountAmount
+    }
+  })
   return (
     <div>
       {onDrill && drillHint ? (
@@ -687,17 +785,17 @@ function PaymentDetailTable({
       <table className="w-full min-w-[920px] text-sm">
         <thead>
           <tr className="border-b bg-muted/40 text-muted-foreground">
-            <th className="px-3 py-2 text-left">{tr("salesPaymentDiscountReason", "할인 사유")}</th>
-            <th className="px-3 py-2 text-left">{tr("salesPromoCode", "프로모 코드")}</th>
-            <th className="px-3 py-2 text-left">{tr("salesDiscountKindColumn", "유형")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesOccupancy", "주문건수")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoPaymentDiscount", "결제 할인")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}</th>
-            <th className="px-3 py-2 text-right">{tr("salesPaymentDiscountShare", "할인 비중")}</th>
+            <DiscTh sort={sort} k="reason" align="left" label={tr("salesPaymentDiscountReason", "할인 사유")} />
+            <DiscTh sort={sort} k="code" align="left" label={tr("salesPromoCode", "프로모 코드")} />
+            <DiscTh sort={sort} k="kind" align="left" label={tr("salesDiscountKindColumn", "유형")} />
+            <DiscTh sort={sort} k="orders" label={tr("salesOccupancy", "주문건수")} />
+            <DiscTh sort={sort} k="discount" label={tr("salesPromoPaymentDiscount", "결제 할인")} />
+            <DiscTh sort={sort} k="pctGross" label={tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")} />
+            <DiscTh sort={sort} k="share" label={tr("salesPaymentDiscountShare", "할인 비중")} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {sortedRows.map((r) => (
             <tr
               key={r.key}
               className={`border-b border-border/60 ${onDrill ? DRILLABLE_ROW_CN : ""}`}
@@ -767,6 +865,21 @@ export function CombinedKindSection({
   onDrill?: (target: SalesDiscountDrillTarget) => void
   drillHint?: string
 }) {
+  const sort = useSalesTableSort<"layer" | "kind" | "discount" | "pctGross" | "share">("discount", "desc")
+  const sortedByKind = sortSalesRows(byKind, sort.sortDir, (k) => {
+    switch (sort.sortKey) {
+      case "layer":
+        return combinedLayerLabel(k.layer, tr)
+      case "kind":
+        return combinedKindLabel(k, tr)
+      case "pctGross":
+        return k.discountPctOfGross
+      case "share":
+        return k.discountSharePct
+      default:
+        return k.discountAmount
+    }
+  })
   return (
     <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
       {onDrill && drillHint ? (
@@ -776,15 +889,15 @@ export function CombinedKindSection({
         <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b bg-muted/40 text-muted-foreground">
-              <th className="px-3 py-2 text-left">{tr("salesCombinedDiscountLayer", "할인 층")}</th>
-              <th className="px-3 py-2 text-left">{tr("salesPromoKindBreakdown", "유형별 분석")}</th>
-              <th className="px-3 py-2 text-right">{tr("salesPromoTotalDiscount", "할인 합계")}</th>
-              <th className="px-3 py-2 text-right">{tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")}</th>
-              <th className="px-3 py-2 text-right">{tr("salesPaymentDiscountShare", "할인 비중")}</th>
+              <DiscTh sort={sort} k="layer" align="left" label={tr("salesCombinedDiscountLayer", "할인 층")} />
+              <DiscTh sort={sort} k="kind" align="left" label={tr("salesPromoKindBreakdown", "유형별 분석")} />
+              <DiscTh sort={sort} k="discount" label={tr("salesPromoTotalDiscount", "할인 합계")} />
+              <DiscTh sort={sort} k="pctGross" label={tr("salesPromoDiscountPctOfGross", "총매출 대비 할인")} />
+              <DiscTh sort={sort} k="share" label={tr("salesPaymentDiscountShare", "할인 비중")} />
             </tr>
           </thead>
           <tbody>
-            {byKind.map((k, idx) => (
+            {sortedByKind.map((k, idx) => (
               <tr
                 key={`${k.layer}-${k.kind}-${idx}`}
                 className={`border-b border-border/60 ${onDrill ? DRILLABLE_ROW_CN : ""}`}

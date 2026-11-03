@@ -14,6 +14,22 @@ import {
   type StatementCompareDay,
 } from "@/lib/pos-delivery-app-statement-csv"
 import { translateDeliveryAppCode } from "@/lib/sales-analytics-labels"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
+
+type StatementCompareSortKey =
+  | "date"
+  | "status"
+  | "csvDelivery"
+  | "erpDelivery"
+  | "deliveryDiff"
+  | "csvDine"
+  | "erpDine"
+  | "dineDiff"
+  | "netDiff"
 
 export function SalesDeliveryAppStatementCompare(props: {
   erpRows: PosDeliveryAppReconcileRow[]
@@ -29,6 +45,7 @@ export function SalesDeliveryAppStatementCompare(props: {
     null
   )
   const [mismatchOnly, setMismatchOnly] = React.useState(true)
+  const { sortKey, sortDir, toggleSort } = useSalesTableSort<StatementCompareSortKey>("date", "asc")
 
   const compareDays = React.useMemo(() => {
     if (!parsed) return [] as StatementCompareDay[]
@@ -37,9 +54,42 @@ export function SalesDeliveryAppStatementCompare(props: {
   }, [parsed, erpRows])
 
   const summary = React.useMemo(() => summarizeStatementCompare(compareDays), [compareDays])
-  const visibleDays = mismatchOnly
+  const filteredDays = mismatchOnly
     ? compareDays.filter((d) => d.status !== "match")
     : compareDays
+
+  const visibleDays = React.useMemo(
+    () =>
+      sortSalesRows(
+        filteredDays,
+        sortDir,
+        (d) => {
+          switch (sortKey) {
+            case "status":
+              return d.status
+            case "csvDelivery":
+              return d.csvDeliverySales
+            case "erpDelivery":
+              return d.erpDeliverySales
+            case "deliveryDiff":
+              return d.deliverySalesDiff
+            case "csvDine":
+              return d.csvInStoreSales
+            case "erpDine":
+              return d.erpInStoreSales
+            case "dineDiff":
+              return d.inStoreSalesDiff
+            case "netDiff":
+              return d.netDiff
+            case "date":
+            default:
+              return d.date
+          }
+        },
+        (a, b) => a.date.localeCompare(b.date)
+      ),
+    [filteredDays, sortKey, sortDir]
+  )
 
   const statusLabel = (status: StatementCompareDay["status"]) => {
     if (status === "match") return tr("salesAppReconcileCsvMatch", "맞음")
@@ -178,17 +228,71 @@ export function SalesDeliveryAppStatementCompare(props: {
             <table className="w-full min-w-[920px] text-sm">
               <thead>
                 <tr className="border-b text-muted-foreground">
-                  <th className="px-2 py-1.5 text-left">{tr("salesPeriodDay", "일별")}</th>
-                  <th className="px-2 py-1.5 text-left">{tr("salesAppReconcileKind", "구분")}</th>
-                  <th className="px-2 py-1.5 text-right">CSV {tr("salesAppReconcileKindDelivery", "배달")}</th>
-                  <th className="px-2 py-1.5 text-right">ERP {tr("salesAppReconcileKindDelivery", "배달")}</th>
-                  <th className="px-2 py-1.5 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
-                  <th className="px-2 py-1.5 text-right">CSV dine</th>
-                  <th className="px-2 py-1.5 text-right">ERP dine</th>
-                  <th className="px-2 py-1.5 text-right">{tr("salesAppReconcileCsvDiff", "차이")}</th>
-                  <th className="px-2 py-1.5 text-right">
-                    {tr("salesAppReconcileColAppNet", "앱 합계 순매출")} {tr("salesAppReconcileCsvDiff", "차이")}
-                  </th>
+                  <SalesSortableTh
+                    align="left"
+                    muted
+                    label={tr("salesPeriodDay", "일별")}
+                    active={sortKey === "date"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("date")}
+                  />
+                  <SalesSortableTh
+                    align="left"
+                    muted
+                    label={tr("salesAppReconcileKind", "구분")}
+                    active={sortKey === "status"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("status")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label={`CSV ${tr("salesAppReconcileKindDelivery", "배달")}`}
+                    active={sortKey === "csvDelivery"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("csvDelivery")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label={`ERP ${tr("salesAppReconcileKindDelivery", "배달")}`}
+                    active={sortKey === "erpDelivery"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("erpDelivery")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label={tr("salesAppReconcileCsvDiff", "차이")}
+                    active={sortKey === "deliveryDiff"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("deliveryDiff")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label="CSV dine"
+                    active={sortKey === "csvDine"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("csvDine")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label="ERP dine"
+                    active={sortKey === "erpDine"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("erpDine")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label={tr("salesAppReconcileCsvDiff", "차이")}
+                    active={sortKey === "dineDiff"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("dineDiff")}
+                  />
+                  <SalesSortableTh
+                    muted
+                    label={`${tr("salesAppReconcileColAppNet", "앱 합계 순매출")} ${tr("salesAppReconcileCsvDiff", "차이")}`}
+                    active={sortKey === "netDiff"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("netDiff")}
+                  />
                 </tr>
               </thead>
               <tbody>

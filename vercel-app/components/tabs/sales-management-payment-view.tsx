@@ -7,6 +7,11 @@ import {
   sumDisplayedSalesAmounts,
 } from "@/components/tabs/sales-management-shared"
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
 import type { PosSalesPaymentBreakdown } from "@/lib/api-client"
 import type {
   SalesChannelChartRow,
@@ -39,6 +44,33 @@ export function SalesPaymentView({
   deliveryPaymentChannelRows,
   creditPaymentChannelRows,
 }: SalesPaymentViewProps) {
+  type PaymentSortKey = "method" | "sales"
+  const paymentSort = useSalesTableSort<PaymentSortKey>("sales", "desc")
+  const deliverySort = useSalesTableSort<PaymentSortKey>("sales", "desc")
+  const creditSort = useSalesTableSort<PaymentSortKey>("sales", "desc")
+
+  const sortedPaymentRows = React.useMemo(
+    () =>
+      sortSalesRows(paymentChartRows, paymentSort.sortDir, (r) =>
+        paymentSort.sortKey === "method" ? r.axisLabel : r.sales
+      ),
+    [paymentChartRows, paymentSort.sortDir, paymentSort.sortKey]
+  )
+  const sortedDeliveryRows = React.useMemo(
+    () =>
+      sortSalesRows(deliveryPaymentChannelRows, deliverySort.sortDir, (r) =>
+        deliverySort.sortKey === "method" ? r.axisLabel : r.sales
+      ),
+    [deliveryPaymentChannelRows, deliverySort.sortDir, deliverySort.sortKey]
+  )
+  const sortedCreditRows = React.useMemo(
+    () =>
+      sortSalesRows(creditPaymentChannelRows, creditSort.sortDir, (r) =>
+        creditSort.sortKey === "method" ? r.axisLabel : r.sales
+      ),
+    [creditPaymentChannelRows, creditSort.sortDir, creditSort.sortKey]
+  )
+
   return (
     <>
       <SalesPeriodTrendChartBlock
@@ -101,12 +133,23 @@ export function SalesPaymentView({
             <table className="min-w-[240px] flex-1 text-sm">
               <thead>
                 <tr className="border-b text-muted-foreground">
-                  <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
-                  <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                  <SalesSortableTh
+                    label={tr("salesPaymentMethod", "결제수단")}
+                    active={paymentSort.sortKey === "method"}
+                    dir={paymentSort.sortDir}
+                    align="left"
+                    onClick={() => paymentSort.toggleSort("method")}
+                  />
+                  <SalesSortableTh
+                    label={tr("pL_sales", "매출")}
+                    active={paymentSort.sortKey === "sales"}
+                    dir={paymentSort.sortDir}
+                    onClick={() => paymentSort.toggleSort("sales")}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {paymentChartRows.map((r) => (
+                {sortedPaymentRows.map((r) => (
                   <tr key={r.paymentKey} className="border-b">
                     <td className="py-1.5 pr-4">{r.axisLabel}</td>
                     <td className="py-1.5 text-right font-erp-numeric">
@@ -145,12 +188,23 @@ export function SalesPaymentView({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
-                <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                <SalesSortableTh
+                  label={tr("salesPaymentMethod", "결제수단")}
+                  active={deliverySort.sortKey === "method"}
+                  dir={deliverySort.sortDir}
+                  align="left"
+                  onClick={() => deliverySort.toggleSort("method")}
+                />
+                <SalesSortableTh
+                  label={tr("pL_sales", "매출")}
+                  active={deliverySort.sortKey === "sales"}
+                  dir={deliverySort.sortDir}
+                  onClick={() => deliverySort.toggleSort("sales")}
+                />
               </tr>
             </thead>
             <tbody>
-              {deliveryPaymentChannelRows.map((r) => (
+              {sortedDeliveryRows.map((r) => (
                 <tr key={r.channelKey} className="border-b">
                   <td className="py-1.5 pr-4">{r.axisLabel}</td>
                   <td className="py-1.5 text-right font-erp-numeric">
@@ -176,12 +230,23 @@ export function SalesPaymentView({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
-                <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                <SalesSortableTh
+                  label={tr("salesPaymentMethod", "결제수단")}
+                  active={creditSort.sortKey === "method"}
+                  dir={creditSort.sortDir}
+                  align="left"
+                  onClick={() => creditSort.toggleSort("method")}
+                />
+                <SalesSortableTh
+                  label={tr("pL_sales", "매출")}
+                  active={creditSort.sortKey === "sales"}
+                  dir={creditSort.sortDir}
+                  onClick={() => creditSort.toggleSort("sales")}
+                />
               </tr>
             </thead>
             <tbody>
-              {creditPaymentChannelRows.map((r) => (
+              {sortedCreditRows.map((r) => (
                 <tr key={r.channelKey} className="border-b">
                   <td className="py-1.5 pr-4">{r.axisLabel}</td>
                   <td className="py-1.5 text-right font-erp-numeric">

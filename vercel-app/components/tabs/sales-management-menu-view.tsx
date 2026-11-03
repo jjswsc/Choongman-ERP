@@ -7,12 +7,19 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { formatSalesAmount } from "@/components/tabs/sales-management-shared"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
 import type {
   SalesMenuDataRow,
   SalesPeriodBarXAxisProps,
   SalesPeriodChartRow,
   SalesPeriodChartYAxisProps,
 } from "@/components/tabs/sales-management-view-types"
+
+type MenuSortKey = "name" | "qty" | "sales"
 
 export interface SalesMenuViewProps {
   periodChartRows: SalesPeriodChartRow[]
@@ -43,6 +50,23 @@ export function SalesMenuView({
   selectedStoresKey,
   menuData,
 }: SalesMenuViewProps) {
+  const { sortKey, sortDir, toggleSort } = useSalesTableSort<MenuSortKey>("sales", "desc")
+
+  const sortedMenuData = React.useMemo(
+    () =>
+      sortSalesRows(
+        menuData,
+        sortDir,
+        (r) => {
+          if (sortKey === "name") return r.name
+          if (sortKey === "qty") return r.qty
+          return r.sales
+        },
+        (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      ),
+    [menuData, sortKey, sortDir]
+  )
+
   return (
     <>
       <SalesPeriodTrendChartBlock
@@ -76,13 +100,29 @@ export function SalesMenuView({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="py-2 text-left">{tr("salesMenu", "메뉴")}</th>
-            <th className="py-2 text-right">{tr("salesQuantity", "수량")}</th>
-            <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+            <SalesSortableTh
+              label={tr("salesMenu", "메뉴")}
+              active={sortKey === "name"}
+              dir={sortDir}
+              align="left"
+              onClick={() => toggleSort("name")}
+            />
+            <SalesSortableTh
+              label={tr("salesQuantity", "수량")}
+              active={sortKey === "qty"}
+              dir={sortDir}
+              onClick={() => toggleSort("qty")}
+            />
+            <SalesSortableTh
+              label={tr("pL_sales", "매출")}
+              active={sortKey === "sales"}
+              dir={sortDir}
+              onClick={() => toggleSort("sales")}
+            />
           </tr>
         </thead>
         <tbody>
-          {menuData.slice(0, 100).map((r) => (
+          {sortedMenuData.slice(0, 100).map((r) => (
             <tr key={r.name} className="border-b">
               <td className="py-1.5">{r.name}</td>
               <td className="py-1.5 text-right font-erp-numeric">

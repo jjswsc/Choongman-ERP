@@ -2,6 +2,11 @@
 
 import * as React from "react"
 import { formatSalesAmount, formatSalesPct } from "@/components/tabs/sales-management-shared"
+import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { translateDeliveryAppCode } from "@/lib/sales-analytics-labels"
 import type { PosSalesStoreDeliveryPlatformRow } from "@/lib/api-client"
@@ -12,6 +17,19 @@ import type {
   SalesPeriodChartYAxisProps,
   SalesStoreChartRow,
 } from "@/components/tabs/sales-management-view-types"
+
+type ChannelSortKey =
+  | "store"
+  | "dineIn"
+  | "dineInPct"
+  | "delivery"
+  | "deliveryPct"
+  | "takeout"
+  | "takeoutPct"
+  | "total"
+  | "totalPct"
+
+type DeliverySortKey = "store" | "deliveryTotal" | "deliveryTotalPct" | `plat:${string}` | `platPct:${string}`
 
 export type StoreChannelCompareRow = {
   storeName: string
@@ -94,6 +112,16 @@ export function SalesStoreCategoryView({
   posStoreDisplayName,
 }: SalesStoreCategoryViewProps) {
   const pctHeader = tr("salesSharePctShort", "%")
+  const {
+    sortKey: channelSortKey,
+    sortDir: channelSortDir,
+    toggleSort: toggleChannelSort,
+  } = useSalesTableSort<ChannelSortKey>("total", "desc")
+  const {
+    sortKey: deliverySortKey,
+    sortDir: deliverySortDir,
+    toggleSort: toggleDeliverySort,
+  } = useSalesTableSort<DeliverySortKey>("deliveryTotal", "desc")
 
   const storeChannelTotals = React.useMemo(
     () =>
@@ -109,10 +137,36 @@ export function SalesStoreCategoryView({
     [storeChannelRows]
   )
 
-  const sortedStoreChannelRows = React.useMemo(
-    () => [...storeChannelRows].sort((a, b) => b.total - a.total),
-    [storeChannelRows]
-  )
+  const sortedStoreChannelRows = React.useMemo(() => {
+    return sortSalesRows(
+      storeChannelRows,
+      channelSortDir,
+      (r) => {
+        switch (channelSortKey) {
+          case "store":
+            return r.storeDisplayName
+          case "dineIn":
+            return r.dineIn
+          case "dineInPct":
+            return pctOf(r.dineIn, r.total)
+          case "delivery":
+            return r.delivery
+          case "deliveryPct":
+            return pctOf(r.delivery, r.total)
+          case "takeout":
+            return r.takeout
+          case "takeoutPct":
+            return pctOf(r.takeout, r.total)
+          case "totalPct":
+            return pctOf(r.total, storeChannelTotals.total)
+          case "total":
+          default:
+            return r.total
+        }
+      },
+      (a, b) => a.storeDisplayName.localeCompare(b.storeDisplayName, undefined, { sensitivity: "base" })
+    )
+  }, [storeChannelRows, channelSortKey, channelSortDir, storeChannelTotals.total])
 
   const deliveryPlatformCodes = React.useMemo(() => {
     const totals = new Map<string, number>()
@@ -127,18 +181,36 @@ export function SalesStoreCategoryView({
   }, [storeDeliveryPlatformRows])
 
   const storeDeliveryMatrixRows = React.useMemo(() => {
-    return [...storeDeliveryPlatformRows]
-      .map((r) => {
-        const byCode = new Map(r.platforms.map((p) => [p.code, p.sales]))
-        return {
-          storeName: r.storeName,
-          storeDisplayName: posStoreDisplayName(r.storeName),
-          deliveryTotal: r.deliveryTotal,
-          byCode,
+    const rows = storeDeliveryPlatformRows.map((r) => {
+      const byCode = new Map(r.platforms.map((p) => [p.code, p.sales]))
+      return {
+        storeName: r.storeName,
+        storeDisplayName: posStoreDisplayName(r.storeName),
+        deliveryTotal: r.deliveryTotal,
+        byCode,
+      }
+    })
+    const grandDelivery = rows.reduce((s, r) => s + r.deliveryTotal, 0)
+    return sortSalesRows(
+      rows,
+      deliverySortDir,
+      (r) => {
+        if (deliverySortKey === "store") return r.storeDisplayName
+        if (deliverySortKey === "deliveryTotal") return r.deliveryTotal
+        if (deliverySortKey === "deliveryTotalPct") return pctOf(r.deliveryTotal, grandDelivery)
+        if (deliverySortKey.startsWith("platPct:")) {
+          const code = deliverySortKey.slice("platPct:".length)
+          return pctOf(r.byCode.get(code) || 0, r.deliveryTotal)
         }
-      })
-      .sort((a, b) => b.deliveryTotal - a.deliveryTotal)
-  }, [storeDeliveryPlatformRows, posStoreDisplayName])
+        if (deliverySortKey.startsWith("plat:")) {
+          const code = deliverySortKey.slice("plat:".length)
+          return r.byCode.get(code) || 0
+        }
+        return r.deliveryTotal
+      },
+      (a, b) => a.storeDisplayName.localeCompare(b.storeDisplayName, undefined, { sensitivity: "base" })
+    )
+  }, [storeDeliveryPlatformRows, posStoreDisplayName, deliverySortKey, deliverySortDir])
 
   const storeDeliveryColumnTotals = React.useMemo(() => {
     const byCode = new Map<string, number>()
@@ -227,15 +299,65 @@ export function SalesStoreCategoryView({
               <table className="min-w-[760px] w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
-                    <th className="px-3 py-2 text-right">{tr("salesAmountKindDineIn", "홀")}</th>
-                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
-                    <th className="px-3 py-2 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
-                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
-                    <th className="px-3 py-2 text-right">{tr("salesAmountKindTakeout", "포장")}</th>
-                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
-                    <th className="px-3 py-2 text-right">{tr("salesTotalLabel", "합계")}</th>
-                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
+                    <SalesSortableTh
+                      label={tr("salesStoreName", "매장명")}
+                      active={channelSortKey === "store"}
+                      dir={channelSortDir}
+                      align="left"
+                      onClick={() => toggleChannelSort("store")}
+                    />
+                    <SalesSortableTh
+                      label={tr("salesAmountKindDineIn", "홀")}
+                      active={channelSortKey === "dineIn"}
+                      dir={channelSortDir}
+                      onClick={() => toggleChannelSort("dineIn")}
+                    />
+                    <SalesSortableTh
+                      label={pctHeader}
+                      active={channelSortKey === "dineInPct"}
+                      dir={channelSortDir}
+                      muted
+                      onClick={() => toggleChannelSort("dineInPct")}
+                    />
+                    <SalesSortableTh
+                      label={tr("salesAmountKindDelivery", "배달")}
+                      active={channelSortKey === "delivery"}
+                      dir={channelSortDir}
+                      onClick={() => toggleChannelSort("delivery")}
+                    />
+                    <SalesSortableTh
+                      label={pctHeader}
+                      active={channelSortKey === "deliveryPct"}
+                      dir={channelSortDir}
+                      muted
+                      onClick={() => toggleChannelSort("deliveryPct")}
+                    />
+                    <SalesSortableTh
+                      label={tr("salesAmountKindTakeout", "포장")}
+                      active={channelSortKey === "takeout"}
+                      dir={channelSortDir}
+                      onClick={() => toggleChannelSort("takeout")}
+                    />
+                    <SalesSortableTh
+                      label={pctHeader}
+                      active={channelSortKey === "takeoutPct"}
+                      dir={channelSortDir}
+                      muted
+                      onClick={() => toggleChannelSort("takeoutPct")}
+                    />
+                    <SalesSortableTh
+                      label={tr("salesTotalLabel", "합계")}
+                      active={channelSortKey === "total"}
+                      dir={channelSortDir}
+                      onClick={() => toggleChannelSort("total")}
+                    />
+                    <SalesSortableTh
+                      label={pctHeader}
+                      active={channelSortKey === "totalPct"}
+                      dir={channelSortDir}
+                      muted
+                      onClick={() => toggleChannelSort("totalPct")}
+                    />
                   </tr>
                 </thead>
                 <tbody>
@@ -313,17 +435,43 @@ export function SalesStoreCategoryView({
               <table className="min-w-[880px] w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
+                    <SalesSortableTh
+                      label={tr("salesStoreName", "매장명")}
+                      active={deliverySortKey === "store"}
+                      dir={deliverySortDir}
+                      align="left"
+                      onClick={() => toggleDeliverySort("store")}
+                    />
                     {deliveryPlatformCodes.map((code) => (
                       <React.Fragment key={code}>
-                        <th className="px-3 py-2 text-right">{translateDeliveryAppCode(code, tr)}</th>
-                        <th className="px-2 py-2 text-right text-muted-foreground font-normal">
-                          {pctHeader}
-                        </th>
+                        <SalesSortableTh
+                          label={translateDeliveryAppCode(code, tr)}
+                          active={deliverySortKey === `plat:${code}`}
+                          dir={deliverySortDir}
+                          onClick={() => toggleDeliverySort(`plat:${code}`)}
+                        />
+                        <SalesSortableTh
+                          label={pctHeader}
+                          active={deliverySortKey === `platPct:${code}`}
+                          dir={deliverySortDir}
+                          muted
+                          onClick={() => toggleDeliverySort(`platPct:${code}`)}
+                        />
                       </React.Fragment>
                     ))}
-                    <th className="px-3 py-2 text-right">{tr("salesAmountKindDelivery", "배달")}</th>
-                    <th className="px-2 py-2 text-right text-muted-foreground font-normal">{pctHeader}</th>
+                    <SalesSortableTh
+                      label={tr("salesAmountKindDelivery", "배달")}
+                      active={deliverySortKey === "deliveryTotal"}
+                      dir={deliverySortDir}
+                      onClick={() => toggleDeliverySort("deliveryTotal")}
+                    />
+                    <SalesSortableTh
+                      label={pctHeader}
+                      active={deliverySortKey === "deliveryTotalPct"}
+                      dir={deliverySortDir}
+                      muted
+                      onClick={() => toggleDeliverySort("deliveryTotalPct")}
+                    />
                   </tr>
                 </thead>
                 <tbody>
