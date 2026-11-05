@@ -62,7 +62,10 @@ export type RoutineTemplateItem = {
   photoRequired: boolean
   linkType: string
   perStore: boolean
-  /** 0/없음 = 템플릿 적용 대상 전원. 있으면 해당 직원 일정에만 포함 */
+  /**
+   * 0/없음 = 템플릿 적용 대상 전원.
+   * 있으면 그 직원 일정에만 포함. 템플릿 직급과 달라도(매니저 템플릿 → 직원) 생성 시 그 사람 표로 옮긴다.
+   */
   employeeId: number
 }
 
@@ -193,6 +196,28 @@ export function managerDailyPlanPosition(job: string | null | undefined): string
   return "all"
 }
 
+/** 직원 목록 필터용 근무구역. job이 Service/Kitchen이면 그 구역, Office는 별도, 그 외·Officer는 all */
+export function dailyPlanDeptFromJob(job: string | null | undefined): "service" | "kitchen" | "office" | "all" {
+  const pos = managerDailyPlanPosition(job)
+  if (pos === "service" || pos === "kitchen") return pos
+  const m = String(job || "").trim().toLowerCase()
+  if (!m) return "all"
+  if (/(^|[^a-z])office([^a-z]|$)|오피스|สำนักงาน|ออฟฟิศ|オフィス/.test(m)) return "office"
+  return "all"
+}
+
+/** job이 비어 있으면 일정표 position(service/kitchen/office)을 쓴다 */
+export function dailyPlanDeptKey(
+  job: string | null | undefined,
+  position?: string | null
+): "service" | "kitchen" | "office" | "all" {
+  const fromJob = dailyPlanDeptFromJob(job)
+  if (fromJob !== "all") return fromJob
+  const p = String(position || "").trim().toLowerCase()
+  if (p === "service" || p === "kitchen" || p === "office") return p
+  return "all"
+}
+
 function templateEmployeeId(t: Pick<RoutineTemplate, "employeeId">): number {
   const n = Number(t.employeeId || 0)
   return Number.isFinite(n) && n > 0 ? n : 0
@@ -299,6 +324,67 @@ export function routineItemAppliesToEmployee(
 ): boolean {
   const tid = itemEmployeeId(item)
   return tid <= 0 || tid === Number(employeeId || 0)
+}
+
+/**
+ * 다른 템플릿에서 이 직원에게만 지정된 항목.
+ * 매니저 체크리스트 한 줄을 매장 직원에게 맡기면, 그 직원 일정 생성 때 여기로 모인다.
+ * 이미 이 사람 표에 고른 템플릿은 excludeTemplateIds 로 빼서 중복을 막는다.
+ */
+export function collectAssignedRoutineItems(
+  templates: RoutineTemplate[],
+  params: { employeeId: number; store: string; excludeTemplateIds?: number[] }
+): RoutineTemplateItem[] {
+  const empId = Number(params.employeeId || 0)
+  if (!(empId > 0)) return []
+  const store = norm(params.store)
+  const exclude = new Set(params.excludeTemplateIds || [])
+  const out: RoutineTemplateItem[] = []
+  const seen = new Set<string>()
+  for (const t of templates) {
+    if (t.status !== "pilot" && t.status !== "active") continue
+    if (exclude.has(t.id)) continue
+    const tStore = norm(t.storeName)
+    if (tStore && tStore !== store) continue
+    for (const it of t.items) {
+      if (itemEmployeeId(it) !== empId) continue
+      const title = String(it.title || "").trim()
+      if (!title) continue
+      const key = `${norm(title)}|${String(it.weekdays || "")}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(it)
+    }
+  }
+  return out
+}
+
+/** 지정 항목을 일정 템플릿 뒤에 붙인다. 기본 템플릿이 없어도 지정 항목만으로 표를 만들 수 있다. */
+export function withAssignedRoutineItems(
+  base: RoutineTemplate | null,
+  extras: RoutineTemplateItem[],
+  role: DailyPlanRole
+): RoutineTemplate | null {
+  if (extras.length === 0) return base
+  const items = extras.map((it, i) => ({ ...it, sortOrder: 100000 + i * 10 }))
+  if (!base) {
+    return {
+      id: 0,
+      name: "",
+      roleScope: role,
+      position: "all",
+      storeName: "",
+      employeeId: 0,
+      status: "active",
+      version: 0,
+      note: "",
+      travelMinutes: 0,
+      updatedBy: "",
+      updatedAt: "",
+      items,
+    }
+  }
+  return { ...base, items: [...base.items, ...items] }
 }
 
 /**

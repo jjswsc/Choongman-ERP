@@ -28,6 +28,7 @@ import {
   DAILY_PLAN_ROLES,
   DAILY_PLAN_WORKDAY_MINUTES,
   ROUTINE_TEMPLATE_STATUSES,
+  dailyPlanDeptKey,
   diffPersonalAgainstSharedTemplate,
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplatesForPlan,
@@ -112,6 +113,8 @@ export function DailyPlanTemplates({ t }: { t: T }) {
   const [saving, setSaving] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [roleFilter, setRoleFilter] = useState<string>("all")
+  const [tplQuery, setTplQuery] = useState("")
+  const [empQuery, setEmpQuery] = useState("")
   const [edit, setEdit] = useState<RoutineTemplateDto | null>(null)
   const [copyOpen, setCopyOpen] = useState(false)
   const [copyStores, setCopyStores] = useState<string[]>([])
@@ -167,6 +170,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
 
   const employeeOptions = useMemo(() => {
     const storeSet = new Set(storeOptions.map((s) => s.toLowerCase()))
+    const needle = empQuery.trim().toLowerCase()
     return candidates
       .filter((c) => {
         if (storeLeadOnly && storeSet.size > 0 && !storeSet.has(String(c.store || "").trim().toLowerCase())) {
@@ -176,8 +180,58 @@ export function DailyPlanTemplates({ t }: { t: T }) {
         if (edit?.roleScope === "staff") return c.planRole === "staff"
         return c.planRole === "manager" || c.planRole === "staff"
       })
+      .filter((c) => !needle || `${c.name} ${c.nick} ${c.store}`.toLowerCase().includes(needle))
       .sort((a, b) => a.store.localeCompare(b.store) || a.name.localeCompare(b.name))
-  }, [candidates, storeOptions, storeLeadOnly, edit?.roleScope])
+  }, [candidates, storeOptions, storeLeadOnly, edit?.roleScope, empQuery])
+
+  /** 검색에 안 걸려도 이미 고른 사람은 셀렉트에 남긴다 */
+  const employeeSelectOptions = useMemo(() => {
+    const ids = new Set(employeeOptions.map((c) => c.id))
+    const extra: DailyPlanCandidate[] = []
+    const keep = (id: number) => {
+      if (!(id > 0) || ids.has(id)) return
+      const hit = candidates.find((c) => c.id === id)
+      if (hit) {
+        extra.push(hit)
+        ids.add(id)
+      }
+    }
+    keep(Number(edit?.employeeId || 0))
+    for (const it of edit?.items || []) keep(Number(it.employeeId || 0))
+    return [...extra, ...employeeOptions]
+  }, [employeeOptions, candidates, edit?.employeeId, edit?.items])
+
+  /**
+   * 항목별 담당. 매장이 있는 템플릿은 직급과 상관없이 그 매장 매니저·직원.
+   * 매니저 템플릿에서도 매장 직원이 보여, 줄을 개인에게 맡기고 요일로 주간 담당을 나눈다.
+   */
+  const itemEmployeeOptions = useMemo(() => {
+    const tplStore = String(edit?.storeName || "").trim().toLowerCase()
+    const needle = empQuery.trim().toLowerCase()
+    const storeSet = new Set(storeOptions.map((s) => s.toLowerCase()))
+    const pool = !tplStore
+      ? employeeOptions
+      : candidates
+          .filter((c) => {
+            if (c.planRole !== "manager" && c.planRole !== "staff") return false
+            if (String(c.store || "").trim().toLowerCase() !== tplStore) return false
+            if (storeLeadOnly && storeSet.size > 0 && !storeSet.has(tplStore)) return false
+            if (needle && !`${c.name} ${c.nick} ${c.store}`.toLowerCase().includes(needle)) return false
+            return true
+          })
+          .sort((a, b) => a.name.localeCompare(b.name))
+    const ids = new Set(pool.map((c) => c.id))
+    const extra: DailyPlanCandidate[] = []
+    for (const it of edit?.items || []) {
+      const id = Number(it.employeeId || 0)
+      if (!(id > 0) || ids.has(id)) continue
+      const hit = candidates.find((c) => c.id === id)
+      if (!hit) continue
+      extra.push(hit)
+      ids.add(id)
+    }
+    return [...extra, ...pool]
+  }, [candidates, employeeOptions, storeOptions, storeLeadOnly, edit?.storeName, edit?.items, empQuery])
 
   const employeeNameById = useMemo(() => {
     const m = new Map<number, string>()
@@ -190,9 +244,10 @@ export function DailyPlanTemplates({ t }: { t: T }) {
       list.filter(
         (x) =>
           (showArchived || x.status !== "archived") &&
-          (roleFilter === "all" || x.roleScope === roleFilter)
+          (roleFilter === "all" || x.roleScope === roleFilter) &&
+          (!tplQuery.trim() || x.name.toLowerCase().includes(tplQuery.trim().toLowerCase()))
       ),
-    [list, showArchived, roleFilter]
+    [list, showArchived, roleFilter, tplQuery]
   )
 
   const fixedMinutes = (tpl: RoutineTemplateDto) =>
@@ -417,11 +472,18 @@ export function DailyPlanTemplates({ t }: { t: T }) {
               </p>
             </div>
             <div className="space-y-1 lg:col-span-2">
+              <Input
+                value={empQuery}
+                onChange={(e) => setEmpQuery(e.target.value)}
+                placeholder={t("dp_search_employee")}
+                className="h-9"
+                disabled={!canEdit || edit.roleScope === "supervisor"}
+              />
               <select
                 value={String(edit.employeeId || 0)}
                 onChange={(e) => {
                   const eid = Math.floor(Number(e.target.value) || 0)
-                  const hit = employeeOptions.find((c) => c.id === eid)
+                  const hit = employeeSelectOptions.find((c) => c.id === eid)
                   setEdit({
                     ...edit,
                     employeeId: eid > 0 ? eid : 0,
@@ -441,10 +503,11 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                 disabled={!canEdit || edit.roleScope === "supervisor"}
               >
                 <option value="0">{t("dp_tpl_employee_all")}</option>
-                {employeeOptions.map((c) => (
+                {employeeSelectOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                     {c.store ? ` · ${c.store}` : ""}
+                    {dailyPlanDeptKey(c.job) !== "all" ? ` · ${label.position(dailyPlanDeptKey(c.job))}` : ""}
                   </option>
                 ))}
               </select>
@@ -625,7 +688,7 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                       <select
                         value={String(it.employeeId || 0)}
                         onChange={(e) => setItem(idx, { employeeId: Math.floor(Number(e.target.value) || 0) })}
-                        className="h-8 max-w-[9rem] rounded border bg-background px-1"
+                        className="h-8 max-w-[14rem] rounded border bg-background px-1"
                         disabled={!canEdit || Number(edit.employeeId) > 0}
                         title={
                           Number(edit.employeeId) > 0
@@ -634,9 +697,12 @@ export function DailyPlanTemplates({ t }: { t: T }) {
                         }
                       >
                         <option value="0">{t("dp_tpl_employee_all")}</option>
-                        {employeeOptions.map((c) => (
+                        {itemEmployeeOptions.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
+                            {c.store && c.store.trim().toLowerCase() !== edit.storeName.trim().toLowerCase()
+                              ? ` · ${c.store}`
+                              : ""}
                           </option>
                         ))}
                       </select>
@@ -801,6 +867,12 @@ export function DailyPlanTemplates({ t }: { t: T }) {
             {t("dp_tpl_new")}
           </Button>
         ) : null}
+        <Input
+          value={tplQuery}
+          onChange={(e) => setTplQuery(e.target.value)}
+          placeholder={t("dp_search_template")}
+          className="h-8 w-56"
+        />
         <div className="flex gap-1">
           {roleFilterOptions.map((r) => (
             <Button

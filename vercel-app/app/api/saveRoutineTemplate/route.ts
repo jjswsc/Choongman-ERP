@@ -13,7 +13,13 @@ import {
   DAILY_PLAN_ROLES,
   ROUTINE_TEMPLATE_STATUSES,
 } from '@/lib/daily-plan-generate'
-import { canEditRoutineTemplate, resolveDailyPlanScope } from '@/lib/daily-plan-server'
+import {
+  canAssignDailyPlan,
+  canEditRoutineTemplate,
+  dailyPlanRoleOf,
+  loadPlanEmployeeById,
+  resolveDailyPlanScope,
+} from '@/lib/daily-plan-server'
 
 type ItemIn = {
   timeSlot?: string
@@ -148,8 +154,9 @@ async function insertTemplateItems(templateId: number, items: Record<string, unk
     await supabaseInsertMany(
       'routine_template_items',
       rows.map((it) => {
-        const { employee_id: _drop, ...rest } = it
-        return rest
+        const copy = { ...(it as Record<string, unknown>) }
+        delete copy.employee_id
+        return copy
       })
     )
   }
@@ -275,6 +282,17 @@ export async function POST(request: NextRequest) {
       })
       .filter((it) => it.title)
       .slice(0, 80)
+
+    if (storeLeadOnly) {
+      const assigneeIds = [...new Set(items.map((it) => Number(it.employee_id || 0)).filter((n) => n > 0))]
+      for (const eid of assigneeIds) {
+        const emp = await loadPlanEmployeeById(eid)
+        const role = emp ? dailyPlanRoleOf(emp) : null
+        if (!emp || !role || !canAssignDailyPlan(scope, { role, store: emp.store, employeeId: emp.id })) {
+          return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
+        }
+      }
+    }
 
     let templateId = id
     if (id) {

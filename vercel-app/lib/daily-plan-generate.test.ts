@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest"
 import {
   buildDailyPlanItems,
   buildDailyPlanWorkLogContent,
+  collectAssignedRoutineItems,
   computeActualMinutes,
   diffPersonalAgainstSharedTemplate,
   isDailyPlanProgressDone,
   isoWeekdayOfYmd,
+  dailyPlanDeptFromJob,
+  dailyPlanDeptKey,
   managerDailyPlanPosition,
   mergeDailyPlanPhotoUrls,
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplate,
+  withAssignedRoutineItems,
   pickRoutineTemplatesForPlan,
   routineItemAppliesToEmployee,
   selectActionsForPlan,
@@ -81,6 +85,20 @@ describe("managerDailyPlanPosition", () => {
     expect(managerDailyPlanPosition("Service")).toBe("service")
     expect(managerDailyPlanPosition("")).toBe("all")
     expect(managerDailyPlanPosition("Officer")).toBe("all")
+  })
+})
+
+describe("dailyPlanDeptFromJob", () => {
+  it("maps kitchen, service, office and leaves officer or blank as all", () => {
+    expect(dailyPlanDeptFromJob("Kitchen")).toBe("kitchen")
+    expect(dailyPlanDeptFromJob("ครัว")).toBe("kitchen")
+    expect(dailyPlanDeptFromJob("Service")).toBe("service")
+    expect(dailyPlanDeptFromJob("Office")).toBe("office")
+    expect(dailyPlanDeptFromJob("ออฟฟิศ")).toBe("office")
+    expect(dailyPlanDeptFromJob("Officer")).toBe("all")
+    expect(dailyPlanDeptFromJob("")).toBe("all")
+    expect(dailyPlanDeptKey("", "kitchen")).toBe("kitchen")
+    expect(dailyPlanDeptKey("Service", "kitchen")).toBe("service")
   })
 })
 
@@ -188,6 +206,74 @@ describe("routineItemAppliesToEmployee / diffPersonalAgainstSharedTemplate", () 
       hqTasks: [],
     })
     expect(items.map((i) => i.title)).toEqual(["공통", "개인만"])
+  })
+  it("moves a manager-template line onto the named staff plan for that weekday", () => {
+    const managerTpl = tpl({
+      id: 8,
+      roleScope: "manager",
+      position: "service",
+      storeName: "CM Huamak",
+      status: "active",
+      items: [
+        item({ title: "전원", employeeId: 0, weekdays: "1234567" }),
+        item({ title: "월요일 담당", employeeId: 50, weekdays: "1" }),
+        item({ title: "같은 매장 둘째", employeeId: 50, weekdays: "1" }),
+      ],
+    })
+    const otherStore = tpl({
+      id: 9,
+      roleScope: "manager",
+      storeName: "CM Silom",
+      status: "active",
+      items: [item({ title: "실롬만", employeeId: 50, weekdays: "1" })],
+    })
+    const draft = tpl({
+      id: 10,
+      roleScope: "manager",
+      storeName: "CM Huamak",
+      status: "draft",
+      items: [item({ title: "초안", employeeId: 50, weekdays: "1" })],
+    })
+    const assigned = collectAssignedRoutineItems([managerTpl, otherStore, draft], {
+      employeeId: 50,
+      store: "CM Huamak",
+    })
+    expect(assigned.map((i) => i.title)).toEqual(["월요일 담당", "같은 매장 둘째"])
+    expect(
+      collectAssignedRoutineItems([managerTpl], {
+        employeeId: 50,
+        store: "CM Huamak",
+        excludeTemplateIds: [8],
+      })
+    ).toEqual([])
+
+    const merged = withAssignedRoutineItems(null, assigned, "staff")
+    const wd = isoWeekdayOfYmd("2026-10-05")
+    expect(wd).toBe(1)
+    const plan = buildDailyPlanItems({
+      template: merged,
+      role: "staff",
+      dateYmd: "2026-10-05",
+      homeStore: "CM Huamak",
+      routeStores: [],
+      employee: { id: 50, name: "Staff" },
+      actions: [],
+      carry: [],
+      hqTasks: [],
+    })
+    expect(plan.map((i) => i.title)).toEqual(["월요일 담당", "같은 매장 둘째"])
+    const tuesday = buildDailyPlanItems({
+      template: merged,
+      role: "staff",
+      dateYmd: "2026-10-06",
+      homeStore: "CM Huamak",
+      routeStores: [],
+      employee: { id: 50, name: "Staff" },
+      actions: [],
+      carry: [],
+      hqTasks: [],
+    })
+    expect(tuesday.map((i) => i.title)).toEqual([])
   })
   it("diffs personal vs shared by title", () => {
     const personal = tpl({

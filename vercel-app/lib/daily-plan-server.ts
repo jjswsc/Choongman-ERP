@@ -53,8 +53,10 @@ import {
   buildDailyPlanWorkLogContent,
   DAILY_PLAN_ROLES,
   managerDailyPlanPosition,
+  collectAssignedRoutineItems,
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplatesForPlan,
+  withAssignedRoutineItems,
   planItemDraftKey,
   selectCarryItems,
   summarizePlanItems,
@@ -504,6 +506,138 @@ export async function getDailyPlanItems(planId: number): Promise<DailyPlanItemRo
   return (rows || []).map(normalizePlanItemRow)
 }
 
+async function delegatedCopySourceIds(sourceIds: number[]): Promise<Set<number>> {
+  const set = new Set<number>()
+  for (let i = 0; i < sourceIds.length; i += 100) {
+    const chunk = sourceIds.slice(i, i + 100)
+    const rows = ((await supabaseSelectFilter(
+      'daily_plan_items',
+      `delegated_from_item_id=in.(${chunk.join(',')})`,
+      { select: 'delegated_from_item_id', limit: 500 }
+    )) || []) as { delegated_from_item_id?: number }[]
+    for (const r of rows) {
+      const id = Number(r.delegated_from_item_id || 0)
+      if (id > 0) set.add(id)
+    }
+  }
+  return set
+}
+
+async function targetPlanForDelegatedCopy(date: string, employeeId: number, actor: string): Promise<DailyPlanRow | null> {
+  const existing = await getDailyPlanFor(date, employeeId)
+  if (existing) return existing.status === 'closed' ? null : existing
+  const emp = await loadPlanEmployeeById(employeeId)
+  if (!emp) return null
+  const role = dailyPlanRoleOf(emp) || 'staff'
+  const { plan } = await ensureDailyPlan({
+    date,
+    employee: emp,
+    role,
+    store: emp.store,
+    actor: actor || 'delegate',
+    force: true,
+  })
+  if (!plan || plan.status === 'closed') return null
+  return plan
+}
+
+/**
+ * 위임 원본은 「위임됨」인데 직원 일정 사본이 없으면 다시 만든다.
+ * 일정표 재생성 때 미착수 사본이 지워진 경우(직원 2건·위임 3건)를 연 화면에서 복구한다.
+ * 복구된 사본 수를 반환한다.
+ */
+export async function repairMissingDelegatedCopies(
+  plan: DailyPlanRow,
+  knownItems?: DailyPlanItemRow[]
+): Promise<number> {
+  if (plan.status === 'closed') return 0
+  const mine = knownItems || (await getDailyPlanItems(plan.id))
+  const pending: { src: DailyPlanItemRow; srcPlan: DailyPlanRow }[] = []
+  const seen = new Set<number>()
+  const push = (src: DailyPlanItemRow, srcPlan: DailyPlanRow) => {
+    if (seen.has(src.id)) return
+    if (src.status !== 'delegated' && src.status !== 'awaiting_verify') return
+    if (!(Number(src.delegated_to_employee_id) > 0)) return
+    seen.add(src.id)
+    pending.push({ src, srcPlan })
+  }
+  for (const it of mine) push(it, plan)
+
+  const inbound = ((await supabaseSelectFilter(
+    'daily_plan_items',
+    `delegated_to_employee_id=eq.${plan.employee_id}&status=in.(delegated,awaiting_verify)`,
+    { limit: 100, order: 'id.desc' }
+  )) || []) as Record<string, unknown>[]
+  const inboundItems = inbound.map(normalizePlanItemRow).filter((it) => !seen.has(it.id))
+  if (inboundItems.length > 0) {
+    const planIds = [...new Set(inboundItems.map((it) => it.plan_id))].filter((id) => id > 0)
+    const planRows = planIds.length
+      ? (((await supabaseSelectFilter('daily_plans', `id=in.(${planIds.join(',')})`, { limit: 100 })) ||
+          []) as Record<string, unknown>[])
+      : []
+    const byId = new Map(planRows.map((r) => [normalizePlanRow(r).id, normalizePlanRow(r)]))
+    for (const src of inboundItems) {
+      const srcPlan = byId.get(src.plan_id)
+      if (!srcPlan || srcPlan.plan_date !== plan.plan_date || srcPlan.id === plan.id) continue
+      push(src, srcPlan)
+    }
+  }
+  if (pending.length === 0) return 0
+
+  const have = await delegatedCopySourceIds(pending.map((p) => p.src.id))
+  const missing = pending.filter((p) => !have.has(p.src.id))
+  if (missing.length === 0) return 0
+
+  const nowIso = new Date().toISOString()
+  let created = 0
+  for (const { src, srcPlan } of missing) {
+    const targetId = Number(src.delegated_to_employee_id)
+    const targetPlan =
+      targetId === plan.employee_id
+        ? plan
+        : await targetPlanForDelegatedCopy(srcPlan.plan_date, targetId, src.delegated_by_name || srcPlan.employee_name)
+    if (!targetPlan || targetPlan.status === 'closed') continue
+    const again = await delegatedCopySourceIds([src.id])
+    if (again.has(src.id)) continue
+    const last = ((await supabaseSelectFilter('daily_plan_items', `plan_id=eq.${targetPlan.id}`, {
+      select: 'sort_order',
+      order: 'sort_order.desc',
+      limit: 1,
+    })) || []) as { sort_order?: number }[]
+    const finished = src.status === 'awaiting_verify'
+    await supabaseInsert('daily_plan_items', {
+      plan_id: targetPlan.id,
+      source: src.source || 'routine',
+      ref_id: src.ref_id || '',
+      store_name: src.store_name || targetPlan.store_name || '',
+      time_slot: src.time_slot || '',
+      block: src.block || '',
+      category: src.category || '기타',
+      title: String(src.title || '').slice(0, 300),
+      description: String(src.description || '').slice(0, 2000),
+      est_minutes: src.est_minutes,
+      link_type: src.link_type || 'none',
+      photo_required: src.photo_required,
+      status: finished ? 'done' : 'todo',
+      note: src.note || '',
+      sort_order: Number(last?.[0]?.sort_order || 0) + 10,
+      delegated_from_item_id: src.id,
+      delegated_by_name: String(src.delegated_by_name || srcPlan.employee_name || '').slice(0, 120),
+      ...(finished
+        ? {
+            finished_at: src.finished_at || nowIso,
+            actual_minutes: src.actual_minutes ?? src.est_minutes,
+          }
+        : {}),
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    await touchDailyPlanProgress(targetPlan.id)
+    created += 1
+  }
+  return created
+}
+
 export function planItemLite(i: DailyPlanItemRow): PlanItemLite {
   return {
     source: i.source,
@@ -640,6 +774,12 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
     employeeId: p.employee.id,
   })
   const template = mergeRoutineTemplatesForPlan(picked)
+  const assignedFromOther = collectAssignedRoutineItems(ctx.templates, {
+    employeeId: p.employee.id,
+    store: homeStore,
+    excludeTemplateIds: picked.map((t) => t.id),
+  })
+  const templateForItems = withAssignedRoutineItems(template, assignedFromOther, p.role)
 
   let carry: CarryLite[] = []
   if (!existing) {
@@ -647,7 +787,7 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   }
 
   const drafts = buildDailyPlanItems({
-    template,
+    template: templateForItems,
     role: p.role,
     dateYmd: p.date,
     homeStore,
@@ -710,9 +850,10 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   }
 
   const replaceSources = ['routine', 'visit', 'action', ...(p.hqTasks ? ['hq_task'] : [])]
+  // 위임받은 사본(delegated_from)은 미착수여도 유지. 지우면 위임자 화면은 「위임됨」인데 직원 일정에서는 사라진다.
   await supabaseDeleteByFilter(
     'daily_plan_items',
-    `plan_id=eq.${existing.id}&status=eq.todo&source=in.(${replaceSources.join(',')})&block=neq.${MANUAL_BLOCK}`
+    `plan_id=eq.${existing.id}&status=eq.todo&source=in.(${replaceSources.join(',')})&block=neq.${MANUAL_BLOCK}&delegated_from_item_id=is.null`
   )
   const kept = await getDailyPlanItems(existing.id)
   const keptKeys = new Set(kept.map(itemRowKey))
