@@ -101,6 +101,63 @@ export function computePlanTimeline(
   return { slots, dayStart, dayEnd: cursor }
 }
 
+/**
+ * 자정을 넘는 근무의 다음날 아침 종료 시각(분).
+ * 22:00–08:00, 18:00–02:00, 근무표 24시+ 표기(32:00 = 익일 08:00)를 받는다.
+ * 같은 날 안에 끝나는 근무는 null.
+ */
+export function overnightShiftEndMin(shiftIn: string, shiftOut: string): number | null {
+  const inn = hmToMin(shiftIn)
+  const out = hmToMin(shiftOut)
+  if (inn == null || out == null) return null
+  const noon = 12 * 60
+  if (out >= 24 * 60) {
+    const morning = out % (24 * 60)
+    if (morning >= noon) return null
+    return morning
+  }
+  if (out <= inn && out < noon) return out
+  return null
+}
+
+/**
+ * 방콕 벽시계가 아직 그 야간 근무 안인지.
+ * 예정 퇴근 + 59분까지, 그리고 늦어도 11:59까지만 전날 표를 유지한다.
+ * 22:00–08:00은 익일 08:59까지 (근태와 같은 상한).
+ */
+export function overnightPlanStillActive(shiftIn: string, shiftOut: string, nowMin: number): boolean {
+  const end = overnightShiftEndMin(shiftIn, shiftOut)
+  if (end == null) return false
+  const until = Math.min(end + 59, 11 * 60 + 59)
+  return nowMin <= until
+}
+
+/** 오늘(달력) 조회일 때, 아직 안 끝난 전날 야간 표를 보여줄지 */
+export function shouldKeepOvernightPlan(params: {
+  requestedYmd: string
+  calendarTodayYmd: string
+  nowMin: number
+  yesterdayStatus: string
+  shiftIn: string
+  shiftOut: string
+}): boolean {
+  if (params.requestedYmd !== params.calendarTodayYmd) return false
+  if (String(params.yesterdayStatus || "").trim() === "closed") return false
+  return overnightPlanStillActive(params.shiftIn, params.shiftOut, params.nowMin)
+}
+
+/**
+ * 야간 표 타임라인은 22:00부터 24:00+로 이어진다.
+ * 다음날 아침 벽시계(00:00–11:59)는 비교용으로 24시간을 더한다.
+ */
+export function timelineNowMin(shiftIn: string, shiftOut: string, wallNowMin: number): number {
+  if (overnightShiftEndMin(shiftIn, shiftOut) == null) return wallNowMin
+  const inn = hmToMin(shiftIn)
+  if (inn == null) return wallNowMin
+  if (wallNowMin < inn) return wallNowMin + 24 * 60
+  return wallNowMin
+}
+
 /** 시작 안 한 항목의 계획 시작 대비 지연 분 (grace 이하면 0) */
 export function lateMinutes(slot: TimelineSlot | undefined, status: string, nowMin: number, grace = 0): number {
   if (!slot || status !== "todo") return 0

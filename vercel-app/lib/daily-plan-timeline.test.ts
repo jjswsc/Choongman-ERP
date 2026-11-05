@@ -4,8 +4,12 @@ import {
   hmToMin,
   lateMinutes,
   minToHm,
+  overnightPlanStillActive,
+  overnightShiftEndMin,
   planDayStart,
+  shouldKeepOvernightPlan,
   suggestVisitStores,
+  timelineNowMin,
   type TimelineItemInput,
 } from "@/lib/daily-plan-timeline"
 
@@ -95,5 +99,74 @@ describe("daily-plan-timeline", () => {
     expect(r.map((x) => x.store)).toEqual(["A", "D", "C"])
     expect(r[0]).toMatchObject({ overdue: 1, daysSinceVisit: 1 })
     expect(r[1].daysSinceVisit).toBeNull()
+  })
+})
+
+describe("야간 근무표 — 자정 이후에도 출근일 표를 유지", () => {
+  const at = (hm: string) => hmToMin(hm) as number
+
+  it("22:00–08:00과 32:00 표기 모두 익일 08:00에 끝난다", () => {
+    expect(overnightShiftEndMin("22:00", "08:00")).toBe(at("08:00"))
+    expect(overnightShiftEndMin("22:00", "32:00")).toBe(at("08:00"))
+    expect(overnightShiftEndMin("18:00", "02:00")).toBe(at("02:00"))
+    expect(overnightShiftEndMin("09:00", "18:00")).toBeNull()
+    expect(overnightShiftEndMin("13:00", "22:00")).toBeNull()
+  })
+
+  it("더 스트리트 심야는 07:58에 열려 있고 09:00에는 닫힌다", () => {
+    expect(overnightPlanStillActive("22:00", "08:00", at("07:58"))).toBe(true)
+    expect(overnightPlanStillActive("22:00", "08:00", at("08:59"))).toBe(true)
+    expect(overnightPlanStillActive("22:00", "08:00", at("09:00"))).toBe(false)
+    expect(overnightPlanStillActive("22:00", "08:00", at("00:10"))).toBe(true)
+    expect(overnightPlanStillActive("18:00", "02:00", at("02:30"))).toBe(true)
+    expect(overnightPlanStillActive("18:00", "02:00", at("03:00"))).toBe(false)
+    expect(overnightPlanStillActive("09:00", "18:00", at("07:58"))).toBe(false)
+  })
+
+  it("달력상 오늘 조회일 때만 전날 미마감 야간 표를 고른다", () => {
+    expect(
+      shouldKeepOvernightPlan({
+        requestedYmd: "2026-11-05",
+        calendarTodayYmd: "2026-11-05",
+        nowMin: at("07:58"),
+        yesterdayStatus: "in_progress",
+        shiftIn: "22:00",
+        shiftOut: "08:00",
+      })
+    ).toBe(true)
+    expect(
+      shouldKeepOvernightPlan({
+        requestedYmd: "2026-11-05",
+        calendarTodayYmd: "2026-11-05",
+        nowMin: at("07:58"),
+        yesterdayStatus: "closed",
+        shiftIn: "22:00",
+        shiftOut: "08:00",
+      })
+    ).toBe(false)
+    expect(
+      shouldKeepOvernightPlan({
+        requestedYmd: "2026-11-04",
+        calendarTodayYmd: "2026-11-05",
+        nowMin: at("07:58"),
+        yesterdayStatus: "in_progress",
+        shiftIn: "22:00",
+        shiftOut: "08:00",
+      })
+    ).toBe(false)
+  })
+
+  it("아침 벽시계는 야간 타임라인(24:00+)과 비교된다", () => {
+    expect(timelineNowMin("22:00", "08:00", at("07:58"))).toBe(at("07:58") + 24 * 60)
+    expect(timelineNowMin("22:00", "08:00", at("22:30"))).toBe(at("22:30"))
+    expect(timelineNowMin("09:00", "18:00", at("07:58"))).toBe(at("07:58"))
+    const slotStart = at("23:00")
+    const late = lateMinutes(
+      { start: slotStart, end: slotStart + 10, travel: 0, pushed: false },
+      "todo",
+      timelineNowMin("22:00", "08:00", at("07:58")),
+      30
+    )
+    expect(late).toBeGreaterThan(30)
   })
 })

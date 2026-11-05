@@ -28,7 +28,7 @@ import {
   type DailyPlanItemAction,
   type DailyPlanTeamMember,
 } from "@/lib/api-client"
-import { getBangkokDateTimeString, getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { addBangkokCalendarDays, getBangkokDateTimeString, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useLang } from "@/lib/lang-context"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
@@ -38,6 +38,8 @@ import {
   hmToMin,
   lateMinutes,
   minToHm,
+  overnightPlanStillActive,
+  timelineNowMin,
 } from "@/lib/daily-plan-timeline"
 import { DailyPlanActionSheet } from "@/components/daily-plan/daily-plan-action-sheet"
 
@@ -116,15 +118,22 @@ export function DailyPlanItems(props: {
   const editable = !readOnly && !closed
   /** 마감 후에도 사진·메모 소급 첨부 가능 (상태 변경은 editable만) */
   const canAttachEvidence = !readOnly
-  const isToday = plan.plan_date === getBangkokTodayDateString()
-  const [nowMin, setNowMin] = useState(bangkokNowMin)
+  const calendarToday = getBangkokTodayDateString()
+  const [wallNowMin, setWallNowMin] = useState(bangkokNowMin)
+  /** 자정 이후에도 전날 야간 근무표는 퇴근 전까지 오늘 표처럼 진행·지연을 표시 */
+  const onOvernight =
+    !closed &&
+    plan.plan_date === addBangkokCalendarDays(calendarToday, -1) &&
+    overnightPlanStillActive(plan.shift_in, plan.shift_out, wallNowMin)
+  const isLive = !closed && (plan.plan_date === calendarToday || onOvernight)
+  const nowMin = timelineNowMin(plan.shift_in, plan.shift_out, wallNowMin)
   const targets = (delegateTargets || []).filter((m) => m.employeeId !== plan.employee_id)
 
   useEffect(() => {
-    if (!isToday) return
-    const id = window.setInterval(() => setNowMin(bangkokNowMin()), 60_000)
+    if (!isLive) return
+    const id = window.setInterval(() => setWallNowMin(bangkokNowMin()), 60_000)
     return () => window.clearInterval(id)
-  }, [isToday])
+  }, [isLive])
 
   /** 외국인 직원: 제목·설명·메모·스킵사유 전부 번역 (모바일은 자동번역 토글 없음 → force) */
   const textsToTranslate = useMemo(() => {
@@ -163,7 +172,7 @@ export function DailyPlanItems(props: {
     [items, plan.shift_in, travelMinutes]
   )
 
-  const showNow = isToday && !closed
+  const showNow = isLive
   const nowIndex = showNow ? items.findIndex((i) => (timeline.slots.get(i.id)?.start ?? 0) > nowMin) : -1
 
   const run = async (item: DailyPlanItem, action: DailyPlanItemAction, extra: Record<string, unknown> = {}) => {
@@ -282,7 +291,7 @@ export function DailyPlanItems(props: {
       />
       {items.map((it, idx) => {
         const slot = timeline.slots.get(it.id)
-        const late = isToday && !closed ? lateMinutes(slot, it.status, nowMin, DAILY_PLAN_LATE_GRACE_MINUTES) : 0
+        const late = isLive ? lateMinutes(slot, it.status, nowMin, DAILY_PLAN_LATE_GRACE_MINUTES) : 0
         const busy = busyId === it.id
         const photos = it.photo_urls || []
         const isVisit = it.source === "visit"

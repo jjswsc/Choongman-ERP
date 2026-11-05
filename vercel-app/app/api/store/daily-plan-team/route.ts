@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
-import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
+import { addBangkokCalendarDays, getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { isDailyPlanProgressDone } from '@/lib/daily-plan-generate'
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
   computePlanTimeline,
   hmToMin,
   lateMinutes,
+  overnightPlanStillActive,
+  timelineNowMin,
 } from '@/lib/daily-plan-timeline'
 import {
   canListDailyPlanCandidate,
@@ -15,10 +17,13 @@ import {
   getDailyPlanItems,
   loadActivePlanEmployees,
   loadTravelMinutesByTemplate,
+  normalizePlanRow,
   resolveDailyPlanScope,
   travelMinutesOfPlan,
   type DailyPlanRole,
+  type DailyPlanRow,
 } from '@/lib/daily-plan-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
@@ -61,9 +66,22 @@ export async function GET(request: NextRequest) {
       })
 
     const nowMin = hmToMin(nowHm) ?? 0
+    const overnightByEmp = new Map<number, DailyPlanRow>()
+    if (date === today && nowMin < 12 * 60) {
+      const yesterday = addBangkokCalendarDays(today, -1)
+      const rows = ((await supabaseSelectFilter(
+        'daily_plans',
+        `plan_date=eq.${yesterday}&status=neq.closed`,
+        { limit: 2000 }
+      )) || []) as Record<string, unknown>[]
+      for (const row of rows) {
+        const p = normalizePlanRow(row)
+        if (overnightPlanStillActive(p.shift_in, p.shift_out, nowMin)) overnightByEmp.set(p.employee_id, p)
+      }
+    }
     const members = []
     for (const e of candidates) {
-      const plan = await getDailyPlanFor(date, e.id)
+      const plan = (date === today ? overnightByEmp.get(e.id) : undefined) || (await getDailyPlanFor(date, e.id))
       let summary = { total: 0, done: 0, open: 0, late: 0, doneRate: 0 }
       if (plan) {
         const items = await getDailyPlanItems(plan.id)
@@ -80,9 +98,10 @@ export async function GET(request: NextRequest) {
           })),
           { shiftIn: plan.shift_in, travelMinutes: travelMinutesOfPlan(plan, travel) }
         )
+        const compareMin = timelineNowMin(plan.shift_in, plan.shift_out, nowMin)
         const late =
           date === today
-            ? items.filter((i) => lateMinutes(slots.get(i.id), i.status, nowMin, DAILY_PLAN_LATE_GRACE_MINUTES) > 0)
+            ? items.filter((i) => lateMinutes(slots.get(i.id), i.status, compareMin, DAILY_PLAN_LATE_GRACE_MINUTES) > 0)
                 .length
             : date < today
               ? work.filter((i) => i.status === 'todo' || i.status === 'doing').length
@@ -117,7 +136,9 @@ export async function GET(request: NextRequest) {
 
     let mePlanId: number | null = null
     if (scope.actorEmployeeId) {
-      const mine = await getDailyPlanFor(date, scope.actorEmployeeId)
+      const mine =
+        (date === today ? overnightByEmp.get(scope.actorEmployeeId) : undefined) ||
+        (await getDailyPlanFor(date, scope.actorEmployeeId))
       mePlanId = mine?.id ?? null
     }
 
