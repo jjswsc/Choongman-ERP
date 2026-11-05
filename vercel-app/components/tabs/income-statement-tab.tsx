@@ -1076,6 +1076,23 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
       amount: q(data.expenseBreakdown?.payrollExpense ?? 0),
       pct: view.pct(data.expenseBreakdown?.payrollExpense ?? 0),
     })
+    if ((data.expenseBreakdown?.payrollExpense ?? 0) > 0) {
+      rows.push({
+        label: `      · ${t("pL_payrollIncludedSso")}`,
+        amount: q(data.expenseBreakdown?.payrollSso ?? 0),
+        pct: view.pct(data.expenseBreakdown?.payrollSso ?? 0),
+      })
+      rows.push({
+        label: `      · ${t("pL_payrollIncludedTax")}`,
+        amount: q(data.expenseBreakdown?.payrollWithholding ?? 0),
+        pct: view.pct(data.expenseBreakdown?.payrollWithholding ?? 0),
+      })
+      rows.push({
+        label: `    - ${t("pL_payrollEmployerSso")}`,
+        amount: q(data.expenseBreakdown?.payrollEmployerSso ?? 0),
+        pct: view.pct(data.expenseBreakdown?.payrollEmployerSso ?? 0),
+      })
+    }
     rows.push({
       label: `    - ${t("pL_expenseSourceDepreciation") || "Depreciation"}`,
       amount: q(data.expenseBreakdown?.depreciationExpense ?? 0),
@@ -2019,6 +2036,66 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                             ))}
                                           </tr>
                                           <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-12 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                              · {t("pL_payrollIncludedSso")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "payrollSso"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-12 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                              · {t("pL_payrollIncludedTax")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "payrollWithholding"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
+                                            <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                              - {t("pL_payrollEmployerSso")}
+                                            </td>
+                                            {incomeCompareCols.map((c) => (
+                                              <td
+                                                key={c.key}
+                                                className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                                title={t("fs_compareYearAggregateHint")}
+                                              >
+                                                {formatBath(
+                                                  yearlyExpenseBreakdownField(
+                                                    compareIncomeRows,
+                                                    c.key,
+                                                    "payrollEmployerSso"
+                                                  )
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
+                                          <tr className="border-b bg-muted/10 last:border-0">
                                             <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
                                               - {t("pL_expenseSourceDepreciation")}
                                             </td>
@@ -2448,6 +2525,51 @@ export function IncomeStatementTab(props: IncomeStatementTabProps = {}) {
                                           {rowData.error
                                             ? "—"
                                             : formatBath(rowData.expenseBreakdown?.payrollExpense ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-12 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                        · {t("pL_payrollIncludedSso")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.payrollSso ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-12 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                        · {t("pL_payrollIncludedTax")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.payrollWithholding ?? 0)}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                    <tr className="border-b bg-muted/10">
+                                      <td className="p-1.5 pl-8 text-sm text-muted-foreground sticky left-0 z-10 bg-muted/10 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                                        - {t("pL_payrollEmployerSso")}
+                                      </td>
+                                      {compareIncomeRows.map(({ ym, data: rowData }) => (
+                                        <td
+                                          key={ym}
+                                          className="p-1.5 text-right font-mono text-sm text-muted-foreground whitespace-nowrap"
+                                        >
+                                          {rowData.error
+                                            ? "—"
+                                            : formatBath(rowData.expenseBreakdown?.payrollEmployerSso ?? 0)}
                                         </td>
                                       ))}
                                     </tr>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   aggregatePayrollRecordsForPl,
+  employerSsoExpenseFromEmployeeSso,
+  isEmployerSsoCashDuplicate,
   isPayrollRecordIncludedInPl,
   isSalaryLikePlExpenseRow,
   payrollRecordGrossExpenseBaht,
@@ -12,6 +14,43 @@ import {
 describe('payrollRecordGrossExpenseBaht', () => {
   it('sums net + sso + tax', () => {
     expect(payrollRecordGrossExpenseBaht({ net_pay: 9000, sso: 500, tax: 200 })).toBe(9700)
+  })
+})
+
+describe('aggregatePayrollRecordsForPl', () => {
+  it('keeps employee SSO and withholding inside the payroll total', () => {
+    const agg = aggregatePayrollRecordsForPl({
+      rows: [
+        { id: 1, store: 'CM Silom', name: 'A', net_pay: 9000, sso: 500, tax: 200, status: '확정' },
+      ],
+      storeFilter: 'All',
+      isHQ: false,
+      preferredSubjectId: 10,
+      salarySubjectIds: new Set([10]),
+    })
+    expect(agg.total).toBe(9700)
+    expect(agg.ssoTotal).toBe(500)
+    expect(agg.taxTotal).toBe(200)
+    expect(employerSsoExpenseFromEmployeeSso(agg.ssoTotal)).toBe(500)
+  })
+})
+
+describe('isEmployerSsoCashDuplicate', () => {
+  it('skips an SSO bank payment only after employer SSO is on the payroll month', () => {
+    expect(
+      isEmployerSsoCashDuplicate({
+        memo: 'ประกันสังคม 08/2569',
+        ssoSubjectId: 9,
+        employerSsoOnPayroll: 500,
+      })
+    ).toBe(true)
+    expect(
+      isEmployerSsoCashDuplicate({
+        memo: 'ประกันสังคม 08/2569',
+        ssoSubjectId: 9,
+        employerSsoOnPayroll: 0,
+      })
+    ).toBe(false)
   })
 })
 

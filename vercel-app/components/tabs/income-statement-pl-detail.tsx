@@ -604,6 +604,43 @@ export function IncomePlDetailTableContent({
                   {view.pct(data.expenseBreakdown?.payrollExpense ?? 0)}
                 </td>
               </tr>
+              {(data.expenseBreakdown?.payrollExpense ?? 0) > 0 ? (
+                <>
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, "pl-6 sm:pl-16")}>
+                      · {t("pL_payrollIncludedSso")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(data.expenseBreakdown?.payrollSso ?? 0)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>
+                      {view.pct(data.expenseBreakdown?.payrollSso ?? 0)}
+                    </td>
+                  </tr>
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, "pl-6 sm:pl-16")}>
+                      · {t("pL_payrollIncludedTax")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(data.expenseBreakdown?.payrollWithholding ?? 0)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>
+                      {view.pct(data.expenseBreakdown?.payrollWithholding ?? 0)}
+                    </td>
+                  </tr>
+                  <tr className={accountingPlSubRowCn}>
+                    <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
+                      - {t("pL_payrollEmployerSso")}
+                    </td>
+                    <td className={`${accountingPlTdAmountCn} text-muted-foreground`}>
+                      {formatBath(data.expenseBreakdown?.payrollEmployerSso ?? 0)}
+                    </td>
+                    <td className={`${accountingPlTdPctCn}`}>
+                      {view.pct(data.expenseBreakdown?.payrollEmployerSso ?? 0)}
+                    </td>
+                  </tr>
+                </>
+              ) : null}
               <tr className={accountingPlSubRowCn}>
                 <td className={cn(accountingPlSubTdLabelCn, accountingPlDeepIndentLabelCn)}>
                   - {t("pL_expenseSourceDepreciation") || "Depreciation"}

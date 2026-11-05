@@ -39,8 +39,11 @@ import {
 } from '@/lib/income-statement-item-vat'
 import { loadItemTaxTypeMap } from '@/lib/income-statement-item-vat-server'
 import {
+  employerSsoExpenseFromEmployeeSso,
+  isEmployerSsoCashDuplicate,
   isSalaryLikePlExpenseRow,
   loadPayrollAggregateForIncomeStatement,
+  resolveEmployerSsoExpenseSubjectId,
   resolveSalaryCashPlDecision,
 } from '@/lib/accounting-payroll-pl'
 import { plFetchEndStrWithPayrollPayWindow } from '@/lib/payroll-utils'
@@ -150,6 +153,10 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   let fixedExpenses = 0
   let stockInboundExpense = 0
   let payrollExpense = 0
+  let payrollSso = 0
+  let payrollWithholding = 0
+  let payrollEmployerSso = 0
+  let employerSsoCashDeduped = 0
   let payrollCashDeduped = 0
   let skippedNonPlExpense = 0
   let bankCategoryFixedExpense = 0
@@ -165,9 +172,36 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     isHQ,
     subjectMeta,
   })
+  const employerSsoSubjectId = resolveEmployerSsoExpenseSubjectId(subjectMeta)
   if (payrollAgg.total > 0) {
     payrollExpense = payrollAgg.total
+    payrollSso = payrollAgg.ssoTotal
+    payrollWithholding = payrollAgg.taxTotal
+    payrollEmployerSso = employerSsoExpenseFromEmployeeSso(payrollAgg.ssoTotal)
     addToSubjectMap(expenseBySubjectMap, payrollAgg.preferredSubjectId, payrollAgg.total)
+    if (payrollEmployerSso > 0) {
+      addToSubjectMap(expenseBySubjectMap, employerSsoSubjectId, payrollEmployerSso)
+    }
+  }
+  const skipEmployerSsoCash = (row: {
+    memo?: string | null
+    note?: string | null
+    account_subject_id?: number | null
+    amount?: number
+  }) => {
+    if (
+      !isEmployerSsoCashDuplicate({
+        memo: row.memo,
+        note: row.note,
+        accountSubjectId: row.account_subject_id,
+        ssoSubjectId: employerSsoSubjectId,
+        employerSsoOnPayroll: payrollEmployerSso,
+      })
+    ) {
+      return false
+    }
+    employerSsoCashDeduped += Math.abs(Number(row.amount) || 0)
+    return true
   }
   const payrollPayWindowEndStr = plFetchEndStrWithPayrollPayWindow(endStr)
 
@@ -398,6 +432,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       if (!isHqAccountingStoreRow(st)) continue
       const salaryDecision = classifySalaryCashForPl(r)
       if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+      if (skipEmployerSsoCash(r)) continue
       if (salaryDecision === 'not-salary') {
         const td = String(r.trans_date || '').slice(0, 10)
         if (td < startStr || td > endStr) continue
@@ -457,6 +492,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
           const salaryDecision = classifySalaryCashForPl(r)
           if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+          if (skipEmployerSsoCash(r)) continue
           if (salaryDecision === 'not-salary') {
             if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
           }
@@ -744,6 +780,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     for (const r of pettyRows || []) {
       const salaryDecision = classifySalaryCashForPl(r)
       if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+      if (skipEmployerSsoCash(r)) continue
       if (salaryDecision === 'not-salary') {
         const td = String(r.trans_date || '').slice(0, 10)
         if (td < startStr || td > endStr) continue
@@ -806,6 +843,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
           if (['transfer', 'correction', 'loan', 'advance', 'unclassified', 'purchase_payment'].includes(cat)) continue
           const salaryDecision = classifySalaryCashForPl(r)
           if (salaryDecision === 'skip-payroll-dup' || salaryDecision === 'skip-other-month') continue
+          if (skipEmployerSsoCash(r)) continue
           if (salaryDecision === 'not-salary') {
             if (!bankExpenseInPlPeriod(String(r.trans_date || ''), r.expense_date, startStr, endStr)) continue
           }
@@ -942,6 +980,11 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
   if (payrollCashDeduped > 0) {
     warnings.push(
       `확정 급여(근태 귀속월)가 손익에 반영되어, 익월 지급분 통장·패티 급여성 출금 약 ฿${Math.round(payrollCashDeduped).toLocaleString('en-US')}은 이중 방지를 위해 제외했습니다.`
+    )
+  }
+  if (employerSsoCashDeduped > 0) {
+    warnings.push(
+      `사업주 사회보험을 급여 월 비용으로 넣었고, 같은 납부의 통장·패티 출금 약 ฿${Math.round(employerSsoCashDeduped).toLocaleString('en-US')}은 이중 방지를 위해 제외했습니다.`
     )
   }
   if (skippedNonPlExpense > 0) {
@@ -1121,6 +1164,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       fixedExpenses,
       stockInboundExpense: round2(stockInboundExpense),
       payrollExpense: round2(payrollExpense),
+      payrollSso: round2(payrollSso),
+      payrollWithholding: round2(payrollWithholding),
+      payrollEmployerSso: round2(payrollEmployerSso),
       depreciationExpense: round2(depreciationExpense),
       franchiseRoyalty: round2(franchiseRoyaltyExpense),
       franchiseDeliveryGp: round2(franchiseDeliveryGpExpense),

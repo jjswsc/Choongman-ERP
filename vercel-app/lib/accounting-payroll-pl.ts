@@ -5,6 +5,7 @@
  * - 같은 스코프에 확정 급여가 있으면 통장/패티의 급여성 출금은 이중 방지를 위해 제외
  */
 import { storeMatchesIncomeFilter } from '@/lib/accounting-store-match'
+import { looksLikeSsoRemittanceMemo } from '@/lib/bank-transaction-note-meta'
 import { isHeadOfficeLikeStoreName } from '@/lib/internal-outbound'
 import { isOfficeStore } from '@/lib/permissions'
 import { payrollAttributionMonthFromPayYmd } from '@/lib/payroll-utils'
@@ -35,7 +36,7 @@ export type PayrollPlRecordRow = {
   status?: string | null
 }
 
-/** net + 근로자 SSO + 원천 = 총인건비(사업주 SSO는 별도 납부예정·지출) */
+/** net + 근로자 SSO + 원천 = 총인건비. 사업주 SSO는 같은 금액으로 별도 비용 */
 export function payrollRecordGrossExpenseBaht(row: {
   net_pay?: number | null
   sso?: number | null
@@ -45,6 +46,49 @@ export function payrollRecordGrossExpenseBaht(row: {
     0,
     (Number(row.net_pay) || 0) + (Number(row.sso) || 0) + (Number(row.tax) || 0)
   )
+}
+
+/** ม.33 사업주 부담 = 근로자 SSO와 동액. 급여 합계(근로자분)와 따로 비용 처리 */
+export function employerSsoExpenseFromEmployeeSso(employeeSso: number): number {
+  return Math.round(Math.max(0, Number(employeeSso) || 0) * 100) / 100
+}
+
+type SsoExpenseSubjectMeta = {
+  code: string
+  name: string
+  nameEn?: string | null
+  nameTh?: string | null
+  type: string
+  pAndLSection?: string | null
+}
+
+export function resolveEmployerSsoExpenseSubjectId(
+  subjectMeta: Iterable<readonly [number, SsoExpenseSubjectMeta]>
+): number | null {
+  let named: number | null = null
+  for (const [id, meta] of subjectMeta) {
+    if (meta.type !== 'expense') continue
+    if (meta.pAndLSection === 'cost') continue
+    const text = `${meta.code} ${meta.name} ${meta.nameEn || ''} ${meta.nameTh || ''}`.toLowerCase()
+    if (!/sso|social|ประกัน|사회보험/.test(text)) continue
+    if (String(meta.code || '').trim() === '5521') return id
+    if (named == null) named = id
+  }
+  return named
+}
+
+/** 급여에서 사업주 SSO를 비용으로 넣었으면, 같은 납부의 통장·패티는 빼 이중계상을 막는다. */
+export function isEmployerSsoCashDuplicate(params: {
+  memo?: string | null
+  note?: string | null
+  accountSubjectId?: number | null
+  ssoSubjectId: number | null
+  employerSsoOnPayroll: number
+}): boolean {
+  if (!(params.employerSsoOnPayroll > 0)) return false
+  if (looksLikeSsoRemittanceMemo(params.memo) || looksLikeSsoRemittanceMemo(params.note)) return true
+  const sid = Number(params.accountSubjectId || 0)
+  return params.ssoSubjectId != null && sid > 0 && sid === params.ssoSubjectId
 }
 
 export function isPayrollRecordIncludedInPl(status: string | null | undefined): boolean {
@@ -153,6 +197,10 @@ export function payrollStoreInIncomeScope(params: {
 
 export type PayrollPlAggregate = {
   total: number
+  /** 직원 부담 사회보험. total(실지급+SSO+원천) 안에 이미 포함 */
+  ssoTotal: number
+  /** 원천세. total 안에 이미 포함 */
+  taxTotal: number
   preferredSubjectId: number | null
   salarySubjectIds: Set<number>
   rowCount: number
@@ -176,6 +224,8 @@ export function aggregatePayrollRecordsForPl(params: {
 }): PayrollPlAggregate {
   const records: PayrollPlAggregate['records'] = []
   let total = 0
+  let ssoTotal = 0
+  let taxTotal = 0
   for (const r of params.rows) {
     if (!isPayrollRecordIncludedInPl(r.status)) continue
     const store = String(r.store || '').trim()
@@ -186,20 +236,26 @@ export function aggregatePayrollRecordsForPl(params: {
     if (!amount) continue
     const id = Number(r.id) || 0
     if (!id) continue
+    const sso = Math.max(0, Number(r.sso) || 0)
+    const tax = Math.max(0, Number(r.tax) || 0)
     total += amount
+    ssoTotal += sso
+    taxTotal += tax
     records.push({
       id,
       store,
       name: String(r.name || '').trim() || '—',
       amount,
       netPay: Math.max(0, Number(r.net_pay) || 0),
-      sso: Math.max(0, Number(r.sso) || 0),
-      tax: Math.max(0, Number(r.tax) || 0),
+      sso,
+      tax,
     })
   }
   records.sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name, 'ko'))
   return {
     total: Math.round(total * 100) / 100,
+    ssoTotal: Math.round(ssoTotal * 100) / 100,
+    taxTotal: Math.round(taxTotal * 100) / 100,
     preferredSubjectId: params.preferredSubjectId,
     salarySubjectIds: params.salarySubjectIds,
     rowCount: records.length,
@@ -218,6 +274,8 @@ export async function loadPayrollAggregateForIncomeStatement(params: {
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return {
       total: 0,
+      ssoTotal: 0,
+      taxTotal: 0,
       preferredSubjectId: preferredId,
       salarySubjectIds,
       rowCount: 0,

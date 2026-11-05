@@ -30,6 +30,12 @@ export interface IncomeStatementData {
     fixedExpenses: number
     stockInboundExpense?: number
     payrollExpense?: number
+    /** 직원 SSO. payrollExpense에 이미 포함 */
+    payrollSso?: number
+    /** 원천세. payrollExpense에 이미 포함 */
+    payrollWithholding?: number
+    /** 사업주 SSO. 비용 합계에 포함 */
+    payrollEmployerSso?: number
     depreciationExpense?: number
     franchiseRoyalty?: number
     franchiseDeliveryGp?: number

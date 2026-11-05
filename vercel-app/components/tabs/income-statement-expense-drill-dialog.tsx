@@ -286,6 +286,9 @@ export function IncomeExpenseDrillDialog({
                         <th className="text-left p-2">{t("pL_purchaseDrillColStore")}</th>
                         <th className="text-right p-2">{t("amount")}</th>
                         <th className="text-right p-2">{t("pL_expenseDrillPayrollColNet")}</th>
+                        <th className="text-right p-2">{t("pL_payrollIncludedSso")}</th>
+                        <th className="text-right p-2">{t("pL_payrollEmployerSso")}</th>
+                        <th className="text-right p-2">{t("pL_payrollIncludedTax")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -297,6 +300,9 @@ export function IncomeExpenseDrillDialog({
                           <td className="p-2 text-right font-mono text-muted-foreground">
                             {formatBath(r.netPay)}
                           </td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.sso)}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.sso)}</td>
+                          <td className="p-2 text-right font-mono">{formatBath(r.tax)}</td>
                         </tr>
                       ))}
                     </tbody>

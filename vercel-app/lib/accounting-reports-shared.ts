@@ -93,6 +93,12 @@ export type IncomeStatementReport = {
     stockInboundExpense: number
     /** 확정 급여(payroll_records) 인건비 — net+sso+tax */
     payrollExpense: number
+    /** 직원 SSO. payrollExpense 안에 이미 포함 (비용에 다시 더하지 않음) */
+    payrollSso?: number
+    /** 원천세. payrollExpense 안에 이미 포함 */
+    payrollWithholding?: number
+    /** 사업주 SSO. 직원 SSO와 동액이며 비용 합계에 포함 */
+    payrollEmployerSso?: number
     /** 감가상각(depreciation_entries) — 당기순이익 비용에 포함 */
     depreciationExpense: number
     /** 승인 회계 PO 로열티 — VAT 포함(total) 기준 저장, 화면은 displayAmounts로 토글 */

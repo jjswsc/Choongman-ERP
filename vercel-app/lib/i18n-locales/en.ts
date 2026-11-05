@@ -3121,7 +3121,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_financial_statements:
     'Management accounts for running the stores. Amounts may differ from the tax books. View P&L, balance sheet, and margin by store and period. The balance sheet includes borrowings (2150) and loans receivable (1150). Salary (5310) posts to the payroll month, not the pay date. Approved accounting POs (royalty, delivery GP, Grab GP) post to store expenses and HQ (issuer) sales; amounts follow the VAT included/excluded toggle (PO total vs subtotal). VAT-inclusive view adds PP.30 remittance as an expense in the tax month (excluded view and PND stay out).',
   helpHow_admin_financial_statements:
-    '① Choose store and start/end month, then search. Changing month or store alone does not reload income, balance, reconcile, or margin until you search again.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together. Amounts show two decimal places (0.01 baht). Inclusive view only adds PP.30 remittance as expense in the tax month (not the bank pay date).\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.\n⑥ Payroll hits that month’s P&L, not the pay date. Confirmed payroll excludes salary-like bank/petty cash to avoid double counting.\n⑦ Delivery app (5528) and card (5529) fees use only Expense Management monthly batch amounts. Auto channel settlements from bank chips are not included in P&L.',
+    '① Choose store and start/end month, then search. Changing month or store alone does not reload income, balance, reconcile, or margin until you search again.\n② Switching VAT included/excluded adjusts sales, purchases, inventory, and approved franchise-billing PO amounts together. Amounts show two decimal places (0.01 baht). Inclusive view only adds PP.30 remittance as expense in the tax month (not the bank pay date).\n③ Royalty / delivery / Grab GP hit the P&L only after the accounting PO is Approved (Draft and platform fee 5528 are separate).\n④ Enter and save manual sales / beginning inventory on a single-month query; multi-month view applies each month’s saved values.\n⑤ Search filters and results stay when you switch menus or sub-tabs.\n⑥ Payroll hits that month’s P&L, not the pay date. Under confirmed payroll, employee SSO and withholding are shown separately and are already inside the payroll total. Employer SSO is added as its own expense, equal to the employee SSO. Confirmed payroll excludes salary-like bank/petty cash to avoid double counting.\n⑦ Delivery app (5528) and card (5529) fees use only Expense Management monthly batch amounts. Auto channel settlements from bank chips are not included in P&L.',
   adminChartOfAccounts: 'Chart of accounts',
   adminAccountingCompliance: 'Accounting & Thailand filing',
   adminTaxFiling: 'Tax accounts',
@@ -5561,6 +5561,9 @@ Only matters the employee must handle personally on a working day:
   pL_expenseDrillColChannel: 'Channel',
   pL_expenseDrillColBankTx: 'Bank deposit',
   pL_expenseDrillPayrollColNet: 'Net pay',
+  pL_payrollIncludedSso: 'SSO (inside payroll)',
+  pL_payrollIncludedTax: 'Withholding tax (inside payroll)',
+  pL_payrollEmployerSso: 'Employer SSO',
   pL_expenseDrillClickHint: 'Click to open this month’s expense breakdown',
   pL_expenseDrillColCategory: 'Category',
   pL_expenseDrillColName: 'Name',
