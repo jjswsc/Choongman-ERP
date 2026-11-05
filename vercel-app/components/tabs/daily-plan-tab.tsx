@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronUp, Copy, Lock, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useLang } from "@/lib/lang-context"
@@ -113,10 +114,16 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
   const [memberBundle, setMemberBundle] = useState<DailyPlanBundle | null>(null)
   const [memberName, setMemberName] = useState("")
   const [creatingId, setCreatingId] = useState<number | null>(null)
+  const [teamQ, setTeamQ] = useState("")
 
   const visibleTeamMembers = useMemo(
-    () => teamMembers.filter((m) => teamMemberMatchesPicker(m, viewStore, storePickerQuery)),
-    [teamMembers, viewStore, storePickerQuery]
+    () =>
+      teamMembers.filter(
+        (m) =>
+          teamMemberMatchesPicker(m, viewStore, storePickerQuery) &&
+          teamMemberMatchesPicker(m, "All", teamQ)
+      ),
+    [teamMembers, viewStore, storePickerQuery, teamQ]
   )
 
   const loadMine = useCallback(async () => {
@@ -320,6 +327,12 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
 
       {view === "team" ? (
         <div className="space-y-2">
+          <Input
+            value={teamQ}
+            onChange={(e) => setTeamQ(e.target.value)}
+            placeholder={t("dp_search_employee")}
+            className="h-9"
+          />
           {visibleTeamMembers.length === 0 ? (
             <Card>
               <CardContent className="p-4 text-center text-sm text-muted-foreground">

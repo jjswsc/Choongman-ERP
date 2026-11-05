@@ -14,6 +14,7 @@ import {
   loadTravelMinutesByTemplate,
   normalizePlanRow,
   planItemLite,
+  repairMissingDelegatedCopies,
   resolveDailyPlanScope,
   travelMinutesOfPlan,
   type DailyPlanRow,
@@ -34,7 +35,16 @@ async function findOwnPlan(date: string, employeeId: number | null, name: string
 
 async function withItems(plan: DailyPlanRow | null) {
   if (!plan) return null
-  const [items, travel] = await Promise.all([getDailyPlanItems(plan.id), loadTravelMinutesByTemplate([plan.template_id])])
+  let items = await getDailyPlanItems(plan.id)
+  if (plan.status !== 'closed') {
+    try {
+      const added = await repairMissingDelegatedCopies(plan, items)
+      if (added > 0) items = await getDailyPlanItems(plan.id)
+    } catch (e) {
+      console.warn('repairMissingDelegatedCopies:', e instanceof Error ? e.message : e)
+    }
+  }
+  const travel = await loadTravelMinutesByTemplate([plan.template_id])
   return {
     plan,
     items,

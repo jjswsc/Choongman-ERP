@@ -37,6 +37,7 @@ export function DailyPlanBoard({ t }: { t: T }) {
   const [loading, setLoading] = useState(false)
   const [notReady, setNotReady] = useState(false)
   const [role, setRole] = useState<string>("all")
+  const [q, setQ] = useState("")
   const [detail, setDetail] = useState<DailyPlanBundle | null>(null)
 
   const load = useCallback(async () => {
@@ -59,13 +60,17 @@ export function DailyPlanBoard({ t }: { t: T }) {
     setDetail(res.today)
   }, [])
 
-  const filtered = useMemo(
-    () =>
-      rows
-        .filter((r) => role === "all" || r.role_scope === role)
-        .sort((a, b) => (ROLE_ORDER[a.role_scope] ?? 9) - (ROLE_ORDER[b.role_scope] ?? 9)),
-    [rows, role]
-  )
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return rows
+      .filter((r) => role === "all" || r.role_scope === role)
+      .filter((r) => {
+        if (!needle) return true
+        const hay = `${r.employee_name} ${r.store_name} ${(r.route_stores || []).join(" ")}`.toLowerCase()
+        return hay.includes(needle)
+      })
+      .sort((a, b) => (ROLE_ORDER[a.role_scope] ?? 9) - (ROLE_ORDER[b.role_scope] ?? 9) || a.store_name.localeCompare(b.store_name) || a.employee_name.localeCompare(b.employee_name))
+  }, [rows, role, q])
 
   const kpi = useMemo(() => {
     const total = filtered.reduce((s, r) => s + r.total, 0)
@@ -100,6 +105,12 @@ export function DailyPlanBoard({ t }: { t: T }) {
         <Button size="sm" variant="ghost" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         </Button>
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t("dp_search_person")}
+          className="h-8 w-48"
+        />
       </div>
 
       {notReady ? <p className="text-sm text-amber-600">{t("dp_not_ready")}</p> : null}

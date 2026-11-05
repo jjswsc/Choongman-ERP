@@ -16,6 +16,7 @@ import {
   Wrench,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
@@ -114,6 +115,7 @@ export function DailyPlanItems(props: {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [actionId, setActionId] = useState<number | null>(null)
   const [delegateItem, setDelegateItem] = useState<DailyPlanItem | null>(null)
+  const [delegateQ, setDelegateQ] = useState("")
   const closed = plan.status === "closed"
   const editable = !readOnly && !closed
   /** 마감 후에도 사진·메모 소급 첨부 가능 (상태 변경은 editable만) */
@@ -128,6 +130,11 @@ export function DailyPlanItems(props: {
   const isLive = !closed && (plan.plan_date === calendarToday || onOvernight)
   const nowMin = timelineNowMin(plan.shift_in, plan.shift_out, wallNowMin)
   const targets = (delegateTargets || []).filter((m) => m.employeeId !== plan.employee_id)
+  const visibleTargets = useMemo(() => {
+    const needle = delegateQ.trim().toLowerCase()
+    if (!needle) return targets
+    return targets.filter((m) => `${m.name} ${m.nick} ${m.store} ${m.job}`.toLowerCase().includes(needle))
+  }, [targets, delegateQ])
 
   useEffect(() => {
     if (!isLive) return
@@ -471,7 +478,10 @@ export function DailyPlanItems(props: {
                       variant="outline"
                       className="h-7 px-2 text-xs"
                       disabled={busy}
-                      onClick={() => setDelegateItem(it)}
+                      onClick={() => {
+                        setDelegateQ("")
+                        setDelegateItem(it)
+                      }}
                     >
                       <UserPlus className="mr-1 h-3 w-3" />
                       {t("dp_btn_delegate")}
@@ -553,7 +563,13 @@ export function DailyPlanItems(props: {
               {displayText(dailyPlanItemTitle(delegateItem.title, t))}
             </p>
             <div className="mt-3 space-y-1.5">
-              {targets.map((m) => (
+              <Input
+                value={delegateQ}
+                onChange={(e) => setDelegateQ(e.target.value)}
+                placeholder={t("dp_search_employee")}
+                className="h-9"
+              />
+              {visibleTargets.map((m) => (
                 <button
                   key={m.employeeId}
                   type="button"

@@ -20,6 +20,7 @@ import {
   type VisitSuggestionDto,
 } from "@/lib/api-client"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { dailyPlanDeptKey } from "@/lib/daily-plan-generate"
 import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
 
 type T = (k: string) => string
@@ -48,6 +49,9 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
   const [tasks, setTasks] = useState<TaskDraft[]>([])
   const [briefing, setBriefing] = useState("")
   const [q, setQ] = useState("")
+  const [roleFilter, setRoleFilter] = useState("all")
+  const [storeFilter, setStoreFilter] = useState("")
+  const [deptFilter, setDeptFilter] = useState("")
   const [bulkMinutes, setBulkMinutes] = useState(30)
 
   const load = useCallback(async () => {
@@ -97,16 +101,31 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
       }
     }
     const needle = q.trim().toLowerCase()
+    const storeNeedle = storeFilter.trim().toLowerCase()
+    const narrowed = !!(needle || storeNeedle || deptFilter || roleFilter !== "all")
     return [...map.values()]
+      .filter((c) => roleFilter === "all" || c.planRole === roleFilter)
+      .filter((c) => !storeNeedle || c.store.trim().toLowerCase() === storeNeedle)
+      .filter((c) => !deptFilter || dailyPlanDeptKey(c.job) === deptFilter)
       .filter((c) => !needle || `${c.name} ${c.nick} ${c.store}`.toLowerCase().includes(needle))
-      .filter((c) => c.planRole !== "staff" || planByEmp.has(c.id) || needle || !canAssignAll)
+      .filter((c) => c.planRole !== "staff" || planByEmp.has(c.id) || narrowed || !canAssignAll)
       .sort(
         (a, b) =>
           ROLE_ORDER.indexOf(a.planRole) - ROLE_ORDER.indexOf(b.planRole) ||
           a.store.localeCompare(b.store) ||
+          dailyPlanDeptKey(a.job).localeCompare(dailyPlanDeptKey(b.job)) ||
           a.name.localeCompare(b.name)
       )
-  }, [candidates, plans, q, planByEmp, canAssignAll])
+  }, [candidates, plans, q, planByEmp, canAssignAll, roleFilter, storeFilter, deptFilter])
+
+  const storeOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of candidates) {
+      const s = c.store.trim()
+      if (s) set.add(s)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [candidates])
 
   const selected = people.find((p) => p.id === selectedId) || null
   const selectedPlan = selectedId != null ? planByEmp.get(selectedId) : undefined
@@ -253,6 +272,47 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
         <Card>
           <CardContent className="space-y-2 p-2">
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("dp_search_person")} className="h-8" />
+            <div className="flex flex-wrap gap-1">
+              {["all", ...ROLE_ORDER].map((r) => (
+                <Button
+                  key={r}
+                  size="sm"
+                  variant={roleFilter === r ? "default" : "outline"}
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => setRoleFilter(r)}
+                >
+                  {r === "all" ? t("dp_all") : label.role(r)}
+                </Button>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <select
+                value={storeFilter}
+                onChange={(e) => setStoreFilter(e.target.value)}
+                className="h-8 min-w-0 flex-1 rounded border bg-background px-2 text-xs"
+                aria-label={t("dp_filter_store")}
+              >
+                <option value="">{t("dp_filter_all_stores")}</option>
+                {storeOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="h-8 rounded border bg-background px-2 text-xs"
+                aria-label={t("dp_filter_dept")}
+              >
+                <option value="">{t("dp_all")}</option>
+                {(["service", "kitchen", "office"] as const).map((d) => (
+                  <option key={d} value={d}>
+                    {label.position(d)}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="max-h-[60vh] space-y-1 overflow-y-auto">
               {people.length === 0 ? (
                 <p className="p-3 text-center text-xs text-muted-foreground">{loading ? t("loading") : t("dp_no_people")}</p>
@@ -272,7 +332,8 @@ export function DailyPlanAssign({ t, preset }: { t: T; preset?: DailyPlanAssignP
                       <div className="flex items-center gap-1">
                         <span className="font-medium">{c.name}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          {label.role(c.planRole)} · {c.store}
+                          {label.role(c.planRole)}
+                          {dailyPlanDeptKey(c.job) !== "all" ? ` · ${label.position(dailyPlanDeptKey(c.job))}` : ""} · {c.store}
                         </span>
                         <span
                           className={cn(

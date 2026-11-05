@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CheckSquare, ChevronLeft, ChevronRight, Plus, RefreshCw, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -16,6 +17,7 @@ import {
   type DailyPlanWeekCell,
 } from "@/lib/api-client"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { dailyPlanDeptKey } from "@/lib/daily-plan-generate"
 import { dailyPlanLabelers } from "@/lib/daily-plan-i18n"
 
 type T = (k: string) => string
@@ -40,7 +42,14 @@ function parseCellKey(key: string): { employeeId: number; date: string } | null 
   return { employeeId, date }
 }
 
-type RowPerson = { id: number; name: string; store: string; role: string; days: (DailyPlanWeekCell | null)[] }
+type RowPerson = {
+  id: number
+  name: string
+  store: string
+  role: string
+  dept: "service" | "kitchen" | "office" | "all"
+  days: (DailyPlanWeekCell | null)[]
+}
 
 /** 주간 일정 — 빈 칸·미공개 다중 선택(드래그·Shift)·일괄 생성+공개 */
 export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, employeeId: number) => void }) {
@@ -54,6 +63,9 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
   const [publishing, setPublishing] = useState(false)
   const [notReady, setNotReady] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [q, setQ] = useState("")
+  const [storeFilter, setStoreFilter] = useState("")
+  const [deptFilter, setDeptFilter] = useState("")
   const anchorRef = useRef<string | null>(null)
   const dragRef = useRef<{ active: boolean; mode: "add" | "remove" }>({ active: false, mode: "add" })
 
@@ -89,21 +101,61 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
     }
   }, [])
 
-  const rows: RowPerson[] = useMemo(() => {
-    const people = new Map<number, { id: number; name: string; store: string; role: string }>()
+  const roster = useMemo(() => {
+    const people = new Map<number, Omit<RowPerson, "days">>()
     for (const c of candidates) {
-      if (c.planRole === role && role !== "staff") people.set(c.id, { id: c.id, name: c.name, store: c.store, role: c.planRole })
+      if (c.planRole !== role) continue
+      people.set(c.id, {
+        id: c.id,
+        name: c.name,
+        store: c.store,
+        role: c.planRole,
+        dept: dailyPlanDeptKey(c.job),
+      })
     }
     for (const c of cells) {
-      if (c.role === role && !people.has(c.employeeId)) {
-        people.set(c.employeeId, { id: c.employeeId, name: c.employeeName, store: c.employeeStore, role: c.role })
+      if (c.role !== role) continue
+      const prev = people.get(c.employeeId)
+      const dept = dailyPlanDeptKey("", prev?.dept && prev.dept !== "all" ? prev.dept : c.position)
+      if (!prev) {
+        people.set(c.employeeId, {
+          id: c.employeeId,
+          name: c.employeeName,
+          store: c.employeeStore,
+          role: c.role,
+          dept,
+        })
+      } else if (prev.dept === "all" && dept !== "all") {
+        people.set(c.employeeId, { ...prev, dept })
       }
     }
+    return [...people.values()].sort(
+      (a, b) => a.store.localeCompare(b.store) || a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name)
+    )
+  }, [candidates, cells, role])
+
+  const storeOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of roster) {
+      const s = p.store.trim()
+      if (s) set.add(s)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [roster])
+
+  const rows: RowPerson[] = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const storeNeedle = storeFilter.trim().toLowerCase()
     const byKey = new Map(cells.map((c) => [cellKey(c.employeeId, c.date), c]))
-    return [...people.values()]
-      .sort((a, b) => a.store.localeCompare(b.store) || a.name.localeCompare(b.name))
+    return roster
+      .filter((p) => {
+        if (storeNeedle && p.store.trim().toLowerCase() !== storeNeedle) return false
+        if (deptFilter && p.dept !== deptFilter) return false
+        if (needle && !`${p.name} ${p.store}`.toLowerCase().includes(needle)) return false
+        return true
+      })
       .map((p) => ({ ...p, days: days.map((d) => byKey.get(cellKey(p.id, d)) || null) }))
-  }, [candidates, cells, days, role])
+  }, [roster, cells, days, q, storeFilter, deptFilter])
 
   /** 선택 가능: 오늘 이후 + (빈 칸 또는 미공개·미마감) */
   const selectableKeys = useMemo(() => {
@@ -260,6 +312,44 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
         <Button size="sm" variant="ghost" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         </Button>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {t("dp_week_count").replace("{n}", String(rows.length))}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t("dp_search_person")}
+          className="h-8 w-48"
+        />
+        <select
+          value={storeFilter}
+          onChange={(e) => setStoreFilter(e.target.value)}
+          className="h-8 max-w-[14rem] rounded border bg-background px-2 text-xs"
+          aria-label={t("dp_filter_store")}
+        >
+          <option value="">{t("dp_filter_all_stores")}</option>
+          {storeOptions.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={deptFilter}
+          onChange={(e) => setDeptFilter(e.target.value)}
+          className="h-8 rounded border bg-background px-2 text-xs"
+          aria-label={t("dp_filter_dept")}
+        >
+          <option value="">{t("dp_all")}</option>
+          {(["service", "kitchen", "office"] as const).map((d) => (
+            <option key={d} value={d}>
+              {label.position(d)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
@@ -285,6 +375,7 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
       </div>
 
       <p className="text-xs text-muted-foreground">{t("dp_week_hint")}</p>
+      {role === "staff" ? <p className="text-xs text-muted-foreground">{t("dp_week_roster_hint")}</p> : null}
       {notReady ? <p className="text-sm text-amber-600">{t("dp_not_ready")}</p> : null}
 
       <Card>
@@ -296,7 +387,7 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
               <table className="w-full min-w-[900px] table-fixed select-none text-xs">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="w-32 p-1.5">{t("dp_col_person")}</th>
+                    <th className="w-40 p-1.5">{t("dp_col_person")}</th>
                     {days.map((d) => {
                       const dayKeys = selectableKeys.filter((k) => k.endsWith(`|${d}`))
                       const allOn = dayKeys.length > 0 && dayKeys.every((k) => selected.has(k))
@@ -326,8 +417,11 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
                   {rows.map((r) => (
                     <tr key={r.id} className="border-b align-top">
                       <td className="p-1.5">
-                        <p className="font-medium">{r.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{r.store}</p>
+                        <p className="break-words font-medium">{r.name}</p>
+                        <p className="break-words text-[10px] text-muted-foreground">{r.store}</p>
+                        {r.dept !== "all" ? (
+                          <p className="text-[10px] text-muted-foreground">{label.position(r.dept)}</p>
+                        ) : null}
                       </td>
                       {r.days.map((c, i) => {
                         const d = days[i]
