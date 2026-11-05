@@ -993,13 +993,17 @@ export function TaxFilingBooksTab(props: {
               <p className="text-xs text-destructive">{t("taxBooksErr_DUPLICATE_DOCUMENT_NO")}</p>
             ) : null}
             {dayAdj.map((ln, idx) => (
-              <div key={idx} className="flex flex-wrap gap-2">
-                <Input
-                  className="w-28"
+              <div key={idx} className="flex flex-wrap items-start gap-2">
+                <LedgerAccountCodeInput
+                  lang={lang}
+                  options={ledgerAccountOptions}
                   value={ln.accountCode}
                   placeholder={t("taxBooksAccount")}
-                  onChange={(e) =>
-                    setDayAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode: e.target.value } : row)))
+                  onChange={(accountCode) =>
+                    setDayAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode } : row)))
+                  }
+                  onPick={(accountCode) =>
+                    setDayAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode } : row)))
                   }
                 />
                 <select
@@ -1487,13 +1491,17 @@ export function TaxFilingBooksTab(props: {
             <p className="text-sm font-medium">{t("taxBooksAdjustment")}</p>
             <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t("taxBooksMemo")} />
             {adj.map((ln, idx) => (
-              <div key={idx} className="flex flex-wrap gap-2">
-                <Input
-                  className="w-28"
+              <div key={idx} className="flex flex-wrap items-start gap-2">
+                <LedgerAccountCodeInput
+                  lang={lang}
+                  options={ledgerAccountOptions}
                   value={ln.accountCode}
                   placeholder={t("taxBooksAccount")}
-                  onChange={(e) =>
-                    setAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode: e.target.value } : row)))
+                  onChange={(accountCode) =>
+                    setAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode } : row)))
+                  }
+                  onPick={(accountCode) =>
+                    setAdj((rows) => rows.map((row, i) => (i === idx ? { ...row, accountCode } : row)))
                   }
                 />
                 <select
@@ -1740,7 +1748,7 @@ function LedgerAccountCodeInput({
   }
   const showList = open && matches.length > 0 && !(matches.length === 1 && exact)
   return (
-    <div className="relative">
+    <div className={cn("relative", open && "z-30")}>
       <Input
         className="h-9 w-[150px]"
         value={value}
