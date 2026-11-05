@@ -116,7 +116,6 @@ import {
   isPosOrderFullyPaidButOpenFromDbRow,
   shouldSkipHallAutoprintForCounterQrPending,
 } from '@/lib/pos-kbank-counter-qr-finalize-shared'
-import { shouldReprintPaymentReceiptForTaxInvoiceMemoChange } from '@/lib/pos-tax-invoice'
 import {
   hallOrderReceiptPayloadFromOrderFields,
   hallOrderReceiptPayloadFromPosOrder,
@@ -127,6 +126,7 @@ import {
   isPosOrderItemsJsonPackagingOnlyUpdate,
   posOrderRealtimePricingFieldsChanged,
   shouldAutoprintPaymentReceiptOnRealtimeUpdate,
+  shouldRealtimeReprintPaidOrderTaxInvoice,
 } from '@/lib/pos-dine-in-realtime-update'
 import {
   isPosOrderPaidLikeStatus,
@@ -1267,14 +1267,11 @@ export function usePosMainDeviceSyncHost(): void {
       }
 
       if (
-        wantPayment &&
-        oldRow &&
-        isPosOrderPaidLikeStatus(String(row.status ?? '')) &&
-        posOrderRowPaymentSum(row) > 0 &&
-        shouldReprintPaymentReceiptForTaxInvoiceMemoChange(
-          String(oldRow.memo ?? ''),
-          String(row.memo ?? '')
-        )
+        shouldRealtimeReprintPaidOrderTaxInvoice({
+          oldRow,
+          newRow: row,
+          localPrior: localPaymentPrior,
+        })
       ) {
         void getPosOrders({ orderId, storeCode })
           .then(async (list) => {

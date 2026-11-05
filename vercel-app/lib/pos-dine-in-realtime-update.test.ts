@@ -7,9 +7,11 @@ import {
   posOrderRealtimePricingFieldsChanged,
   resetMergeQtyOnlySkipAppliedKeysForTests,
   shouldAutoprintPaymentReceiptOnRealtimeUpdate,
+  shouldRealtimeReprintPaidOrderTaxInvoice,
   shouldSkipDineInAddonAutoprintForTableMerge,
 } from '@/lib/pos-dine-in-realtime-update'
 import { buildPosOrderMergedKeepStamp } from '@/lib/pos-order-merge'
+import { upsertPosOrderTaxInvoiceMemo } from '@/lib/pos-tax-invoice'
 
 describe('inferPosOrderTypeFromRow', () => {
   it('infers delivery from Line Man memo when DB order_type is dine_in', () => {
@@ -394,6 +396,79 @@ describe('table merge → skip dine-in addon autoprint', () => {
         prevQtyById: new Map([['line-1', 1]]),
         newMemo: oldStamp,
         nowMs: Date.parse('2026-07-27T13:00:00.000Z'),
+      })
+    ).toBe(false)
+  })
+})
+
+describe('shouldRealtimeReprintPaidOrderTaxInvoice', () => {
+  const tax = {
+    memberNo: '',
+    customerType: 'company' as const,
+    name: 'Cmc Buyer Co',
+    taxId: '0105568110459',
+    branchNo: '00000',
+    phone: '0812345678',
+    email: 'a@b.co',
+    address: 'Bangkok',
+    member: false,
+  }
+  const taxMemo = upsertPosOrderTaxInvoiceMemo('', tax)
+  const paidQr = {
+    payment_cash: 0,
+    payment_card: 0,
+    payment_qr: 1563,
+    payment_other: 0,
+    payment_delivery_app: 0,
+  }
+
+  it('reprints when a paid order gains a tax invoice, with no autoprint switch in the decision', () => {
+    expect(
+      shouldRealtimeReprintPaidOrderTaxInvoice({
+        oldRow: { id: 16, status: 'paid', memo: '', ...paidQr },
+        newRow: { id: 16, status: 'paid', memo: taxMemo, ...paidQr },
+      })
+    ).toBe(true)
+  })
+
+  it('does not reprint when the tax invoice fingerprint is unchanged', () => {
+    expect(
+      shouldRealtimeReprintPaidOrderTaxInvoice({
+        oldRow: { id: 16, status: 'paid', memo: taxMemo, ...paidQr },
+        newRow: { id: 16, status: 'paid', memo: taxMemo, ...paidQr },
+      })
+    ).toBe(false)
+  })
+
+  it('does not add a second slip when tax invoice was already on the order before payment', () => {
+    expect(
+      shouldRealtimeReprintPaidOrderTaxInvoice({
+        oldRow: { id: 16, status: 'cooking', memo: taxMemo, payment_qr: 0, payment_cash: 0, payment_card: 0, payment_other: 0, payment_delivery_app: 0 },
+        newRow: { id: 16, status: 'paid', memo: taxMemo, ...paidQr },
+      })
+    ).toBe(false)
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 16, status: 'cooking', memo: taxMemo, payment_qr: 0, payment_cash: 0, payment_card: 0, payment_other: 0, payment_delivery_app: 0 },
+        { id: 16, status: 'paid', memo: taxMemo, ...paidQr }
+      )
+    ).toBe(true)
+  })
+
+  it('does not reprint when tax invoice is written in the same update as unpaid→paid', () => {
+    expect(
+      shouldRealtimeReprintPaidOrderTaxInvoice({
+        oldRow: { id: 16, status: 'cooking', memo: 'note', payment_qr: 0, payment_cash: 0, payment_card: 0, payment_other: 0, payment_delivery_app: 0 },
+        newRow: { id: 16, status: 'paid', memo: upsertPosOrderTaxInvoiceMemo('note', tax), ...paidQr },
+      })
+    ).toBe(false)
+  })
+
+  it('does not reprint an unpaid order', () => {
+    expect(
+      shouldRealtimeReprintPaidOrderTaxInvoice({
+        oldRow: { id: 16, status: 'cooking', memo: '', payment_qr: 0 },
+        newRow: { id: 16, status: 'cooking', memo: taxMemo, payment_qr: 0 },
       })
     ).toBe(false)
   })

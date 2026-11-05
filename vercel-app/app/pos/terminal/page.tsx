@@ -275,7 +275,6 @@ import {
   posOrderPaymentSum,
   posOrderRowPaymentSum,
   receiptModalDataFromPosOrderForPayment,
-  receiptModalDataFromTerminalOrderTaxReprint,
   hallOrderReceiptPayloadFromPosOrder,
   hallOrderReceiptPayloadFromOrderFields,
   buildCheckoutPaymentReceiptModalData,
@@ -8626,60 +8625,14 @@ export default function PosTerminalPage() {
         )
         return
       }
-      /** 결제 후 세금 정보 저장 시: 결제(세금계산서) 영수증 재인쇄 — 홀 주문표는 매장·VAT·결제 수단이 빠짐 */
+      /**
+       * 전표는 메인 POS Realtime이 1장만 인쇄한다(결제 자동인쇄 스위치와 무관).
+       * 여기서 다시 찍으면 같은 저장에 2장이 나간다.
+       */
       const orderPaymentRecorded =
         taxInvoiceTargetOrder.status === 'paid' ||
         taxInvoiceTargetOrder.status === 'completed' ||
         orderPaymentsSum(taxInvoiceTargetOrder) > 0.005
-      if (isMainPosDevice && orderPaymentRecorded) {
-        const settings = await getPrinterSettingsForStore(currentStoreId)
-        const receiptBase = receiptModalDataFromTerminalOrderTaxReprint(
-          taxInvoiceTargetOrder,
-          currentStoreId,
-          nextMemo,
-          pricingAdjustments,
-          posReceiptLineOpts
-        )
-        const receiptData = {
-          ...receiptBase,
-          items: enrichReceiptModalItemsForPromoDisplay(receiptBase.items, {
-            ...posReceiptLineOpts,
-            memo: receiptBase.memo,
-            deliveryAppCode: receiptBase.deliveryAppCode,
-          }),
-        }
-        const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
-          receiptData,
-          menus,
-          optionNameByCode,
-          orderTypeLabels: {
-            dine_in: tPrint('posOrderTypeDineIn') ?? '매장',
-            takeout: tPrint('posOrderTypeTakeout') ?? '포장',
-            delivery: tPrint('posOrderTypeDelivery') ?? '배달',
-          },
-          t: tPrint,
-          lang: printLang,
-          origin: typeof window !== 'undefined' ? window.location.origin : '',
-          printedAt: new Date(),
-          printerSettings: settings,
-          forceSimpleTextMode: shouldForceSimplePaymentReceiptForStore(currentStoreId),
-        })
-        printPosHtmlDocument(receiptHtml, {
-          title: tPrint('posReceipt') || '영수증',
-          printDelayMs: 0,
-          fallbackCleanupMs: 120_000,
-          focusIframeBeforePrint: false,
-          printRole: 'receipt',
-          printReceiptKind: 'payment',
-          escPosCutOverride: resolveEscPosCutOverride(settings, {
-            printRole: 'receipt',
-            printReceiptKind: 'payment',
-          }),
-          onPrintUnavailable: () => {
-            void appAlert(t('posPrintUnavailable'))
-          },
-        })
-      }
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
           userStore: auth.store,

@@ -1480,7 +1480,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly: _readOnl
         )
         return
       }
-      await handlePrintCustomerReceipt({ ...taxInvoiceOrder, memo: nextMemo }, { includeTaxInvoice: true })
+      /** 전표는 메인 POS Realtime이 1장만 인쇄한다. 여기서 다시 찍으면 2장이 된다. */
       if (auth?.store && auth?.role) {
         await upsertPosTaxInvoiceRecipient({
           userStore: auth.store,

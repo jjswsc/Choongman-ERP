@@ -11,6 +11,7 @@ import {
   posOrderRowPaymentSum,
 } from '@/lib/pos-payment-receipt-from-order'
 import { isGrabAutoPaidMemo } from '@/lib/grab-order-memo'
+import { shouldReprintPaymentReceiptForTaxInvoiceMemoChange } from '@/lib/pos-tax-invoice'
 
 const PACKAGING_STATE_ITEM_KEYS = new Set([
   'servedAt',
@@ -135,6 +136,27 @@ export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
 
   // unpaid → paid (또는 결제금액 0 → >0) 전환
   return true
+}
+
+/**
+ * 이미 결제된 주문에 세금계산서가 추가·변경되면 메인 POS가 결제 영수증을 1장 재인쇄한다.
+ * 결제 자동인쇄(receiptOnPayment)와 무관하다.
+ * 이번 UPDATE가 미결제→결제 전환이면 결제 영수증이 수취인 블록을 이미 포함하므로 재인쇄하지 않는다.
+ */
+export function shouldRealtimeReprintPaidOrderTaxInvoice(opts: {
+  oldRow: Record<string, unknown> | null | undefined
+  newRow: Record<string, unknown>
+  localPrior?: { status?: string; paymentSum?: number } | null
+}): boolean {
+  const { oldRow, newRow, localPrior } = opts
+  if (!oldRow) return false
+  if (!isPosOrderPaidLikeStatus(String(newRow.status ?? ''))) return false
+  if (posOrderRowPaymentSum(newRow) <= 0) return false
+  if (shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRow, newRow, { localPrior })) return false
+  return shouldReprintPaymentReceiptForTaxInvoiceMemoChange(
+    String(oldRow.memo ?? ''),
+    String(newRow.memo ?? '')
+  )
 }
 
 /**
