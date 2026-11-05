@@ -315,8 +315,8 @@ describe('receipt totals layout with Rounding', () => {
       printerSettings: { vatRate: 7 } as never,
       forceSimpleTextMode: true,
     })
-    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">93\.00/)
-    expect(html).toContain('7.00')
+    expect(html).toMatch(/Amount Before VAT<\/td><td class="simple-v">93\.46/)
+    expect(html).toContain('6.54')
     expect(html).not.toContain('-7.00')
     expect(html).not.toContain('Rounding')
   })

@@ -226,8 +226,8 @@ describe('receipt Amount Before VAT + Rounding vs fee modes', () => {
       serviceMode: 'separate',
     })
     expect(r.subtotalPrint).toBe(199)
-    expect(r.amountBeforeVat).toBe(93)
-    expect(r.vatPrint).toBe(7)
+    expect(r.amountBeforeVat).toBe(93.46)
+    expect(r.vatPrint).toBe(6.54)
     expect(r.total).toBe(100)
     expect(r.rounding).toBe(0)
     expect(r.identityOk).toBe(true)
@@ -244,8 +244,8 @@ describe('receipt Amount Before VAT + Rounding vs fee modes', () => {
       serviceMode: 'separate',
     })
     expect(r.subtotalPrint).toBe(2500)
-    expect(r.amountBeforeVat).toBe(2430)
-    expect(r.vatPrint).toBe(170)
+    expect(r.amountBeforeVat).toBe(2429.91)
+    expect(r.vatPrint).toBe(170.09)
     expect(r.total).toBe(2600)
     expect(r.rounding).toBe(0)
   })

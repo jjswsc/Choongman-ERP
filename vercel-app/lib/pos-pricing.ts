@@ -116,11 +116,11 @@ export interface PosPricingResult {
   packagingFee: number
   baseTotal: number
   /**
-   * VAT 포함(included)일 때 영수증 소계 행에 쓸 공급가액(바트 정수).
+   * VAT 포함(included)일 때 영수증 소계 행에 쓸 공급가액(사탕, 소수 2자리).
    * 품목 합·할인 등으로 `subtotal !== baseTotal`이면 영수증에서는 원시 subtotal을 유지하고 이 값은 참고용만 채움.
    */
   receiptExclusiveSubtotalDisplay?: number
-  /** VAT 포함일 때 영수증 부가세 행(바트 정수). 미포함·세율 0이면 미설정. */
+  /** VAT 포함일 때 영수증 부가세 행(사탕). 공급가 + VAT = 포함 합계. 미포함·세율 0이면 미설정. */
   receiptVatDisplayAmt?: number
   vatFeeAmt: number
   vatFeeMode: PosFeeMode
@@ -475,16 +475,13 @@ function calcCardFeeBaseAmount(params: {
   return round2(cardPaymentAmount + cardVatPart + cardServicePart)
 }
 
-/** VAT 포함 합계(정수 바트 앵커)를 공급가액·세액 정수로 나눔 — 합계 = 앵커 */
+/**
+ * VAT 포함 합계를 공급가액·세액(사탕)으로 나눔 — 공급가 + VAT = 앵커.
+ * 정수 바트로 올리면(1,563 → 1,461 + 102) 거래처 비용 청구 영수증과 어긋난다.
+ * 예: 1,563 × 7/107 = 102.25, 공급가 1,460.75.
+ */
 export function splitVatInclusiveBahtForReceipt(anchorBaht: number, vatRatePercent: number): { exclusive: number; vat: number } | null {
-  const rate = Number(vatRatePercent)
-  if (!Number.isFinite(rate) || rate <= 0) return null
-  const t = Math.round(round2(Math.max(0, anchorBaht)))
-  if (t <= 0) return null
-  const rawVat = (t * rate) / (100 + rate)
-  const vat = Math.round(rawVat)
-  const exclusive = t - vat
-  return { exclusive, vat }
+  return splitThaiVatInclusiveGrossForReceipt(anchorBaht, vatRatePercent)
 }
 
 /** 결제 영수증: 소계 금액(첫 행) */

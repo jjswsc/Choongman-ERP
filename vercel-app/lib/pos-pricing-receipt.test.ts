@@ -8,6 +8,7 @@ import {
   resolveTaxInvoiceSubtotalBeforeVatForPrint,
   roundSplitPaymentDuesToWholeBaht,
   splitThaiVatInclusiveGrossForReceipt,
+  splitVatInclusiveBahtForReceipt,
 } from '@/lib/pos-pricing'
 
 describe('resolveReceiptVatPrintAmount', () => {
@@ -66,6 +67,17 @@ describe('splitThaiVatInclusiveGrossForReceipt', () => {
       vat: 169.44,
     })
   })
+
+  it('keeps satang on a whole-baht inclusive total (The Street 1,563)', () => {
+    expect(splitThaiVatInclusiveGrossForReceipt(1563)).toEqual({
+      exclusive: 1460.75,
+      vat: 102.25,
+    })
+    expect(splitVatInclusiveBahtForReceipt(1563, 7)).toEqual({
+      exclusive: 1460.75,
+      vat: 102.25,
+    })
+  })
 })
 
 describe('resolveReceiptSubtotalPrintAmount', () => {
@@ -117,8 +129,8 @@ describe('computePosPricing payment total rounding', () => {
     })
     expect(pricing.baseTotal).toBe(969.99)
     expect(pricing.finalTotal).toBe(970)
-    expect(pricing.receiptVatDisplayAmt).toBe(63)
-    expect(pricing.receiptExclusiveSubtotalDisplay).toBe(907)
+    expect(pricing.receiptVatDisplayAmt).toBe(63.46)
+    expect(pricing.receiptExclusiveSubtotalDisplay).toBe(906.54)
   })
 
   it('keeps whole baht total unchanged', () => {
