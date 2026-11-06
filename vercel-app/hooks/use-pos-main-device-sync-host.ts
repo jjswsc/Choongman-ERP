@@ -1723,7 +1723,18 @@ export function usePosMainDeviceSyncHost(): void {
         }
 
         let shouldRefresh = false
+        /**
+         * 카운터가 저장 중인 12초 동안 폴링이 seen·워터마크를 올리면
+         * 그 주문은 이미 처리된 것으로 남아 홀·주방을 다시 안 뽑는다. 재인쇄만 된다.
+         * 저장이 끝난 다음 폴링에서 다시 잡도록 이번 회차는 건너뛴다.
+         */
+        const deferNewOrderAutoprintToTerminal =
+          isPosTerminalLocalAutoprintActive() && isPosTerminalOrderSubmitInFlight()
+        if (deferNewOrderAutoprintToTerminal) {
+          logPosPrintDebug('poll_defer_terminal_submit', { storeCode })
+        }
         for (const order of orders) {
+          if (deferNewOrderAutoprintToTerminal) break
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
           if (!isCurrentStoreOrder(order.storeCode ?? '')) {

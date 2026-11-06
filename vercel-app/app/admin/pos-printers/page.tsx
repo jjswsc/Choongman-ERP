@@ -430,6 +430,8 @@ export default function PosPrintersPage() {
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const loadRequestSeqRef = React.useRef(0)
+  /** 서버 값을 화면에 올린 뒤에만 저장. 초기 false로 주문·주방 자동인쇄를 끄지 않게 한다. */
+  const settingsHydratedRef = React.useRef(false)
   /** loadData 와 분리 — 저장 직후 메뉴/카테고리만 갱신할 때 loadData 시퀀스를 밟지 않음(로딩 플래그·무효화 레이스 방지) */
   const catalogRequestSeqRef = React.useRef(0)
   const [quickTesting, setQuickTesting] = React.useState(false)
@@ -837,10 +839,12 @@ export default function PosPrintersPage() {
       kitchenSlipPaddingLeftMm: layout.kitchen.paddingLeftMm,
       kitchenSlipPaddingRightMm: layout.kitchen.paddingRightMm,
     })
+    settingsHydratedRef.current = true
   }, [])
 
   const loadData = React.useCallback(() => {
     if (!effectiveStore) return
+    settingsHydratedRef.current = false
     const requestSeq = ++loadRequestSeqRef.current
     setLoading(true)
     Promise.allSettled([
@@ -985,6 +989,13 @@ export default function PosPrintersPage() {
   const handleSave = async (): Promise<boolean> => {
     if (!effectiveStore) {
       await appAlert(t("store") || "매장을 선택하세요.")
+      return false
+    }
+    if (!settingsHydratedRef.current) {
+      await appAlert(
+        t("posPrinterSettingsNotLoaded") ||
+          "프린터 설정을 아직 불러오지 못했습니다. 새로고침 후 다시 저장하세요. 자동 인쇄가 꺼진 값으로 덮이지 않게 저장을 막았습니다."
+      )
       return false
     }
     setSaveStatus("saving")

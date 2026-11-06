@@ -218,6 +218,7 @@ import {
 import { setIncomingDeliveryUiHandler } from '@/lib/pos-main-device-incoming-delivery-ui'
 import { setGrabCancelUiHandler } from '@/lib/pos-main-device-grab-cancel-ui'
 import {
+  isPosTerminalOrderSubmitInFlight,
   markPosTerminalOrderSubmitInFlight,
   setPosTerminalLocalAutoprintActive,
 } from '@/lib/pos-terminal-local-autoprint-ui'
@@ -5087,6 +5088,11 @@ export default function PosTerminalPage() {
         return
       }
       pendingEmptyItemsOrderIdsRef.current.delete(orderId)
+      /** 저장 중에는 seen을 찍지 않는다. 화면 인쇄가 맡고, 못 뽑으면 다음 폴링이 다시 본다. */
+      if (isPosTerminalOrderSubmitInFlight()) {
+        logPosPrintDebug('realtime_insert_defer_terminal_submit', { orderId })
+        return
+      }
       seenOrderIdsRef.current.add(orderId)
       bumpLastSeenOrderId(orderId)
       paymentStatusPriorByOrderIdRef.current.set(orderId, {
@@ -6076,7 +6082,12 @@ export default function PosTerminalPage() {
         }
         const newOrders = orders
         let shouldRefreshCurrentStore = false
+        const deferNewOrderAutoprintToTerminal = isPosTerminalOrderSubmitInFlight()
+        if (deferNewOrderAutoprintToTerminal) {
+          logPosPrintDebug('poll_defer_terminal_submit', { storeCode: currentStoreId })
+        }
         for (const order of newOrders) {
+          if (deferNewOrderAutoprintToTerminal) break
           const oid = Number(order.id)
           if (!Number.isFinite(oid) || oid <= 0) continue
           if (!isCurrentStoreOrder(order.storeCode ?? '')) {
@@ -10301,6 +10312,9 @@ export default function PosTerminalPage() {
                       items: incomingItems.length,
                     })
                   }
+                  if (isMainPosDevice) {
+                    markPosTerminalOrderSubmitInFlight()
+                  }
                   const res = await savePosOrderWithOffline(saveReq)
                   if (!res.success) {
                     if (omniEarlyOptimisticOrderNo) {
@@ -11518,6 +11532,9 @@ export default function PosTerminalPage() {
                 const memoWithKbank = posOrderMemoForPaymentSave(payload.memo, payload.splitReceipts, kbankQr)
                 /** QR 대기 중에는 아직 미결제 → '주문 접수(미결제)'로 저장하고 승인 시 마감 */
                 const hasPayment = paymentSumBeforeSave > 0.0001 && !kbankQrPending
+                if (isMainPosDevice) {
+                  markPosTerminalOrderSubmitInFlight()
+                }
                 const res = await savePosOrderWithOffline({
                   storeCode: currentStoreId,
                   createdBy: auth?.user ?? '',

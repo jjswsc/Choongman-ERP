@@ -276,13 +276,13 @@ export async function POST(req: NextRequest) {
     const actualOrderDetails = body?.actualOrderDetails !== false
     const toppingOptionsPrint = Boolean(body?.toppingOptionsPrint)
     const hideBuffetIncludedOnGuestBill = parseBoolParam(body?.hideBuffetIncludedOnGuestBill, false)
-    const autoPrintReceiptOnOrder = Boolean(body?.autoPrintReceiptOnOrder)
-    const autoPrintReceiptOnAddOrder = Boolean(body?.autoPrintReceiptOnAddOrder)
-    const autoPrintReceiptOnPayment = Boolean(body?.autoPrintReceiptOnPayment)
-    const autoPrintKitchenSlipOnOrder = Boolean(body?.autoPrintKitchenSlipOnOrder)
-    const autoPrintFinalOrderBeforePayment = Boolean(body?.autoPrintFinalOrderBeforePayment)
+    let autoPrintReceiptOnOrder = Boolean(body?.autoPrintReceiptOnOrder)
+    let autoPrintReceiptOnAddOrder = Boolean(body?.autoPrintReceiptOnAddOrder)
+    let autoPrintReceiptOnPayment = Boolean(body?.autoPrintReceiptOnPayment)
+    let autoPrintKitchenSlipOnOrder = Boolean(body?.autoPrintKitchenSlipOnOrder)
+    let autoPrintFinalOrderBeforePayment = Boolean(body?.autoPrintFinalOrderBeforePayment)
     // 미전송 시: 주방 주문 자동인쇄와 동일. 명시 false만 OFF (DEFAULT false로 덮어쓰지 않음)
-    const autoPrintKitchenSlipOnCancel =
+    let autoPrintKitchenSlipOnCancel =
       typeof body?.autoPrintKitchenSlipOnCancel === 'boolean'
         ? body.autoPrintKitchenSlipOnCancel
         : autoPrintKitchenSlipOnOrder
@@ -420,6 +420,47 @@ export async function POST(req: NextRequest) {
       { limit: 1 }
     )) as Record<string, unknown>[] | null
     const previous = previousRows?.[0] || {}
+
+    /**
+     * 자동인쇄 스위치는 본문에 boolean이 있을 때만 바꾼다.
+     * 요금·조리시간·고객화면 등 다른 저장이 필드를 빼면 Boolean(undefined)=false로
+     * 주문 영수증·주방이 꺼지고, 결제 영수증만 남는 상태가 된다.
+     */
+    const keepAutoPrint = (bodyKey: string, prevCol: string, current: boolean) =>
+      typeof (body as Record<string, unknown> | null)?.[bodyKey] === 'boolean'
+        ? current
+        : previous[prevCol] === true
+    autoPrintReceiptOnOrder = keepAutoPrint(
+      'autoPrintReceiptOnOrder',
+      'auto_print_receipt_on_order',
+      autoPrintReceiptOnOrder
+    )
+    autoPrintReceiptOnAddOrder = keepAutoPrint(
+      'autoPrintReceiptOnAddOrder',
+      'auto_print_receipt_on_add_order',
+      autoPrintReceiptOnAddOrder
+    )
+    autoPrintReceiptOnPayment = keepAutoPrint(
+      'autoPrintReceiptOnPayment',
+      'auto_print_receipt_on_payment',
+      autoPrintReceiptOnPayment
+    )
+    autoPrintKitchenSlipOnOrder = keepAutoPrint(
+      'autoPrintKitchenSlipOnOrder',
+      'auto_print_kitchen_slip_on_order',
+      autoPrintKitchenSlipOnOrder
+    )
+    autoPrintFinalOrderBeforePayment = keepAutoPrint(
+      'autoPrintFinalOrderBeforePayment',
+      'auto_print_final_order_before_payment',
+      autoPrintFinalOrderBeforePayment
+    )
+    if (typeof body?.autoPrintKitchenSlipOnCancel !== 'boolean') {
+      autoPrintKitchenSlipOnCancel =
+        typeof previous.auto_print_kitchen_slip_on_cancel === 'boolean'
+          ? previous.auto_print_kitchen_slip_on_cancel
+          : autoPrintKitchenSlipOnOrder
+    }
 
     /** 본문에 없으면 DB 기존값 유지. 컬럼/행 없으면 true(충만 기본). */
     const requireGuestCount =
