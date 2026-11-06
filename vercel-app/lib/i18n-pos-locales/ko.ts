@@ -272,6 +272,8 @@ export const I18N_POS_KO: Record<string, string> = {
     posScreenConfigComingSoon: '준비 중입니다.',
     posCostCalculator: '원가 계산기',
     posPrinterSettings: '프린터 설정',
+    posPrinterSettingsNotLoaded:
+      '프린터 설정을 아직 불러오지 못했습니다. 새로고침 후 다시 저장하세요. 자동 인쇄가 꺼진 값으로 덮이지 않게 저장을 막았습니다.',
     posPrinterSettingsSub: '매장별 주방 프린터·카테고리 출력 설정',
     posPrinterSaveStatusIdle: '저장 전',
     posPrinterQuickTesting: '테스트 인쇄 중...',

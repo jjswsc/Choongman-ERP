@@ -280,6 +280,8 @@ export const I18N_POS_EN: Record<string, string> = {
     posCostSaleInactive: 'Inactive',
     posCostCalculator: 'Cost Calculator',
     posPrinterSettings: 'Printer Settings',
+    posPrinterSettingsNotLoaded:
+      'Printer settings are not loaded yet. Refresh and save again. Saving was blocked so auto-print is not overwritten as off.',
     posPrinterSettingsSub: 'Configure kitchen printers and category output per store.',
     posPrinterSaveStatusIdle: 'Before saving',
     posPrinterQuickTesting: 'Printing test...',

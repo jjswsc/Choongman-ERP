@@ -1073,6 +1073,8 @@ export const I18N_POS_TH: Record<string, string> = {
     posHallOrder: 'สลิปหน้าร้าน',
     posCustomerReceiptPrint: 'ใบเสร็จลูกค้า',
     posReceiptVoidPrint: 'ใบเสร็จยกเลิก',
+    posPrinterSettingsNotLoaded:
+      'ยังโหลดการตั้งค่าเครื่องพิมพ์ไม่สำเร็จครับ รีเฟรชแล้วบันทึกอีกครั้งครับ ระบบกันการบันทึกไว้ เพื่อไม่ให้การพิมพ์อัตโนมัติถูกปิดทับครับ',
     posPrinterSettingsSub: 'ตั้งค่าเครื่องพิมพ์ครัวและการพิมพ์ตามหมวดของแต่ละสาขา',
     posPrinterSaveStatusIdle: 'ก่อนบันทึก',
     posPrinterQuickTesting: 'กำลังพิมพ์ทดสอบ...',
