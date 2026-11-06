@@ -969,6 +969,9 @@ export const I18N_POS_KO: Record<string, string> = {
     posStatusCooking: '조리중',
     posStatusReady: '준비완료',
     posClosedByAdminOnly: '마감 해제는 본사 관리자만 가능합니다.',
+    posSettlementAlreadyClosed:
+      '이미 마감된 결산입니다. 다시 저장할 수 없습니다. 수정이 필요하면 본사에 마감 해제를 요청하세요.',
+    posSettlementDateRequired: '결산일을 입력하세요.',
     posSettlementAutoPrintHint: '마감에 표시 후 저장하면 요약 결산 출력이 자동으로 실행될 수 있습니다.',
     posMemo: '비고',
     posMemoPh: '메모',

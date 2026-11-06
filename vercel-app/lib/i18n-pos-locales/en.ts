@@ -994,6 +994,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posStatusCooking: 'Cooking',
     posStatusReady: 'Ready',
     posClosedByAdminOnly: 'Only HQ admin can reopen closed settlement.',
+    posSettlementAlreadyClosed:
+      'This settlement is already closed and cannot be saved again. Ask HQ to reopen if you need to edit.',
+    posSettlementDateRequired: 'Please enter the settlement date.',
     posSettlementAutoPrintHint: 'With Close checked, saving may automatically print the settlement summary.',
     posMemo: 'Memo',
     posMemoPh: 'Memo',

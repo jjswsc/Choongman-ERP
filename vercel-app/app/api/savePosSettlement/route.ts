@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 import { posApiCorsHeaders, requirePosStoreWriteAuth } from '@/lib/pos-api-write-auth'
+import { canAccessSettings } from '@/lib/permissions'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
@@ -13,6 +14,10 @@ import {
   assertUnpaidHallCloseOverrideAllowed,
   listUnpaidHallOrdersForStore,
 } from '@/lib/pos-unpaid-hall-guard-server'
+
+/** API·i18n(translate-api-message) 공통 문구 — 라우트에서 export 하면 Next 타입 검사에 걸림 */
+const POS_SETTLEMENT_ALREADY_CLOSED_MESSAGE =
+  '이미 마감 완료된 결산입니다. 재저장할 수 없습니다.'
 
 const CASH_ACTUAL_DENOM_KEYS = ['1000', '500', '100', '50', '20', '10', '5', '2', '1'] as const
 
@@ -107,11 +112,19 @@ export async function POST(req: NextRequest) {
       limit: 1,
       select: 'closed',
     })) as { closed?: boolean }[] | null
+    /**
+     * 이미 마감(closed)이면 매장 직원 재저장 금지.
+     * 본사(HQ)만 closed=false 로 저장해 마감 해제 후 다시 입력할 수 있다.
+     * (UI canUnclose 와 맞춤 — 예전에는 UI만 열리고 API가 항상 거절함)
+     */
     if (existing?.[0]?.closed) {
-      return NextResponse.json(
-        { success: false, message: '이미 마감 완료된 결산입니다. 재저장할 수 없습니다.' },
-        { headers }
-      )
+      const hqReopen = !closed && canAccessSettings(String(auth?.role || ''))
+      if (!hqReopen) {
+        return NextResponse.json(
+          { success: false, message: POS_SETTLEMENT_ALREADY_CLOSED_MESSAGE },
+          { headers }
+        )
+      }
     }
 
     /** 마감(closed) 시에만 — 미결제 홀이 있으면 사유+PIN(또는 매니저 역할) 예외 필요 */

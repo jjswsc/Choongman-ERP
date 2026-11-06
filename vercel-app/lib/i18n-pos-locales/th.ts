@@ -1298,6 +1298,9 @@ export const I18N_POS_TH: Record<string, string> = {
     posDifferenceHint: 'ยอดกรอก - ยอดระบบ',
     posClosed: 'ปิดแล้ว',
     posClosedByAdminOnly: 'เฉพาะผู้ดูแลสำนักงานใหญ่ (HQ) เท่านั้นที่ยกเลิกการปิดยอดได้',
+    posSettlementAlreadyClosed:
+      'วันนี้ปิดยอดไปแล้ว บันทึกซ้ำไม่ได้ครับ หากต้องแก้ยอด แจ้งสำนักงานใหญ่ให้ยกเลิกการปิดยอดก่อนครับ',
+    posSettlementDateRequired: 'กรุณาเลือกวันที่ปิดยอดครับ',
     posSettlementAutoPrintHint: 'เมื่อเลือกปิดยอดแล้วบันทึก ระบบอาจพิมพ์สรุปปิดยอดอัตโนมัติ',
     posStoreSelect: 'เลือกสาขา',
     posTableLabel: 'โต๊ะ',

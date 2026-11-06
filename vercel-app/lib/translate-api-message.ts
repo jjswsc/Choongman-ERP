@@ -42,6 +42,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "권한이 없습니다.": "apiPermissionDenied",
   no_store_name: "syncRecNoStoreName",
 
+  // POS 결산
+  "이미 마감 완료된 결산입니다. 재저장할 수 없습니다.": "posSettlementAlreadyClosed",
+  "결산일을 입력하세요.": "posSettlementDateRequired",
+
   // 일정표
   "저장 실패": "msg_save_fail",
   "조회 실패": "msg_load_fail",
