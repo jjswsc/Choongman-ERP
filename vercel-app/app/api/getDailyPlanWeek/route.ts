@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { addDaysYmdUtc } from '@/lib/daily-plan-generate'
+import { addDaysYmdUtc, dailyPlanItemBlocksDismiss, isDailyPlanProgressDone } from '@/lib/daily-plan-generate'
 import {
   canViewDailyPlan,
   dailyPlanScopeFilter,
@@ -36,19 +36,48 @@ export async function GET(request: NextRequest) {
       .map(normalizePlanRow)
       .filter((p) => canViewDailyPlan(scope, p))
 
-    const counts = new Map<number, { total: number; done: number }>()
+    const counts = new Map<number, { total: number; done: number; cancelled: number; locked: boolean }>()
     const ids = plans.map((p) => p.id)
     for (let i = 0; i < ids.length; i += 200) {
       const rows = ((await supabaseSelectFilter(
         'daily_plan_items',
-        `plan_id=in.(${ids.slice(i, i + 200).join(',')})&source=neq.visit`,
-        { select: 'plan_id,status', limit: 50000 }
-      )) || []) as { plan_id?: number; status?: string }[]
+        `plan_id=in.(${ids.slice(i, i + 200).join(',')})`,
+        {
+          select: 'plan_id,status,source,started_at,delegated_to_employee_id,delegated_from_item_id',
+          limit: 50000,
+        }
+      )) || []) as {
+        plan_id?: number
+        status?: string
+        source?: string
+        started_at?: string | null
+        delegated_to_employee_id?: number | null
+        delegated_from_item_id?: number | null
+      }[]
       for (const r of rows) {
-        const c = counts.get(Number(r.plan_id)) || { total: 0, done: 0 }
-        c.total += 1
-        if (r.status === 'done') c.done += 1
-        counts.set(Number(r.plan_id), c)
+        const id = Number(r.plan_id)
+        const c = counts.get(id) || { total: 0, done: 0, cancelled: 0, locked: false }
+        const status = String(r.status || '')
+        const source = String(r.source || '')
+        if (source !== 'visit') {
+          if (status === 'cancelled') c.cancelled += 1
+          else {
+            c.total += 1
+            if (isDailyPlanProgressDone(status)) c.done += 1
+          }
+        }
+        if (
+          dailyPlanItemBlocksDismiss({
+            status,
+            source,
+            startedAt: r.started_at,
+            delegatedToEmployeeId: r.delegated_to_employee_id,
+            delegatedFromItemId: r.delegated_from_item_id,
+          })
+        ) {
+          c.locked = true
+        }
+        counts.set(id, c)
       }
     }
 
@@ -73,6 +102,8 @@ export async function GET(request: NextRequest) {
         shiftOut: p.shift_out,
         total: counts.get(p.id)?.total || 0,
         done: counts.get(p.id)?.done || 0,
+        cancelled: counts.get(p.id)?.cancelled || 0,
+        locked: counts.get(p.id)?.locked || false,
       })),
     })
   } catch (e) {

@@ -7,6 +7,7 @@ import {
 } from '@/lib/permissions'
 import {
   canAssignDailyPlan,
+  canDismissDailyPlan,
   canEditRoutineTemplate,
   canListDailyPlanCandidate,
   canViewDailyPlan,
@@ -21,6 +22,7 @@ export type { DailyPlanScope }
 export type { DailyPlanRole } from '@/lib/daily-plan-generate'
 export {
   canAssignDailyPlan,
+  canDismissDailyPlan,
   canEditRoutineTemplate,
   canListDailyPlanCandidate,
   canViewDailyPlan,
@@ -58,8 +60,11 @@ import {
   pickRoutineTemplatesForPlan,
   withAssignedRoutineItems,
   planItemDraftKey,
+  dailyPlanDismissBlock,
   selectCarryItems,
   summarizePlanItems,
+  type DailyPlanCancelReason,
+  type DailyPlanDismissItem,
   type CarryLite,
   type DailyPlanRole,
   type HqTaskInput,
@@ -93,6 +98,10 @@ export type DailyPlanRow = {
   created_by: string
   created_at: string
   updated_at: string
+  cancel_reason: string
+  suppress_auto: boolean
+  cancelled_at: string | null
+  cancelled_by: string
 }
 
 export type DailyPlanItemRow = {
@@ -446,6 +455,10 @@ export function normalizePlanRow(r: Record<string, unknown>): DailyPlanRow {
     created_by: String(r.created_by || ''),
     created_at: String(r.created_at || ''),
     updated_at: String(r.updated_at || ''),
+    cancel_reason: String(r.cancel_reason || ''),
+    suppress_auto: !!r.suppress_auto,
+    cancelled_at: r.cancelled_at ? String(r.cancelled_at) : null,
+    cancelled_by: String(r.cancelled_by || ''),
   }
 }
 
@@ -752,6 +765,8 @@ export type EnsurePlanParams = {
   force?: boolean
   /** 호출 측에서 이미 없음을 확인함 */
   knownMissing?: boolean
+  /** 배정 화면에서 취소된 날을 다시 저장할 때 취소 기록을 풀고 재생성 */
+  reviveCancelled?: boolean
   ctx?: DailyPlanGenContext
 }
 
@@ -762,6 +777,7 @@ export const MANUAL_BLOCK = 'manual'
 export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: DailyPlanRow | null; created: boolean }> {
   const existing = p.knownMissing ? null : await getDailyPlanFor(p.date, p.employee.id)
   if (existing?.status === 'closed') return { plan: existing, created: false }
+  if (existing?.status === 'cancelled' && !p.reviveCancelled) return { plan: existing, created: false }
 
   const ctx = p.ctx || (await loadDailyPlanGenContext())
   const routeStores = (p.routeStores ?? existing?.route_stores ?? []).map((s) => String(s || '').trim()).filter(Boolean)
@@ -850,10 +866,11 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   }
 
   const replaceSources = ['routine', 'visit', 'action', ...(p.hqTasks ? ['hq_task'] : [])]
+  const replaceStatuses = p.reviveCancelled ? 'todo,cancelled' : 'todo'
   // 위임받은 사본(delegated_from)은 미착수여도 유지. 지우면 위임자 화면은 「위임됨」인데 직원 일정에서는 사라진다.
   await supabaseDeleteByFilter(
     'daily_plan_items',
-    `plan_id=eq.${existing.id}&status=eq.todo&source=in.(${replaceSources.join(',')})&block=neq.${MANUAL_BLOCK}&delegated_from_item_id=is.null`
+    `plan_id=eq.${existing.id}&status=in.(${replaceStatuses})&source=in.(${replaceSources.join(',')})&block=neq.${MANUAL_BLOCK}&delegated_from_item_id=is.null`
   )
   const kept = await getDailyPlanItems(existing.id)
   const keptKeys = new Set(kept.map(itemRowKey))
@@ -873,6 +890,13 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   if (p.briefing !== undefined) patch.briefing_note = String(p.briefing || '').slice(0, 2000)
   if (p.shiftIn !== undefined) patch.shift_in = p.shiftIn
   if (p.shiftOut !== undefined) patch.shift_out = p.shiftOut
+  if (p.reviveCancelled && existing.status === 'cancelled') {
+    patch.status = 'planned'
+    patch.cancel_reason = ''
+    patch.suppress_auto = false
+    patch.cancelled_at = null
+    patch.cancelled_by = ''
+  }
   await supabaseUpdateByFilter('daily_plans', `id=eq.${existing.id}`, patch)
   return { plan: { ...existing, ...(patch as Partial<DailyPlanRow>) }, created: false }
 }
@@ -1084,7 +1108,7 @@ export async function addActionItemToPlan(
   action: ActionForPlan,
   kind: 'owner' | 'verify'
 ): Promise<{ added: boolean; itemId: number | null }> {
-  if (plan.status === 'closed') return { added: false, itemId: null }
+  if (plan.status === 'closed' || plan.status === 'cancelled') return { added: false, itemId: null }
   const items = await getDailyPlanItems(plan.id)
   const found = items.find((i) => i.source === 'action' && i.ref_id === String(action.id))
   if (found) return { added: false, itemId: found.id }
@@ -1150,7 +1174,7 @@ export function planRecipient(plan: Pick<DailyPlanRow, 'employee_store' | 'emplo
 export async function publishDailyPlansForDate(date: string, pushTitle: string, pushBody: string): Promise<number> {
   const rows = ((await supabaseUpdateByFilterReturning(
     'daily_plans',
-    `plan_date=eq.${date}&published_at=is.null&status=neq.closed`,
+    `plan_date=eq.${date}&published_at=is.null&status=neq.closed&status=neq.cancelled`,
     { published_at: new Date().toISOString() }
   )) || []) as Record<string, unknown>[]
   const plans = rows.map(normalizePlanRow)
@@ -1183,7 +1207,7 @@ export async function publishDailyPlansByIds(
   const allowed: DailyPlanRow[] = []
   let skipped = 0
   for (const plan of plans) {
-    if (plan.published_at || plan.status === 'closed') {
+    if (plan.published_at || plan.status === 'closed' || plan.status === 'cancelled') {
       skipped += 1
       continue
     }
@@ -1215,7 +1239,7 @@ export async function publishDailyPlansByIds(
   const now = new Date().toISOString()
   const updated = ((await supabaseUpdateByFilterReturning(
     'daily_plans',
-    `id=in.(${allowed.map((p) => p.id).join(',')})&published_at=is.null&status=neq.closed`,
+    `id=in.(${allowed.map((p) => p.id).join(',')})&published_at=is.null&status=neq.closed&status=neq.cancelled`,
     { published_at: now, updated_at: now }
   )) || []) as Record<string, unknown>[]
   const publishedPlans = updated.map(normalizePlanRow)
@@ -1274,7 +1298,7 @@ export async function ensureAndPublishDailyPlanTargets(
         continue
       }
       const before = await getDailyPlanFor(t.date, emp.id)
-      if (before?.status === 'closed') {
+      if (before?.status === 'closed' || before?.status === 'cancelled') {
         skipped += 1
         continue
       }
@@ -1296,7 +1320,7 @@ export async function ensureAndPublishDailyPlanTargets(
         continue
       }
       if (!before) created += 1
-      if (publish && !plan.published_at && plan.status !== 'closed') {
+      if (publish && !plan.published_at && plan.status !== 'closed' && plan.status !== 'cancelled') {
         toPublish.push(plan.id)
       } else if (!publish || plan.published_at) {
         /* already published or save-only */
@@ -1366,7 +1390,7 @@ async function carryToNextPlan(plan: DailyPlanRow, items: DailyPlanItemRow[]): P
   const carry = selectCarryItems(items)
   if (carry.length === 0) return 0
   const next = await getDailyPlanFor(addDaysYmdUtc(plan.plan_date, 1), plan.employee_id)
-  if (!next || next.status === 'closed') return 0
+  if (!next || next.status === 'closed' || next.status === 'cancelled') return 0
   const nextItems = await getDailyPlanItems(next.id)
   const keys = new Set(nextItems.map(itemRowKey))
   const maxSort = nextItems.reduce((m, i) => Math.max(m, i.sort_order), 0)
@@ -1439,6 +1463,295 @@ export async function closeDailyPlan(plan: DailyPlanRow, opts: { actor: string; 
     actualTotal: s.actualTotal,
     workLogId: workLogId || '',
     carried,
+  }
+}
+
+function isDailyPlanCancelSchemaError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /cancel_reason|suppress_auto|cancelled_at|cancelled_by|PGRST204|42703/i.test(msg)
+}
+
+export { isDailyPlanCancelSchemaError }
+
+function planAsTarget(plan: DailyPlanRow): { role: DailyPlanRole; store: string; employeeId: number } {
+  const role = (DAILY_PLAN_ROLES as readonly string[]).includes(plan.role_scope)
+    ? (plan.role_scope as DailyPlanRole)
+    : 'staff'
+  return { role, store: String(plan.employee_store || plan.store_name || '').trim(), employeeId: plan.employee_id }
+}
+
+function dismissItemOf(i: DailyPlanItemRow): DailyPlanDismissItem {
+  return {
+    status: i.status,
+    source: i.source,
+    startedAt: i.started_at,
+    delegatedToEmployeeId: i.delegated_to_employee_id,
+    delegatedFromItemId: i.delegated_from_item_id,
+  }
+}
+
+export type DismissDailyPlansResult = {
+  deleted: number
+  cancelled: number
+  skipped: number
+  failed: number
+  schemaMissing: boolean
+  skippedList: { employeeId: number; date: string; reason: string }[]
+}
+
+/**
+ * 주간 칸 삭제.
+ * 미공개·미착수는 행 삭제(suppress 면 취소 흔적을 남겨 18:00 재생성을 막음).
+ * 공개된 칸은 취소로 남기고 직원에게 알림. 마감·진행 중은 건너뜀.
+ */
+export async function dismissDailyPlanTargets(
+  targets: { employeeId: number; date: string }[],
+  scope: DailyPlanScope,
+  opts: { reason: DailyPlanCancelReason; suppressAuto: boolean; actor?: string }
+): Promise<DismissDailyPlansResult> {
+  const today = getBangkokTodayDateString()
+  const actor = String(opts.actor || scope.actorName || '').trim() || 'system'
+  const uniq = new Map<string, { employeeId: number; date: string }>()
+  for (const t of targets) {
+    const employeeId = Math.floor(Number(t.employeeId) || 0)
+    const date = String(t.date || '').trim()
+    if (!(employeeId > 0) || !YMD_RE.test(date)) continue
+    uniq.set(`${employeeId}|${date}`, { employeeId, date })
+  }
+  const result: DismissDailyPlansResult = {
+    deleted: 0,
+    cancelled: 0,
+    skipped: 0,
+    failed: 0,
+    schemaMissing: false,
+    skippedList: [],
+  }
+  const skip = (employeeId: number, date: string, reason: string) => {
+    result.skipped += 1
+    if (result.skippedList.length < 30) result.skippedList.push({ employeeId, date, reason })
+  }
+  const now = new Date().toISOString()
+
+  for (const t of [...uniq.values()].slice(0, 120)) {
+    try {
+      if (t.date < today) {
+        skip(t.employeeId, t.date, 'past')
+        continue
+      }
+      const plan = await getDailyPlanFor(t.date, t.employeeId)
+      if (!plan) {
+        skip(t.employeeId, t.date, 'missing')
+        continue
+      }
+      if (!canDismissDailyPlan(scope, planAsTarget(plan))) {
+        skip(t.employeeId, t.date, 'forbidden')
+        continue
+      }
+      const items = await getDailyPlanItems(plan.id)
+      const block = dailyPlanDismissBlock(plan.status, items.map(dismissItemOf))
+      if (block) {
+        skip(t.employeeId, t.date, block)
+        continue
+      }
+      if (!plan.published_at && !opts.suppressAuto) {
+        await supabaseDeleteByFilter('daily_plans', `id=eq.${plan.id}`)
+        result.deleted += 1
+        continue
+      }
+      await supabaseUpdateByFilter('daily_plans', `id=eq.${plan.id}`, {
+        status: 'cancelled',
+        cancel_reason: opts.reason,
+        suppress_auto: true,
+        cancelled_at: now,
+        cancelled_by: actor.slice(0, 120),
+        est_total: 0,
+        updated_at: now,
+      })
+      if (!plan.published_at) {
+        await supabaseDeleteByFilter('daily_plan_items', `plan_id=eq.${plan.id}`)
+      } else {
+        await supabaseUpdateByFilter('daily_plan_items', `plan_id=eq.${plan.id}&status=eq.todo`, {
+          status: 'cancelled',
+          skip_reason: opts.reason,
+          updated_at: now,
+        })
+      }
+      result.cancelled += 1
+      if (plan.published_at) {
+        const recipient = planRecipient(plan)
+        if (recipient) {
+          void pushStoreActionNotice({
+            title: '🗑️ ตารางงานถูกยกเลิก · 일정 취소',
+            body: `${plan.plan_date} ${plan.employee_name}`.slice(0, 180),
+            recipients: [recipient],
+          }).catch(() => {})
+        }
+      }
+    } catch (e) {
+      if (isDailyPlanCancelSchemaError(e)) {
+        result.schemaMissing = true
+        result.failed += 1
+        return result
+      }
+      result.failed += 1
+      console.warn('dismissDailyPlanTargets:', t.employeeId, t.date, e instanceof Error ? e.message : e)
+    }
+  }
+  return result
+}
+
+export type MoveDailyPlanResult =
+  | { ok: true; planId: number }
+  | { ok: false; messageKey: string; message: string; status: number }
+
+/** 시작 전 하루 일정을 다른 사람 또는 다른 날로 옮긴다. 원래 칸은 선택 시 재생성 금지 흔적을 남긴다. */
+export async function moveDailyPlan(
+  params: {
+    fromEmployeeId: number
+    fromDate: string
+    toEmployeeId: number
+    toDate: string
+    suppressAuto: boolean
+  },
+  scope: DailyPlanScope
+): Promise<MoveDailyPlanResult> {
+  const today = getBangkokTodayDateString()
+  const fromDate = String(params.fromDate || '').trim()
+  const toDate = String(params.toDate || '').trim()
+  const fromEmployeeId = Math.floor(Number(params.fromEmployeeId) || 0)
+  const toEmployeeId = Math.floor(Number(params.toEmployeeId) || 0)
+  if (!YMD_RE.test(fromDate) || !YMD_RE.test(toDate) || fromDate < today || toDate < today) {
+    return { ok: false, messageKey: 'dp_err_date_range', message: '오늘부터 7일 이내만 옮길 수 있습니다.', status: 400 }
+  }
+  const maxDate = addDaysYmdUtc(today, 7)
+  if (toDate > maxDate) {
+    return { ok: false, messageKey: 'dp_err_date_range', message: '오늘부터 7일 이내만 옮길 수 있습니다.', status: 400 }
+  }
+  if (fromEmployeeId === toEmployeeId && fromDate === toDate) {
+    return { ok: false, messageKey: 'dp_err_move_same', message: '같은 사람·같은 날짜입니다.', status: 400 }
+  }
+  const source = await getDailyPlanFor(fromDate, fromEmployeeId)
+  if (!source) return { ok: false, messageKey: 'dp_no_plan', message: '일정표가 없습니다.', status: 404 }
+  if (!canDismissDailyPlan(scope, planAsTarget(source))) {
+    return { ok: false, messageKey: 'dp_err_cancel_forbidden', message: '권한이 없습니다.', status: 403 }
+  }
+  const items = await getDailyPlanItems(source.id)
+  const block = dailyPlanDismissBlock(source.status, items.map(dismissItemOf))
+  if (block === 'in_progress') {
+    return { ok: false, messageKey: 'dp_err_move_locked', message: '이미 시작한 일정은 옮길 수 없습니다.', status: 409 }
+  }
+  if (block) {
+    return { ok: false, messageKey: 'dp_err_cancel_locked', message: '마감되었거나 취소된 일정은 옮길 수 없습니다.', status: 409 }
+  }
+  const emp = await loadPlanEmployeeById(toEmployeeId)
+  if (!emp) return { ok: false, messageKey: 'dp_msg_employee_not_found', message: '직원을 찾을 수 없습니다.', status: 404 }
+  const role = dailyPlanRoleOf(emp)
+  if (!role) return { ok: false, messageKey: 'dp_err_no_role', message: '이 직급은 일정표를 쓰지 않습니다.', status: 400 }
+  if (!canAssignDailyPlan(scope, { role, store: emp.store, employeeId: emp.id })) {
+    return { ok: false, messageKey: 'dp_err_cancel_forbidden', message: '권한이 없습니다.', status: 403 }
+  }
+  const target = await getDailyPlanFor(toDate, emp.id)
+  if (target) {
+    return { ok: false, messageKey: 'dp_err_move_target', message: '옮길 곳에 이미 일정이 있습니다.', status: 409 }
+  }
+  const now = new Date().toISOString()
+  const actor = String(scope.actorName || '').trim() || 'system'
+  try {
+    await supabaseUpdateByFilter('daily_plans', `id=eq.${source.id}`, {
+      plan_date: toDate,
+      employee_id: emp.id,
+      employee_name: emp.name,
+      employee_store: emp.store,
+      role_scope: role,
+      position: dailyPlanPositionOf(role, emp),
+      store_name: role === 'supervisor' ? source.store_name : emp.store,
+      route_stores: role === 'supervisor' ? source.route_stores || [] : [],
+      updated_at: now,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/duplicate|23505/i.test(msg)) {
+      return { ok: false, messageKey: 'dp_err_move_target', message: '옮길 곳에 이미 일정이 있습니다.', status: 409 }
+    }
+    throw e
+  }
+  if (params.suppressAuto) {
+    try {
+      await supabaseInsert('daily_plans', {
+        plan_date: fromDate,
+        employee_id: fromEmployeeId,
+        employee_name: source.employee_name,
+        employee_store: source.employee_store,
+        role_scope: source.role_scope,
+        position: source.position,
+        store_name: source.store_name,
+        route_stores: source.route_stores || [],
+        status: 'cancelled',
+        cancel_reason: 'moved',
+        suppress_auto: true,
+        cancelled_at: now,
+        cancelled_by: actor.slice(0, 120),
+        created_by: actor.slice(0, 120),
+        created_at: now,
+        updated_at: now,
+      })
+    } catch (e) {
+      if (isDailyPlanCancelSchemaError(e)) {
+        return {
+          ok: false,
+          messageKey: 'dp_err_cancel_schema',
+          message: '일정은 옮겼지만 재생성 금지 컬럼이 없습니다. SQL을 먼저 실행하세요.',
+          status: 503,
+        }
+      }
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/duplicate|23505/i.test(msg)) {
+        return { ok: true, planId: source.id }
+      }
+      throw e
+    }
+  }
+  if (source.published_at) {
+    const moved = await getDailyPlanById(source.id)
+    const nextRecipient = moved ? planRecipient(moved) : null
+    const prevRecipient = planRecipient(source)
+    if (nextRecipient) {
+      void pushStoreActionNotice({
+        title: '📅 ตารางงานย้ายมา · 일정이 옮겨졌습니다',
+        body: `${toDate} ${emp.name}`.slice(0, 180),
+        recipients: [nextRecipient],
+      }).catch(() => {})
+    }
+    if (prevRecipient && (prevRecipient.store !== nextRecipient?.store || prevRecipient.name !== nextRecipient?.name)) {
+      void pushStoreActionNotice({
+        title: '📅 ตารางงานถูกย้าย · 일정이 옮겨졌습니다',
+        body: `${fromDate} → ${toDate}`.slice(0, 180),
+        recipients: [prevRecipient],
+      }).catch(() => {})
+    }
+  }
+  return { ok: true, planId: source.id }
+}
+
+/** 항목이 전부 취소되면 하루 일정도 취소로 남겨 자동 재생성을 막는다. 컬럼이 없으면 항목 취소만 유지 */
+export async function cancelPlanIfNoActiveItems(planId: number, reason: string, actor: string): Promise<void> {
+  const plan = await getDailyPlanById(planId)
+  if (!plan || plan.status === 'closed' || plan.status === 'cancelled') return
+  const items = await getDailyPlanItems(planId)
+  if (items.length === 0 || items.some((i) => i.status !== 'cancelled')) return
+  const now = new Date().toISOString()
+  try {
+    await supabaseUpdateByFilter('daily_plans', `id=eq.${plan.id}`, {
+      status: 'cancelled',
+      cancel_reason: reason.slice(0, 40),
+      suppress_auto: true,
+      cancelled_at: now,
+      cancelled_by: actor.slice(0, 120),
+      est_total: 0,
+      updated_at: now,
+    })
+  } catch (e) {
+    if (!isDailyPlanCancelSchemaError(e)) throw e
   }
 }
 

@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
       if (plan) {
         const items = await getDailyPlanItems(plan.id)
         const travel = await loadTravelMinutesByTemplate([plan.template_id])
-        const work = items.filter((i) => i.source !== 'visit')
+        const work = items.filter((i) => i.source !== 'visit' && i.status !== 'cancelled')
         const done = work.filter((i) => isDailyPlanProgressDone(i.status)).length
         const { slots } = computePlanTimeline(
-          items.map((i) => ({
+          items.filter((i) => i.status !== 'cancelled').map((i) => ({
             id: i.id,
             source: i.source,
             storeName: i.store_name,

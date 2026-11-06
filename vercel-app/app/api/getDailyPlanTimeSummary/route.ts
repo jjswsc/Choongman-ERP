@@ -44,6 +44,7 @@ async function fallbackSummary(start: string, end: string, scopeFilter: string):
       actual_minutes?: number | null
     }[]
     for (const it of items) {
+      if (it.status === 'cancelled') continue
       const role = roleOf.get(Number(it.plan_id)) || 'staff'
       const category = String(it.category || '기타')
       const title = String(it.title || '')

@@ -5,6 +5,8 @@ import {
   collectAssignedRoutineItems,
   computeActualMinutes,
   diffPersonalAgainstSharedTemplate,
+  canCancelDailyPlanItem,
+  dailyPlanDismissBlock,
   isDailyPlanProgressDone,
   isoWeekdayOfYmd,
   dailyPlanDeptFromJob,
@@ -370,6 +372,22 @@ describe("buildDailyPlanItems", () => {
   })
 })
 
+describe("cancel and dismiss guards", () => {
+  it("cancels only untouched non-visit items", () => {
+    expect(canCancelDailyPlanItem({ status: "todo", source: "routine" })).toBe(true)
+    expect(canCancelDailyPlanItem({ status: "todo", source: "hq_task" })).toBe(true)
+    expect(canCancelDailyPlanItem({ status: "todo", source: "visit" })).toBe(false)
+    expect(canCancelDailyPlanItem({ status: "doing", source: "routine", startedAt: "2026-11-06T02:00:00Z" })).toBe(false)
+    expect(canCancelDailyPlanItem({ status: "todo", source: "routine", delegatedToEmployeeId: 4 })).toBe(false)
+  })
+  it("blocks a day when anything has started, and ignores already cancelled lines", () => {
+    expect(dailyPlanDismissBlock("planned", [{ status: "todo", source: "routine" }, { status: "cancelled", source: "hq_task" }])).toBeNull()
+    expect(dailyPlanDismissBlock("planned", [{ status: "doing", source: "routine" }])).toBe("in_progress")
+    expect(dailyPlanDismissBlock("closed", [])).toBe("closed")
+    expect(dailyPlanDismissBlock("cancelled", [])).toBe("cancelled")
+  })
+})
+
 describe("delegate progress helpers", () => {
   it("mergeDailyPlanPhotoUrls dedupes and keeps last max", () => {
     expect(isDailyPlanProgressDone("delegated")).toBe(false)
@@ -391,6 +409,7 @@ describe("summary and work log", () => {
       total: 3,
       done: 1,
       skipped: 1,
+      cancelled: 0,
       open: 1,
       estTotal: 60,
       actualTotal: 15,
@@ -432,6 +451,21 @@ describe("summary and work log", () => {
     expect(text).toContain("- A · 청결 (사유 · เหตุผล: 정전)")
     expect(text).toContain("ปิดอัตโนมัติ")
     expect(text).toContain("- 교육")
+  })
+  it("drops cancelled items from the completion rate and the not-done list", () => {
+    const withCancel = [
+      ...items,
+      { source: "routine", status: "cancelled", title: "오배정", storeName: "A", estMinutes: 40, actualMinutes: null, skipReason: "wrong_person" },
+    ]
+    const s = summarizePlanItems(withCancel)
+    expect(s.total).toBe(3)
+    expect(s.cancelled).toBe(1)
+    expect(s.doneRate).toBe(33)
+    expect(s.skipped).toBe(1)
+    expect(s.estTotal).toBe(60)
+    const text = buildDailyPlanWorkLogContent({ dateYmd: "2026-10-08", items: withCancel })
+    expect(text).toContain("취소 · ยกเลิก 1")
+    expect(text).not.toContain("오배정")
   })
   it("carries only unfinished hq/carry items", () => {
     const rows = [

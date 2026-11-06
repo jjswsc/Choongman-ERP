@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { JwtPayload } from '@/lib/jwt-auth'
 import {
   canAssignDailyPlan,
+  canDismissDailyPlan,
   canEditRoutineTemplate,
   canListDailyPlanCandidate,
   canViewDailyPlan,
@@ -91,6 +92,12 @@ describe('canListDailyPlanCandidate — Silom Manager', () => {
       canAssignDailyPlan(scope, { role: 'manager', store: 'CM Silom', employeeId: 102 })
     ).toBe(false)
   })
+
+  it('lets the store manager cancel staff schedules and their own, not another manager', () => {
+    expect(canDismissDailyPlan(scope, { role: 'staff', store: 'CM Silom', employeeId: 50 })).toBe(true)
+    expect(canDismissDailyPlan(scope, { role: 'manager', store: 'CM Silom', employeeId: 101 })).toBe(true)
+    expect(canDismissDailyPlan(scope, { role: 'manager', store: 'CM Silom', employeeId: 102 })).toBe(false)
+  })
 })
 
 describe('canViewDailyPlan — Silom Manager', () => {
@@ -134,5 +141,14 @@ describe('canViewDailyPlan — Silom Manager', () => {
         store_name: 'CM Silom',
       })
     ).toBe(true)
+  })
+})
+
+describe('canDismissDailyPlan — staff', () => {
+  it('cannot cancel their own assigned work', () => {
+    const scope = resolveDailyPlanScope(
+      auth({ store: 'CM Silom', name: 'Staff', role: 'staff', employeeId: 50 })
+    )
+    expect(canDismissDailyPlan(scope, { role: 'staff', store: 'CM Silom', employeeId: 50 })).toBe(false)
   })
 })

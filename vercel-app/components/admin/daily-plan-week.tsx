@@ -1,21 +1,25 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CheckSquare, ChevronLeft, ChevronRight, Plus, RefreshCw, Send } from "lucide-react"
+import { ArrowRightLeft, CheckSquare, ChevronLeft, ChevronRight, Plus, RefreshCw, Send, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
 import { appAlert } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import {
+  dismissDailyPlanTargets,
   ensurePublishDailyPlanTargets,
   getDailyPlanBoard,
   getDailyPlanWeek,
+  moveDailyPlan,
   type DailyPlanCandidate,
   type DailyPlanWeekCell,
 } from "@/lib/api-client"
+import { DAILY_PLAN_CANCEL_REASONS } from "@/lib/daily-plan-generate"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { dailyPlanDeptKey } from "@/lib/daily-plan-generate"
 import { dailyPlanLabelers } from "@/lib/daily-plan-i18n"
@@ -61,6 +65,13 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
   const [candidates, setCandidates] = useState<DailyPlanCandidate[]>([])
   const [loading, setLoading] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [acting, setActing] = useState(false)
+  const [dismissOpen, setDismissOpen] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState<(typeof DAILY_PLAN_CANCEL_REASONS)[number]>("not_needed")
+  const [suppressAuto, setSuppressAuto] = useState(true)
+  const [moveEmp, setMoveEmp] = useState(0)
+  const [moveDate, setMoveDate] = useState(today)
   const [notReady, setNotReady] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [q, setQ] = useState("")
@@ -157,7 +168,7 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
       .map((p) => ({ ...p, days: days.map((d) => byKey.get(cellKey(p.id, d)) || null) }))
   }, [roster, cells, days, q, storeFilter, deptFilter])
 
-  /** 선택 가능: 오늘 이후 + (빈 칸 또는 미공개·미마감) */
+  /** 오늘 이후. 빈 칸은 생성, 마감·취소가 아닌 칸은 삭제·이동 대상 */
   const selectableKeys = useMemo(() => {
     const keys: string[] = []
     for (const r of rows) {
@@ -165,11 +176,7 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
         const d = days[i]
         if (d < today) continue
         const c = r.days[i]
-        if (!c) {
-          keys.push(cellKey(r.id, d))
-          continue
-        }
-        if (!c.published && c.status !== "closed") keys.push(cellKey(r.id, d))
+        if (!c || (c.status !== "closed" && c.status !== "cancelled")) keys.push(cellKey(r.id, d))
       }
     }
     return keys
@@ -242,8 +249,49 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
     anchorRef.current = null
   }
 
+  const cellByKey = useCallback(
+    (employeeId: number, date: string) => cells.find((c) => c.employeeId === employeeId && c.date === date) || null,
+    [cells]
+  )
+
+  const dismissPreview = useMemo(() => {
+    let draft = 0
+    let published = 0
+    let locked = 0
+    const send: { employeeId: number; date: string }[] = []
+    for (const key of selected) {
+      const parsed = parseCellKey(key)
+      if (!parsed) continue
+      const c = cellByKey(parsed.employeeId, parsed.date)
+      if (!c || c.status === "closed" || c.status === "cancelled") continue
+      if (c.locked) {
+        locked += 1
+        continue
+      }
+      if (c.published) published += 1
+      else draft += 1
+      send.push(parsed)
+    }
+    return { draft, published, locked, send }
+  }, [selected, cellByKey])
+
+  const moveSource = useMemo(() => {
+    if (selected.size !== 1) return null
+    const parsed = parseCellKey([...selected][0] || "")
+    if (!parsed) return null
+    const c = cellByKey(parsed.employeeId, parsed.date)
+    if (!c || c.locked || c.status === "closed" || c.status === "cancelled") return null
+    return c
+  }, [selected, cellByKey])
+
   const publishSelected = async () => {
-    const targets = [...selected].map(parseCellKey).filter((x): x is { employeeId: number; date: string } => !!x)
+    const targets = [...selected]
+      .map(parseCellKey)
+      .filter((x): x is { employeeId: number; date: string } => !!x)
+      .filter((t) => {
+        const c = cellByKey(t.employeeId, t.date)
+        return !c || (!c.published && c.status !== "closed" && c.status !== "cancelled")
+      })
     if (targets.length === 0) {
       await appAlert(t("dp_week_publish_pick"))
       return
@@ -268,10 +316,80 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
     }
   }
 
+  const openDismiss = () => {
+    if (dismissPreview.send.length === 0) {
+      void appAlert(t("dp_cancel_none"))
+      return
+    }
+    setCancelReason("not_needed")
+    setSuppressAuto(true)
+    setDismissOpen(true)
+  }
+
+  const confirmDismiss = async () => {
+    setActing(true)
+    try {
+      const res = await dismissDailyPlanTargets(dismissPreview.send, {
+        reason: cancelReason,
+        suppressAuto,
+      })
+      if (!res.success) {
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
+        return
+      }
+      setDismissOpen(false)
+      await appAlert(
+        t("dp_cancel_done")
+          .replace("{deleted}", String(res.deleted ?? 0))
+          .replace("{cancelled}", String(res.cancelled ?? 0))
+          .replace("{skipped}", String(res.skipped ?? 0))
+      )
+      await load()
+    } finally {
+      setActing(false)
+    }
+  }
+
+  const openMove = () => {
+    if (!moveSource) {
+      void appAlert(t("dp_move_need_one"))
+      return
+    }
+    const next = addBangkokCalendarDays(moveSource.date, 1)
+    const max = addBangkokCalendarDays(today, 7)
+    setMoveEmp(moveSource.employeeId)
+    setMoveDate(next <= max ? next : moveSource.date)
+    setSuppressAuto(true)
+    setMoveOpen(true)
+  }
+
+  const confirmMove = async () => {
+    if (!moveSource || !(moveEmp > 0) || !moveDate) return
+    setActing(true)
+    try {
+      const res = await moveDailyPlan({
+        fromEmployeeId: moveSource.employeeId,
+        fromDate: moveSource.date,
+        toEmployeeId: moveEmp,
+        toDate: moveDate,
+        suppressAuto,
+      })
+      if (!res.success) {
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
+        return
+      }
+      setMoveOpen(false)
+      await appAlert(t("dp_move_done"))
+      await load()
+    } finally {
+      setActing(false)
+    }
+  }
+
   const storeLoad = useMemo(() => {
     const m = new Map<string, number>()
     for (const c of cells) {
-      if (c.role !== "supervisor") continue
+      if (c.role !== "supervisor" || c.status === "cancelled") continue
       for (const s of c.route) m.set(s, (m.get(s) || 0) + 1)
     }
     return [...m.entries()].sort((a, b) => b[1] - a[1])
@@ -363,6 +481,20 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
         <span className="text-xs text-muted-foreground">
           {t("dp_week_selected_n").replace("{n}", String(selected.size))}
         </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs"
+          disabled={acting || dismissPreview.send.length === 0}
+          onClick={openDismiss}
+        >
+          <Trash2 className="mr-1 h-3.5 w-3.5" />
+          {t("dp_btn_week_delete")}
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 text-xs" disabled={acting || !moveSource} onClick={openMove}>
+          <ArrowRightLeft className="mr-1 h-3.5 w-3.5" />
+          {t("dp_btn_week_move")}
+        </Button>
         <Button
           size="sm"
           className="ml-auto h-8 text-xs"
@@ -509,16 +641,28 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
                                 <p className="line-clamp-3 pr-5 text-[11px] font-medium">
                                   {c.route.length > 0 ? c.route.join(" → ") : c.store}
                                 </p>
-                                <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">
-                                  {c.done}/{c.total} ({rate}%)
-                                  {c.shiftIn ? ` · ${c.shiftIn}` : ""}
-                                </p>
+                                {c.status === "cancelled" ? (
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground">{t("dp_plan_cancelled")}</p>
+                                ) : (
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">
+                                    {c.done}/{c.total} ({rate}%)
+                                    {c.shiftIn ? ` · ${c.shiftIn}` : ""}
+                                    {(c.cancelled || 0) > 0
+                                      ? ` · ${t("dp_summary_cancelled").replace("{n}", String(c.cancelled))}`
+                                      : ""}
+                                  </p>
+                                )}
                                 <p className="text-[10px]">
-                                  {c.status === "closed"
-                                    ? label.planStatus("closed")
-                                    : c.published
-                                      ? t("dp_published")
-                                      : t("dp_unpublished")}
+                                  {c.status === "cancelled"
+                                    ? t("dp_plan_cancelled")
+                                    : c.status === "closed"
+                                      ? label.planStatus("closed")
+                                      : c.published
+                                        ? t("dp_published")
+                                        : t("dp_unpublished")}
+                                  {c.locked && c.status !== "cancelled" && c.status !== "closed"
+                                    ? ` · ${t("dp_week_locked_short")}`
+                                    : ""}
                                 </p>
                               </button>
                             </div>
@@ -548,6 +692,102 @@ export function DailyPlanWeek({ t, onAssign }: { t: T; onAssign: (date: string, 
           </CardContent>
         </Card>
       ) : null}
+
+      <Dialog open={dismissOpen} onOpenChange={setDismissOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("dp_cancel_title")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-muted-foreground">
+              {t("dp_cancel_preview")
+                .replace("{draft}", String(dismissPreview.draft))
+                .replace("{published}", String(dismissPreview.published))
+                .replace("{locked}", String(dismissPreview.locked))}
+            </p>
+            <p className="text-xs text-muted-foreground">{t("dp_cancel_published_note")}</p>
+            <label className="block space-y-1 text-xs">
+              <span>{t("dp_cancel_reason")}</span>
+              <select
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value as (typeof DAILY_PLAN_CANCEL_REASONS)[number])}
+                className="h-9 w-full rounded border bg-background px-2"
+              >
+                {DAILY_PLAN_CANCEL_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {t(`dp_cancel_reason_${r}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={suppressAuto}
+                onChange={(e) => setSuppressAuto(e.target.checked)}
+              />
+              <span>{t("dp_cancel_suppress")}</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={acting} onClick={() => setDismissOpen(false)}>
+              {t("dp_tpl_copy_cancel")}
+            </Button>
+            <Button disabled={acting || dismissPreview.send.length === 0} onClick={() => void confirmDismiss()}>
+              {t("dp_btn_week_delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("dp_move_title")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-xs text-muted-foreground">
+              {moveSource ? `${moveSource.employeeName} · ${moveSource.date}` : ""}
+            </p>
+            <label className="block space-y-1 text-xs">
+              <span>{t("dp_move_to_person")}</span>
+              <select
+                value={moveEmp || ""}
+                onChange={(e) => setMoveEmp(Number(e.target.value) || 0)}
+                className="h-9 w-full rounded border bg-background px-2"
+              >
+                {roster.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} · {p.store}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 text-xs">
+              <span>{t("dp_move_to_date")}</span>
+              <Input type="date" value={moveDate} min={today} max={addBangkokCalendarDays(today, 7)} onChange={(e) => setMoveDate(e.target.value)} />
+            </label>
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={suppressAuto}
+                onChange={(e) => setSuppressAuto(e.target.checked)}
+              />
+              <span>{t("dp_move_suppress")}</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={acting} onClick={() => setMoveOpen(false)}>
+              {t("dp_tpl_copy_cancel")}
+            </Button>
+            <Button disabled={acting || !moveSource || !(moveEmp > 0)} onClick={() => void confirmMove()}>
+              {t("dp_btn_week_move")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

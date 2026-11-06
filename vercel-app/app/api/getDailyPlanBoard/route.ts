@@ -74,10 +74,12 @@ export async function GET(request: NextRequest) {
     const nowMin = hmToMin(nowHm) ?? 0
     const list = plans.map((p) => {
       const items = itemsByPlan.get(p.id) || []
-      const work = items.filter((i) => i.source !== 'visit')
+      const work = items.filter((i) => i.source !== 'visit' && i.status !== 'cancelled')
       const done = work.filter((i) => isDailyPlanProgressDone(i.status))
       const { slots } = computePlanTimeline(
-        items.map((i) => ({ id: i.id, source: i.source, storeName: i.store_name, timeSlot: i.time_slot, estMinutes: i.est_minutes })),
+        items
+          .filter((i) => i.status !== 'cancelled')
+          .map((i) => ({ id: i.id, source: i.source, storeName: i.store_name, timeSlot: i.time_slot, estMinutes: i.est_minutes })),
         { shiftIn: p.shift_in, travelMinutes: travelMinutesOfPlan(p, travel) }
       )
       const late =

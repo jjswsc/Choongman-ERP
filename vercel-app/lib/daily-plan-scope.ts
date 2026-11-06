@@ -167,6 +167,15 @@ export function canViewDailyPlan(scope: DailyPlanScope, plan: DailyPlanViewLite)
   )
 }
 
+/**
+ * 일정 삭제·취소·이동.
+ * 배정 권한과 같되, 직원 본인 일정은 빼지 못한다. 매니저·SV·본사만.
+ */
+export function canDismissDailyPlan(scope: DailyPlanScope, target: DailyPlanTargetLite): boolean {
+  if (!scope.office && !scope.supervisor && !scope.storeLead) return false
+  return canAssignDailyPlan(scope, target)
+}
+
 /** 본사 → 전 직급, 슈퍼바이저 → 매니저·직원(본인 포함), 매니저 → 자기 매장 직원(+본인) */
 export function canAssignDailyPlan(scope: DailyPlanScope, target: DailyPlanTargetLite): boolean {
   if (scope.actorEmployeeId != null && target.employeeId === scope.actorEmployeeId) return true

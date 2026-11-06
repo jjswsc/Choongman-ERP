@@ -82,7 +82,8 @@ function PlanHeader({ bundle, t }: { bundle: DailyPlanBundle; t: (k: string) => 
         <div className="h-full bg-emerald-500 transition-all" style={{ width: `${summary.doneRate}%` }} />
       </div>
       <p className="text-xs text-muted-foreground">
-        {t("dp_col_progress")} {summary.done}/{summary.total} ({summary.doneRate}%) · {t("dp_est")}{" "}
+        {t("dp_col_progress")} {summary.done}/{summary.total} ({summary.doneRate}%)
+        {(summary.cancelled || 0) > 0 ? ` · ${t("dp_summary_cancelled").replace("{n}", String(summary.cancelled))}` : ""} · {t("dp_est")}{" "}
         {minutesLabel(summary.estTotal, t)} · {t("dp_actual")} {minutesLabel(summary.actualTotal, t)}
       </p>
       {plan.briefing_note ? (
@@ -319,6 +320,7 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
             items={memberBundle.items}
             t={t}
             travelMinutes={memberBundle.travelMinutes}
+            canCancel={canManageTeam}
             onChanged={() => void refreshMember()}
             onLink={onLink}
           />
@@ -413,12 +415,15 @@ export function DailyPlanTab({ onNavigate }: { onNavigate?: (tab: string) => voi
                 t={t}
                 travelMinutes={today.travelMinutes}
                 canDelegate={canDelegateMine}
+                canCancel={canManageTeam}
                 delegateTargets={teamMembers}
                 onChanged={() => void load()}
                 onLink={onLink}
               />
 
-              {today.plan.status === "closed" ? (
+              {today.plan.status === "cancelled" ? (
+                <p className="rounded bg-muted p-2 text-center text-xs text-muted-foreground">{t("dp_cancelled_note")}</p>
+              ) : today.plan.status === "closed" ? (
                 <p className="flex items-center justify-center gap-1 rounded bg-muted p-2 text-xs text-muted-foreground">
                   <Lock className="h-3 w-3" />
                   {t("dp_closed_note")}

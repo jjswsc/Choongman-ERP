@@ -58,6 +58,7 @@ export type DailyPlanSummary = {
   total: number
   done: number
   skipped: number
+  cancelled?: number
   open: number
   estTotal: number
   actualTotal: number
@@ -98,6 +99,7 @@ export type DailyPlanItemAction =
   | "photo"
   | "add"
   | "remove"
+  | "cancel"
   | "delegate"
   | "verify_pass"
   | "verify_reject"
@@ -363,6 +365,46 @@ export async function ensurePublishDailyPlanTargets(
   }
 }
 
+export async function dismissDailyPlanTargets(
+  targets: { employeeId: number; date: string }[],
+  opts: { reason: string; suppressAuto?: boolean }
+) {
+  const res = await apiFetch("/api/store/dismiss-daily-plans", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      targets,
+      reason: opts.reason,
+      suppressAuto: opts.suppressAuto !== false,
+    }),
+  })
+  return (await res.json()) as {
+    success?: boolean
+    message?: string
+    messageKey?: string
+    deleted?: number
+    cancelled?: number
+    skipped?: number
+    failed?: number
+    skippedList?: { employeeId: number; date: string; reason: string }[]
+  }
+}
+
+export async function moveDailyPlan(data: {
+  fromEmployeeId: number
+  fromDate: string
+  toEmployeeId: number
+  toDate: string
+  suppressAuto?: boolean
+}) {
+  const res = await apiFetch("/api/store/move-daily-plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...data, suppressAuto: data.suppressAuto !== false }),
+  })
+  return (await res.json()) as { success?: boolean; message?: string; messageKey?: string; planId?: number }
+}
+
 /** 시간 분석 제안 적용 — 같은 직급 템플릿의 같은 이름 항목 예상 분 변경 */
 export async function applyRoutineEstimate(data: { roleScope: string; title: string; estMinutes: number }) {
   const res = await apiFetch("/api/saveRoutineTemplate", {
@@ -406,6 +448,8 @@ export type DailyPlanWeekCell = {
   shiftOut: string
   total: number
   done: number
+  cancelled?: number
+  locked?: boolean
 }
 
 export async function getDailyPlanWeek(start: string) {

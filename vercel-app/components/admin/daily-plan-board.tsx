@@ -261,6 +261,7 @@ export function DailyPlanBoard({ t }: { t: T }) {
                 items={detail.items}
                 t={t}
                 travelMinutes={detail.travelMinutes}
+                canCancel
                 onChanged={() => {
                   void openDetail(detail.plan.id)
                   void load()

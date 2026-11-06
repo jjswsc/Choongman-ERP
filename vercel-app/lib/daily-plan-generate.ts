@@ -13,9 +13,56 @@ export type RoutineTemplateStatus = (typeof ROUTINE_TEMPLATE_STATUSES)[number]
 export const DAILY_PLAN_ITEM_SOURCES = ["routine", "hq_task", "action", "carry", "visit"] as const
 export type DailyPlanItemSource = (typeof DAILY_PLAN_ITEM_SOURCES)[number]
 
-/** DB status 문자열 — delegated / awaiting_verify 는 위임 흐름용 */
-export const DAILY_PLAN_ITEM_STATUSES = ["todo", "doing", "done", "skipped", "delegated", "awaiting_verify"] as const
+/** DB status 문자열 — delegated / awaiting_verify 는 위임 흐름용, cancelled 는 매니저 취소 */
+export const DAILY_PLAN_ITEM_STATUSES = ["todo", "doing", "done", "skipped", "delegated", "awaiting_verify", "cancelled"] as const
 export type DailyPlanItemStatus = (typeof DAILY_PLAN_ITEM_STATUSES)[number]
+
+/** 일정 취소 사유 코드. skip_reason·cancel_reason 에 그대로 저장 */
+export const DAILY_PLAN_CANCEL_REASONS = ["wrong_person", "wrong_store", "duplicate", "not_needed"] as const
+export type DailyPlanCancelReason = (typeof DAILY_PLAN_CANCEL_REASONS)[number]
+
+export function isDailyPlanCancelReason(value: string): value is DailyPlanCancelReason {
+  return (DAILY_PLAN_CANCEL_REASONS as readonly string[]).includes(value)
+}
+
+export type DailyPlanDismissItem = {
+  status: string
+  source: string
+  startedAt?: string | null
+  delegatedToEmployeeId?: number | null
+  delegatedFromItemId?: number | null
+}
+
+/** 하루 일정 전체를 지우거나 취소하지 못하게 막는 항목 */
+export function dailyPlanItemBlocksDismiss(item: DailyPlanDismissItem): boolean {
+  if (item.status === "cancelled") return false
+  if (item.status !== "todo") return true
+  if (item.startedAt) return true
+  if (item.delegatedToEmployeeId) return true
+  if (item.delegatedFromItemId) return true
+  return false
+}
+
+/** 하루 일정 삭제/취소 불가 이유. null 이면 진행 가능 */
+export function dailyPlanDismissBlock(
+  planStatus: string,
+  items: DailyPlanDismissItem[]
+): "closed" | "cancelled" | "in_progress" | null {
+  if (planStatus === "closed") return "closed"
+  if (planStatus === "cancelled") return "cancelled"
+  if (items.some(dailyPlanItemBlocksDismiss)) return "in_progress"
+  return null
+}
+
+/** 항목 하나 취소. 방문(체크인 연동)과 위임·착수 항목은 제외 */
+export function canCancelDailyPlanItem(item: DailyPlanDismissItem): boolean {
+  if (item.source === "visit") return false
+  if (item.status !== "todo") return false
+  if (item.startedAt) return false
+  if (item.delegatedToEmployeeId) return false
+  if (item.delegatedFromItemId) return false
+  return true
+}
 
 /** 진행률·완료 건수에 넣는 상태 (위임만 한 delegated 는 미완료 — 피위임자 실제 완료 후 awaiting_verify) */
 export function isDailyPlanProgressDone(status: string): boolean {
@@ -659,29 +706,34 @@ export type PlanSummary = {
   total: number
   done: number
   skipped: number
+  /** 매니저 취소. 완료율 분모와 못 함 비율에서 제외 */
+  cancelled: number
   open: number
   estTotal: number
   actualTotal: number
   doneRate: number
 }
 
-/** 방문(체류) 항목은 시간 합계에서 제외. awaiting_verify·done 만 진행률 완료 (delegated=피위임자 대기) */
+/** 방문(체류) 항목은 시간 합계에서 제외. awaiting_verify·done 만 진행률 완료 (delegated=피위임자 대기). cancelled 는 분모에서 제외 */
 export function summarizePlanItems(items: PlanItemLite[]): PlanSummary {
   const work = items.filter((i) => i.source !== "visit")
-  const done = work.filter((i) => isDailyPlanProgressDone(i.status))
-  const skipped = work.filter((i) => i.status === "skipped")
-  const estTotal = work.reduce((s, i) => s + (Number(i.estMinutes) || 0), 0)
-  const actualTotal = work
+  const cancelled = work.filter((i) => i.status === "cancelled")
+  const active = work.filter((i) => i.status !== "cancelled")
+  const done = active.filter((i) => isDailyPlanProgressDone(i.status))
+  const skipped = active.filter((i) => i.status === "skipped")
+  const estTotal = active.reduce((s, i) => s + (Number(i.estMinutes) || 0), 0)
+  const actualTotal = active
     .filter((i) => i.status === "done" || i.status === "awaiting_verify")
     .reduce((s, i) => s + (Number(i.actualMinutes ?? i.estMinutes) || 0), 0)
   return {
-    total: work.length,
+    total: active.length,
     done: done.length,
     skipped: skipped.length,
-    open: work.length - done.length - skipped.length,
+    cancelled: cancelled.length,
+    open: active.length - done.length - skipped.length,
     estTotal,
     actualTotal,
-    doneRate: work.length > 0 ? Math.round((done.length / work.length) * 100) : 0,
+    doneRate: active.length > 0 ? Math.round((done.length / active.length) * 100) : 0,
   }
 }
 
@@ -703,7 +755,10 @@ export function buildDailyPlanWorkLogContent(params: {
     `[일일 일정표 · ตารางงาน ${params.dateYmd}] 완료 · เสร็จ ${s.done}/${s.total} (${s.doneRate}%)${params.auto ? " · 자동 마감 · ปิดอัตโนมัติ" : ""}`,
     `예상 · ประมาณ ${s.estTotal}분(นาที) / 실제 · จริง ${s.actualTotal}분(นาที)`,
   ]
-  const pending = params.items.filter((i) => i.source !== "visit" && !isDailyPlanProgressDone(i.status))
+  if (s.cancelled > 0) lines.push(`취소 · ยกเลิก ${s.cancelled}`)
+  const pending = params.items.filter(
+    (i) => i.source !== "visit" && i.status !== "cancelled" && !isDailyPlanProgressDone(i.status)
+  )
   if (pending.length > 0) {
     lines.push("미완료 · ยังไม่เสร็จ:")
     for (const i of pending.slice(0, 20)) {

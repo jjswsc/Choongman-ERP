@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       briefing: body.briefing !== undefined ? String(body.briefing || '') : undefined,
       actor: scope.actorName,
       regenerate: true,
+      reviveCancelled: true,
       force: true,
     })
     if (!plan) return NextResponse.json({ success: false, message: '일정표를 만들 수 없습니다.' }, { status: 500 })

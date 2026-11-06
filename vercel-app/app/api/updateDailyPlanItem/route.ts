@@ -6,10 +6,12 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilterReturning,
 } from '@/lib/supabase-server'
-import { computeActualMinutes, mergeDailyPlanPhotoUrls } from '@/lib/daily-plan-generate'
+import { canCancelDailyPlanItem, computeActualMinutes, isDailyPlanCancelReason, mergeDailyPlanPhotoUrls } from '@/lib/daily-plan-generate'
 import {
   canAssignDailyPlan,
+  canDismissDailyPlan,
   canViewDailyPlan,
+  cancelPlanIfNoActiveItems,
   dailyPlanRoleOf,
   ensureDailyPlan,
   getDailyPlanById,
@@ -47,6 +49,7 @@ const ACTIONS = new Set([
   'photo',
   'add',
   'remove',
+  'cancel',
   'delegate',
   'verify_pass',
   'verify_reject',
@@ -189,6 +192,9 @@ export async function POST(request: NextRequest) {
     if (plan.status === 'closed' && !evidenceOnly && !verifyOnly) {
       return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
     }
+    if (plan.status === 'cancelled' && !evidenceOnly) {
+      return NextResponse.json({ success: false, messageKey: 'dp_err_cancel_locked', message: '취소된 일정표입니다.' }, { status: 409 })
+    }
 
     if (action === 'delegate') {
       if (item.status !== 'todo' && item.status !== 'doing') {
@@ -322,6 +328,69 @@ export async function POST(request: NextRequest) {
         delegatedItem: copyRow ? normalizePlanItemRow(copyRow) : null,
         targetPlanId: targetPlan.id,
       })
+    }
+
+    if (action === 'cancel') {
+      const reason = String(body.skipReason || '').trim()
+      if (!isDailyPlanCancelReason(reason)) {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_cancel_reason', message: '취소 사유를 선택하세요.' },
+          { status: 400 }
+        )
+      }
+      const role = plan.role_scope === 'supervisor' || plan.role_scope === 'manager' || plan.role_scope === 'staff'
+        ? plan.role_scope
+        : 'staff'
+      if (
+        !canDismissDailyPlan(scope, {
+          role,
+          store: plan.employee_store || plan.store_name,
+          employeeId: plan.employee_id,
+        })
+      ) {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_cancel_forbidden', message: '취소 권한이 없습니다.' },
+          { status: 403 }
+        )
+      }
+      if (item.source === 'visit') {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_cancel_visit', message: '방문 항목은 취소할 수 없습니다.' },
+          { status: 400 }
+        )
+      }
+      if (
+        !canCancelDailyPlanItem({
+          status: item.status,
+          source: item.source,
+          startedAt: item.started_at,
+          delegatedToEmployeeId: item.delegated_to_employee_id,
+          delegatedFromItemId: item.delegated_from_item_id,
+        })
+      ) {
+        return NextResponse.json(
+          { success: false, messageKey: 'dp_err_cancel_locked', message: '시작하지 않은 항목만 취소할 수 있습니다.' },
+          { status: 409 }
+        )
+      }
+      const updated = (await supabaseUpdateByFilterReturning('daily_plan_items', `id=eq.${item.id}`, {
+        status: 'cancelled',
+        skip_reason: reason,
+        updated_at: nowIso,
+      })) as Record<string, unknown>[]
+      await cancelPlanIfNoActiveItems(plan.id, reason, scope.actorName || '')
+      if (plan.published_at) {
+        const recipient = planRecipient(plan)
+        if (recipient) {
+          void pushStoreActionNotice({
+            title: '🗑️ ยกเลิกรายการ · 항목 취소',
+            body: `${plan.plan_date} ${String(item.title || '').slice(0, 80)}`,
+            recipients: [recipient],
+          }).catch(() => {})
+        }
+      }
+      await touchDailyPlanProgress(plan.id)
+      return NextResponse.json({ success: true, item: updated?.[0] ? normalizePlanItemRow(updated[0]) : null })
     }
 
     if (action === 'remove') {

@@ -32,6 +32,7 @@ AS $$
   JOIN daily_plans p ON p.id = i.plan_id
   WHERE p.plan_date BETWEEN p_start AND p_end
     AND i.source <> 'visit'
+    AND i.status <> 'cancelled'
     AND (p_stores IS NULL OR p.store_name = ANY (p_stores))
   GROUP BY p.role_scope, i.category, i.title;
 $$;

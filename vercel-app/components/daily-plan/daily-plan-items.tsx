@@ -11,6 +11,7 @@ import {
   PlusCircle,
   RotateCcw,
   SkipForward,
+  Trash2,
   Undo2,
   UserPlus,
   Wrench,
@@ -33,6 +34,7 @@ import { addBangkokCalendarDays, getBangkokDateTimeString, getBangkokTodayDateSt
 import { useLang } from "@/lib/lang-context"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
+import { canCancelDailyPlanItem, DAILY_PLAN_CANCEL_REASONS } from "@/lib/daily-plan-generate"
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
   computePlanTimeline,
@@ -51,6 +53,7 @@ const STATUS_CN: Record<string, string> = {
   doing: "border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20",
   done: "border-l-emerald-500 opacity-80",
   skipped: "border-l-amber-500 opacity-80",
+  cancelled: "border-l-zinc-400 opacity-60",
   delegated: "border-l-violet-500 opacity-90",
   awaiting_verify: "border-l-teal-500 bg-teal-50/60 dark:bg-teal-950/25",
 }
@@ -60,6 +63,7 @@ const DOT_CN: Record<string, string> = {
   doing: "bg-blue-500 border-blue-500",
   done: "bg-emerald-500 border-emerald-500",
   skipped: "bg-amber-500 border-amber-500",
+  cancelled: "bg-zinc-400 border-zinc-400",
   delegated: "bg-violet-500 border-violet-500",
   awaiting_verify: "bg-teal-500 border-teal-500",
 }
@@ -103,11 +107,13 @@ export function DailyPlanItems(props: {
   readOnly?: boolean
   /** 본인 일정에서 매니저/SV가 직원에게 항목 위임 */
   canDelegate?: boolean
+  /** 매니저·SV·본사만. 시작 전 항목 취소 */
+  canCancel?: boolean
   delegateTargets?: DailyPlanTeamMember[]
   onChanged: () => void
   onLink?: (item: DailyPlanItem, kind: DailyPlanLinkKind) => void
 }) {
-  const { plan, items, t, travelMinutes, readOnly, canDelegate, delegateTargets, onChanged, onLink } = props
+  const { plan, items, t, travelMinutes, readOnly, canDelegate, canCancel, delegateTargets, onChanged, onLink } = props
   const { lang } = useLang()
   const label = dailyPlanLabelers(t)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -116,7 +122,9 @@ export function DailyPlanItems(props: {
   const [actionId, setActionId] = useState<number | null>(null)
   const [delegateItem, setDelegateItem] = useState<DailyPlanItem | null>(null)
   const [delegateQ, setDelegateQ] = useState("")
-  const closed = plan.status === "closed"
+  const [cancelItem, setCancelItem] = useState<DailyPlanItem | null>(null)
+  const [cancelReason, setCancelReason] = useState<(typeof DAILY_PLAN_CANCEL_REASONS)[number]>("not_needed")
+  const closed = plan.status === "closed" || plan.status === "cancelled"
   const editable = !readOnly && !closed
   /** 마감 후에도 사진·메모 소급 첨부 가능 (상태 변경은 editable만) */
   const canAttachEvidence = !readOnly
@@ -167,7 +175,9 @@ export function DailyPlanItems(props: {
   const timeline = useMemo(
     () =>
       computePlanTimeline(
-        items.map((i) => ({
+        items
+          .filter((i) => i.status !== "cancelled")
+          .map((i) => ({
           id: i.id,
           source: i.source,
           storeName: i.store_name,
@@ -190,6 +200,23 @@ export function DailyPlanItems(props: {
         await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
         return
       }
+      onChanged()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const confirmCancel = async () => {
+    if (!cancelItem) return
+    setBusyId(cancelItem.id)
+    try {
+      const res = await updateDailyPlanItem({ action: "cancel", itemId: cancelItem.id, skipReason: cancelReason })
+      if (!res.success) {
+        await appAlert(res.messageKey ? t(res.messageKey) : translateApiMessage(res.message, t) || t("dp_save_fail"))
+        return
+      }
+      setCancelItem(null)
+      await appAlert(t("dp_cancel_item_done"))
       onChanged()
     } finally {
       setBusyId(null)
@@ -405,7 +432,14 @@ export function DailyPlanItems(props: {
                     {t("dp_started_at")} {hm(it.started_at)}
                   </p>
                 ) : null}
-                {it.skip_reason ? (
+                {it.status === "cancelled" && it.skip_reason ? (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {t("dp_cancel_reason")}:{" "}
+                    {(DAILY_PLAN_CANCEL_REASONS as readonly string[]).includes(it.skip_reason)
+                      ? t(`dp_cancel_reason_${it.skip_reason}`)
+                      : displayText(it.skip_reason)}
+                  </p>
+                ) : it.skip_reason ? (
                   <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">
                     {t("dp_skip_reason")}: {displayText(it.skip_reason)}
                   </p>
@@ -444,6 +478,27 @@ export function DailyPlanItems(props: {
                 ) : null}
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  {canCancel && editable && canCancelDailyPlanItem({
+                    status: it.status,
+                    source: it.source,
+                    startedAt: it.started_at,
+                    delegatedToEmployeeId: it.delegated_to_employee_id,
+                    delegatedFromItemId: it.delegated_from_item_id,
+                  }) ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-red-700"
+                      disabled={busy}
+                      onClick={() => {
+                        setCancelReason("not_needed")
+                        setCancelItem(it)
+                      }}
+                    >
+                      <Trash2 className="mr-1 h-3 w-3" />
+                      {t("dp_btn_cancel_item")}
+                    </Button>
+                  ) : null}
                   {editable && it.status === "todo" && !isVisit ? (
                     <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void run(it, "start")}>
                       <Play className="mr-1 h-3 w-3" />
@@ -587,6 +642,39 @@ export function DailyPlanItems(props: {
             <Button className="mt-3 w-full" variant="ghost" onClick={() => setDelegateItem(null)}>
               {t("dp_back")}
             </Button>
+          </div>
+        </div>
+      ) : null}
+      {cancelItem ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+          <div className="w-full max-w-md rounded-lg bg-background p-3 shadow-lg">
+            <p className="text-sm font-semibold">{t("dp_cancel_item_title")}</p>
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {displayText(dailyPlanItemTitle(cancelItem.title, t))}
+            </p>
+            <div className="mt-3 space-y-1.5">
+              {DAILY_PLAN_CANCEL_REASONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={cn(
+                    "w-full rounded-md border px-3 py-2 text-left text-sm",
+                    cancelReason === r ? "border-primary bg-primary/10" : "hover:bg-muted/50"
+                  )}
+                  onClick={() => setCancelReason(r)}
+                >
+                  {t(`dp_cancel_reason_${r}`)}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button className="flex-1" variant="ghost" onClick={() => setCancelItem(null)}>
+                {t("dp_tpl_copy_cancel")}
+              </Button>
+              <Button className="flex-1" disabled={busyId === cancelItem.id} onClick={() => void confirmCancel()}>
+                {t("dp_btn_cancel_item")}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

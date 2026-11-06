@@ -100,7 +100,14 @@ export async function GET(request: NextRequest) {
     if (workingDate === date && !plan && date === today && scope.actorEmployeeId) {
       const emp = await loadPlanEmployeeById(scope.actorEmployeeId)
       if (emp) plan = await ensureDailyPlanOnDemand(date, emp, scope.actorName || 'self')
-    } else if (workingDate === date && plan && !plan.template_id && date === today && scope.actorEmployeeId) {
+    } else if (
+      workingDate === date &&
+      plan &&
+      plan.status !== 'cancelled' &&
+      !plan.template_id &&
+      date === today &&
+      scope.actorEmployeeId
+    ) {
       /** 템플릿 미매칭으로 생긴 빈 껍데기 → 앱 열 때 루틴 재채움 */
       const emp = await loadPlanEmployeeById(scope.actorEmployeeId)
       if (emp) {
@@ -111,7 +118,7 @@ export async function GET(request: NextRequest) {
 
     const nextDate = addDaysYmdUtc(workingDate, 1)
     let nextPlan = await findOwnPlan(nextDate, scope.actorEmployeeId, scope.actorName)
-    if (nextPlan?.published_at && !nextPlan.template_id && scope.actorEmployeeId) {
+    if (nextPlan?.published_at && nextPlan.status !== 'cancelled' && !nextPlan.template_id && scope.actorEmployeeId) {
       const emp = await loadPlanEmployeeById(scope.actorEmployeeId)
       if (emp) {
         const healed = await ensureDailyPlanOnDemand(nextDate, emp, scope.actorName || 'self')

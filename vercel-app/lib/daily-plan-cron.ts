@@ -88,6 +88,7 @@ async function closePlans(plans: DailyPlanRow[]): Promise<{ closed: number; fail
     await Promise.all(
       plans.slice(i, i + 5).map(async (p) => {
         try {
+          if (p.status === 'cancelled' || p.status === 'closed') return
           await closeDailyPlan(p, { actor: 'system', auto: true })
           closed += 1
         } catch (e) {
@@ -110,7 +111,7 @@ const SYSTEM_ACTORS = new Set(['', 'system', 'self'])
 async function runLateAlerts(today: string): Promise<DailyPlanCronResult['late']> {
   const nowMin = hmToMin(getBangkokDateTimeString().slice(11, 16)) ?? 0
   const plans = (
-    ((await supabaseSelectFilter('daily_plans', `plan_date=eq.${today}&status=neq.closed`, { limit: 2000 })) ||
+    ((await supabaseSelectFilter('daily_plans', `plan_date=eq.${today}&status=neq.closed&status=neq.cancelled`, { limit: 2000 })) ||
       []) as Record<string, unknown>[]
   ).map(normalizePlanRow)
   if (plans.length === 0) return { ran: true, plans: 0, items: 0, escalated: 0 }
@@ -225,7 +226,7 @@ export async function runDailyPlanCron(today: string, hourBangkok: number): Prom
 
   const pastRows = ((await supabaseSelectFilter(
     'daily_plans',
-    `plan_date=lt.${today}&plan_date=gte.${addBangkokCalendarDays(today, -7)}&status=neq.closed`,
+    `plan_date=lt.${today}&plan_date=gte.${addBangkokCalendarDays(today, -7)}&status=neq.closed&status=neq.cancelled`,
     { limit: 2000 }
   )) || []) as Record<string, unknown>[]
   const nowMin = hmToMin(getBangkokDateTimeString().slice(11, 16)) ?? hourBangkok * 60
@@ -234,7 +235,7 @@ export async function runDailyPlanCron(today: string, hourBangkok: number): Prom
     .filter((p) => !overnightPlanStillActive(p.shift_in, p.shift_out, nowMin))
   let deferred = 0
   if (closeToday && lastRun.close !== today) {
-    const todayRows = ((await supabaseSelectFilter('daily_plans', `plan_date=eq.${today}&status=neq.closed`, {
+    const todayRows = ((await supabaseSelectFilter('daily_plans', `plan_date=eq.${today}&status=neq.closed&status=neq.cancelled`, {
       limit: 2000,
     })) || []) as Record<string, unknown>[]
     for (const p of todayRows.map(normalizePlanRow)) {

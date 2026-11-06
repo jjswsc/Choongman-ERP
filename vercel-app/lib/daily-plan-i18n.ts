@@ -19,12 +19,14 @@ const ITEM_STATUS_KEYS: Record<string, string> = {
   skipped: "dp_item_skipped",
   delegated: "dp_item_delegated",
   awaiting_verify: "dp_item_awaiting_verify",
+  cancelled: "dp_item_cancelled",
 }
 
 const PLAN_STATUS_KEYS: Record<string, string> = {
   planned: "dp_plan_planned",
   in_progress: "dp_plan_in_progress",
   closed: "dp_plan_closed",
+  cancelled: "dp_plan_cancelled",
 }
 
 const TEMPLATE_STATUS_KEYS: Record<string, string> = {
