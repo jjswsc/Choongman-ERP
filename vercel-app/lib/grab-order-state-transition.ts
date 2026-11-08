@@ -1,6 +1,9 @@
 import { posOrderPaymentSumFromAmounts } from '@/lib/pos-order-paid-at'
 
-/** 음식이 매장을 떠난 Grab 상태 — 이 시점에 POS 주문을 배달앱 결제로 마감한다 */
+/**
+ * 음식이 매장을 떠난 Grab 상태 — POS 포장 완료(ready→paid)가 안 된 주문 폴백 마감.
+ * 정상 흐름은 직원이 포장 완료할 때 updatePosOrderStatus 가 paid 로 승격한다.
+ */
 const GRAB_HANDED_OVER_STATES = new Set(['COLLECTED', 'DELIVERED'])
 
 /** 직원이 아직 결제 마감하지 않은 배달 주문 상태 */

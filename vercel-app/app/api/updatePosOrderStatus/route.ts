@@ -41,6 +41,10 @@ import {
   isPosOrderCollectableSettled,
   posOrderCollectableDue,
 } from '@/lib/pos-deposit-domain'
+import {
+  buildDeliveryPackSettlePatch,
+  shouldPromoteDeliveryPackReadyToPaid,
+} from '@/lib/pos-delivery-pack-settle'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled', 'refunded']
 
@@ -320,36 +324,58 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const patch: Record<string, unknown> = { status }
+    /**
+     * 배달 포장 완료(ready): 배달앱 결제만 있는 주문은 paid 로 승격해
+     * 전 매장 “나가는 순간”에 매출·결산 기준으로 맞춘다. Grab COLLECTED 는 폴백.
+     */
+    let appliedStatus = nextStatus
+    let promotedDeliveryPackToPaid = false
+    const patch: Record<string, unknown> = { status: nextStatus }
+    if (nextStatus === 'ready' && shouldPromoteDeliveryPackReadyToPaid(prev ?? {})) {
+      const settlePatch = buildDeliveryPackSettlePatch(prev ?? {}, new Date().toISOString())
+      if (String(settlePatch.status ?? '') === 'paid') {
+        appliedStatus = 'paid'
+        promotedDeliveryPackToPaid = true
+        Object.assign(patch, settlePatch)
+        patch.status = 'paid'
+      }
+    }
     if (grabStateRaw) {
-      const prevMemo = String(prev?.memo ?? '')
+      const prevMemo = String(patch.memo ?? prev?.memo ?? '')
       const grabOrderId = extractGrabOrderIdFromMemo(prevMemo)
       if (grabOrderId) {
-        const mergedMemo = mergeGrabStateIntoFullMemo(prevMemo, grabOrderId, grabStateRaw)
+        const mergedMemo = mergeGrabStateIntoFullMemo(prevMemo, grabOrderId, grabStateRaw, {
+          autoPaid: promotedDeliveryPackToPaid || undefined,
+        })
         if (mergedMemo && mergedMemo !== prevMemo) patch.memo = mergedMemo
       }
     }
-    if (memoAppend && isPosReversalStatus(nextStatus)) {
-      const stamp = `[ORDER_${nextStatus.toUpperCase()} ${new Date().toISOString()}] ${memoAppend.slice(0, 240)}`
+    if (memoAppend && isPosReversalStatus(appliedStatus)) {
+      const stamp = `[ORDER_${appliedStatus.toUpperCase()} ${new Date().toISOString()}] ${memoAppend.slice(0, 240)}`
       patch.memo = appendPosInternalMemoStamp(String(patch.memo ?? prev?.memo ?? ''), stamp)
     }
 
     const paymentSum = posOrderPaymentSumFromAmounts({
-      paymentCash: Number(prev?.payment_cash ?? 0),
+      paymentCash: Number(
+        patch.payment_cash != null ? patch.payment_cash : prev?.payment_cash ?? 0
+      ),
       paymentCard: Number(prev?.payment_card ?? 0),
       paymentQr: Number(prev?.payment_qr ?? 0),
       paymentOther: Number(prev?.payment_other ?? 0),
-      paymentDeliveryApp: Number(prev?.payment_delivery_app ?? 0),
+      paymentDeliveryApp: Number(
+        patch.payment_delivery_app != null
+          ? patch.payment_delivery_app
+          : prev?.payment_delivery_app ?? 0
+      ),
     })
     const orderTotal = Number(prev?.total ?? 0)
-    const nextStatusLower = nextStatus
     if (
-      !String(prev?.paid_at ?? '').trim() &&
+      !String(patch.paid_at ?? prev?.paid_at ?? '').trim() &&
       isPosOrderCollectableSettled(
         posOrderCollectableDue(orderTotal, Number((prev as { deposit_amt?: number }).deposit_amt || 0)),
         paymentSum
       ) &&
-      (isPosCompletionStatus(nextStatusLower) || nextStatusLower === 'paid')
+      (isPosCompletionStatus(appliedStatus) || appliedStatus === 'paid')
     ) {
       patch.paid_at = new Date().toISOString()
     }
@@ -379,10 +405,11 @@ export async function POST(req: NextRequest) {
         memo: String(prev?.memo ?? ''),
       },
       after: {
-        status: nextStatus,
+        status: appliedStatus,
         memo: String(patch.memo ?? prev?.memo ?? ''),
+        ...(promotedDeliveryPackToPaid ? { delivery_pack_promoted_to_paid: true } : {}),
       },
-      reason: memoAppend || null,
+      reason: memoAppend || (promotedDeliveryPackToPaid ? 'delivery_pack_ready_to_paid' : null),
     })
     timing.mark('audit')
 
@@ -391,7 +418,7 @@ export async function POST(req: NextRequest) {
       String(prev?.created_at ?? ''),
       storeCode
     )
-    if (isPosCompletionStatus(nextStatus)) {
+    if (isPosCompletionStatus(appliedStatus)) {
       const allowStock = storeCode ? await shouldRunPosStockDeductionForStore(storeCode) : false
       const allowAccounting = storeCode
         ? await shouldRunPosAccountingSideEffectsForStore(storeCode)
@@ -475,7 +502,7 @@ export async function POST(req: NextRequest) {
         }
         timing.mark('accounting')
       }
-    } else if (isPosReversalStatus(nextStatus) && isPosPaidLikeStatus(prevStatus)) {
+    } else if (isPosReversalStatus(appliedStatus) && isPosPaidLikeStatus(prevStatus)) {
       try {
         await reversePosStockDeduction(id)
       } catch (e) {
@@ -487,7 +514,7 @@ export async function POST(req: NextRequest) {
           posOrderId: id,
           salesDate,
           storeName: storeCode || undefined,
-          memo: `POS 주문 ${nextStatus === 'refunded' ? '환불' : '취소'} 역분개`,
+          memo: `POS 주문 ${appliedStatus === 'refunded' ? '환불' : '취소'} 역분개`,
         })
       } catch (postingErr) {
         pushFailedStep(failedSideEffects, 'reversal_journal')
@@ -496,7 +523,7 @@ export async function POST(req: NextRequest) {
       try {
         await rollbackPosOrderCouponRedemptions({
           orderId: id,
-          reason: `status_${nextStatus}`,
+          reason: `status_${appliedStatus}`,
         })
       } catch (couponErr) {
         pushFailedStep(failedSideEffects, 'reversal_coupon')
@@ -513,7 +540,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (nextStatus === 'paid' && !isPosCompletionStatus(nextStatus)) {
+    if (appliedStatus === 'paid' && !isPosCompletionStatus(appliedStatus)) {
       try {
         const applied = await applyPosDepositOnSettle({
           posOrderId: id,
@@ -536,11 +563,17 @@ export async function POST(req: NextRequest) {
               total: Number(prev?.total || 0),
               vatAmount: Number(prev?.vat || 0),
               serviceAmount: Number(prev?.service_amt || 0),
-              paymentCash: Number(prev?.payment_cash || 0),
+              paymentCash: Number(
+                patch.payment_cash != null ? patch.payment_cash : prev?.payment_cash || 0
+              ),
               paymentCard: Number(prev?.payment_card || 0),
               paymentQr: Number(prev?.payment_qr || 0),
               paymentOther: Number(prev?.payment_other || 0),
-              paymentDeliveryApp: Number(prev?.payment_delivery_app || 0),
+              paymentDeliveryApp: Number(
+                patch.payment_delivery_app != null
+                  ? patch.payment_delivery_app
+                  : prev?.payment_delivery_app || 0
+              ),
               depositAppliedAmt: applied,
               storeName: storeCode || undefined,
               orderNo: String(prev?.order_no || `POS-${id}`),
@@ -562,26 +595,27 @@ export async function POST(req: NextRequest) {
           statusAlreadyApplied: true,
           retryAfterQueue: true,
           failedSideEffects,
+          promotedDeliveryPackToPaid: promotedDeliveryPackToPaid || undefined,
           message: '주문 상태는 변경됐지만 후속 처리 일부가 실패했습니다. 재시도해 주세요.',
         },
         { headers }
       )
     }
 
-    if (nextStatus === 'ready' && prevStatus !== 'ready') {
+    if (appliedStatus === 'ready' && prevStatus !== 'ready') {
       void notifyMemberPortalPickupReady(id).catch((notifyErr) => {
         console.error('updatePosOrderStatus member portal pickup notify:', notifyErr)
       })
     }
     // 선결제(paid) 포장은 ready 로 되돌릴 수 없어 completed 로 바로 닫는다. 픽업 LINE 은 그때 한 번 보낸다.
-    if (nextStatus === 'completed' && prevStatus === 'paid') {
+    if (appliedStatus === 'completed' && prevStatus === 'paid') {
       void notifyMemberPortalPickupReady(id, { alsoWhenCompleted: true }).catch((notifyErr) => {
         console.error('updatePosOrderStatus member portal pickup notify:', notifyErr)
       })
     }
 
     if (
-      (nextStatus === 'paid' || isPosCompletionStatus(nextStatus)) &&
+      (appliedStatus === 'paid' || isPosCompletionStatus(appliedStatus)) &&
       !isPosPaidLikeStatus(prevStatus)
     ) {
       try {
@@ -599,13 +633,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      nextStatus === 'paid' ||
-      isPosCompletionStatus(nextStatus) ||
-      isPosReversalStatus(nextStatus)
+      appliedStatus === 'paid' ||
+      isPosCompletionStatus(appliedStatus) ||
+      isPosReversalStatus(appliedStatus)
     ) {
       try {
         const { closeQrTableSessionsForPosOrder } = await import('@/lib/qr-table-server')
-        await closeQrTableSessionsForPosOrder({ orderId: id, reason: nextStatus })
+        await closeQrTableSessionsForPosOrder({ orderId: id, reason: appliedStatus })
       } catch (qrCloseErr) {
         console.error('updatePosOrderStatus qr session close:', qrCloseErr)
       }
@@ -613,7 +647,15 @@ export async function POST(req: NextRequest) {
     }
 
     timing.apply(headers)
-    return NextResponse.json({ success: true }, { headers })
+    return NextResponse.json(
+      {
+        success: true,
+        ...(promotedDeliveryPackToPaid
+          ? { promotedDeliveryPackToPaid: true, status: 'paid' }
+          : {}),
+      },
+      { headers }
+    )
   } catch (e) {
     console.error('updatePosOrderStatus:', e)
     const msg = e instanceof Error ? e.message : String(e)
