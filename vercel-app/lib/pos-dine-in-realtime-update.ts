@@ -93,6 +93,73 @@ export function posOrderRealtimePricingFieldsChanged(
 }
 
 /**
+ * Realtime·폴링 등 “원격” 결제 영수증 자동인쇄를 건너뛸지.
+ * — Grab 픽업(COLLECTED)·배달완료 웹훅 마감: 라이더가 이미 떠난 뒤라 불필요.
+ * — 배달앱 결제만 있는 delivery 주문: 플랫폼 영수증이 있고 손님 창구 결제가 아님.
+ * 로컬 카운터 결제(checkout) 경로는 이 가드를 쓰지 않는다.
+ */
+export function shouldSkipRemotePaymentReceiptAutoprint(opts: {
+  memo?: unknown
+  orderType?: unknown
+  paymentCash?: number | string | null
+  paymentCard?: number | string | null
+  paymentQr?: number | string | null
+  paymentOther?: number | string | null
+  paymentDeliveryApp?: number | string | null
+  paymentCrypto?: number | string | null
+}): boolean {
+  if (isGrabAutoPaidMemo(opts.memo)) return true
+  const orderType = String(opts.orderType ?? '').trim().toLowerCase()
+  if (orderType !== 'delivery') return false
+  const deliveryApp = Math.max(0, Number(opts.paymentDeliveryApp ?? 0) || 0)
+  if (deliveryApp <= 0.005) return false
+  const customerTender =
+    Math.max(0, Number(opts.paymentCash ?? 0) || 0) +
+    Math.max(0, Number(opts.paymentCard ?? 0) || 0) +
+    Math.max(0, Number(opts.paymentQr ?? 0) || 0) +
+    Math.max(0, Number(opts.paymentOther ?? 0) || 0) +
+    Math.max(0, Number(opts.paymentCrypto ?? 0) || 0)
+  return customerTender <= 0.005
+}
+
+export function shouldSkipRemotePaymentReceiptAutoprintFromDbRow(
+  row: Record<string, unknown>
+): boolean {
+  return shouldSkipRemotePaymentReceiptAutoprint({
+    memo: row.memo,
+    orderType: row.order_type,
+    paymentCash: row.payment_cash as number | string | null | undefined,
+    paymentCard: row.payment_card as number | string | null | undefined,
+    paymentQr: row.payment_qr as number | string | null | undefined,
+    paymentOther: row.payment_other as number | string | null | undefined,
+    paymentDeliveryApp: row.payment_delivery_app as number | string | null | undefined,
+    paymentCrypto: row.payment_crypto as number | string | null | undefined,
+  })
+}
+
+export function shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order: {
+  memo?: unknown
+  orderType?: unknown
+  paymentCash?: number | null
+  paymentCard?: number | null
+  paymentQr?: number | null
+  paymentOther?: number | null
+  paymentDeliveryApp?: number | null
+  paymentCrypto?: number | null
+}): boolean {
+  return shouldSkipRemotePaymentReceiptAutoprint({
+    memo: order.memo,
+    orderType: order.orderType,
+    paymentCash: order.paymentCash,
+    paymentCard: order.paymentCard,
+    paymentQr: order.paymentQr,
+    paymentOther: order.paymentOther,
+    paymentDeliveryApp: order.paymentDeliveryApp,
+    paymentCrypto: order.paymentCrypto,
+  })
+}
+
+/**
  * Realtime UPDATE로 결제 영수증 자동 인쇄할지.
  * — 이미 paid 인 주문에 collab backfill·메모·포장상태 등 비결제 UPDATE가 오면 재인쇄 금지.
  * — OLD 가 PK만 있으면(REPLICA IDENTITY DEFAULT) 로컬 prior(미결제였음)로만 전환을 증명.
@@ -108,7 +175,7 @@ export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
   }
 ): boolean {
   if (!isPosOrderPaidLikeStatus(String(newRow.status ?? ''))) return false
-  if (isGrabAutoPaidMemo(newRow.memo)) return false
+  if (shouldSkipRemotePaymentReceiptAutoprintFromDbRow(newRow)) return false
   if (posOrderRowPaymentSum(newRow) <= 0) return false
   if (!oldRow) return false
 

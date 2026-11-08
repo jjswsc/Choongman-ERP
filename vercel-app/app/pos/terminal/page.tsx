@@ -228,6 +228,7 @@ import {
   posOrderRealtimePricingFieldsChanged,
   shouldAutoprintPaymentReceiptOnRealtimeUpdate,
   shouldSkipDineInAddonAutoprintForTableMerge,
+  shouldSkipRemotePaymentReceiptAutoprintFromPosOrder,
 } from '@/lib/pos-dine-in-realtime-update'
 import {
   buildKitchenSlipGroupOpts,
@@ -4565,6 +4566,15 @@ export default function PosTerminalPage() {
     if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return
     if (posOrderPaymentSum(order) <= 0) return
     if (!(order.items || []).length) return
+    // Realtime 가드와 동일 — 폴링 폴백이 Grab 라이더 완료·배달앱 전용 결제를 폭주 인쇄하지 않게
+    if (shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order)) {
+      printedPaymentReceiptIdsRef.current.add(orderId)
+      logPosPrintDebug('payment_autoprint_skip_remote_settle', {
+        orderId,
+        orderType: order.orderType,
+      })
+      return
+    }
 
     printedPaymentReceiptIdsRef.current.add(orderId)
 
@@ -6018,6 +6028,10 @@ export default function PosTerminalPage() {
               if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return false
               if (posOrderPaymentSum(order) <= 0) return false
               if (!(order.items || []).length) return false
+              if (shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order)) {
+                printedPaymentReceiptIdsRef.current.add(oid)
+                return false
+              }
               return true
             })
             candidates.sort((a, b) => Number(a.id) - Number(b.id))

@@ -7,6 +7,8 @@ import {
   posOrderRealtimePricingFieldsChanged,
   resetMergeQtyOnlySkipAppliedKeysForTests,
   shouldAutoprintPaymentReceiptOnRealtimeUpdate,
+  shouldSkipRemotePaymentReceiptAutoprint,
+  shouldSkipRemotePaymentReceiptAutoprintFromPosOrder,
   shouldRealtimeReprintPaidOrderTaxInvoice,
   shouldSkipDineInAddonAutoprintForTableMerge,
 } from '@/lib/pos-dine-in-realtime-update'
@@ -124,6 +126,51 @@ describe('posOrderRealtimePricingFieldsChanged', () => {
         { id: 1, discount_amt: 10, total: 1972 }
       )
     ).toBe(true)
+  })
+})
+
+describe('shouldSkipRemotePaymentReceiptAutoprint', () => {
+  it('skips Grab auto-paid memo', () => {
+    expect(
+      shouldSkipRemotePaymentReceiptAutoprint({
+        memo: 'grab_order:x|grab_state:COLLECTED|grab_auto_paid:1',
+        orderType: 'delivery',
+        paymentDeliveryApp: 100,
+      })
+    ).toBe(true)
+  })
+
+  it('skips delivery with only delivery_app tender', () => {
+    expect(
+      shouldSkipRemotePaymentReceiptAutoprintFromPosOrder({
+        orderType: 'delivery',
+        paymentDeliveryApp: 199,
+        paymentCash: 0,
+        paymentCard: 0,
+        paymentQr: 0,
+        paymentOther: 0,
+        paymentCrypto: 0,
+      })
+    ).toBe(true)
+  })
+
+  it('does not skip delivery with cash (COD)', () => {
+    expect(
+      shouldSkipRemotePaymentReceiptAutoprint({
+        orderType: 'delivery',
+        paymentDeliveryApp: 0,
+        paymentCash: 199,
+      })
+    ).toBe(false)
+  })
+
+  it('does not skip dine_in', () => {
+    expect(
+      shouldSkipRemotePaymentReceiptAutoprint({
+        orderType: 'dine_in',
+        paymentDeliveryApp: 199,
+      })
+    ).toBe(false)
   })
 })
 
@@ -273,11 +320,66 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
         {
           id: 1,
           status: 'paid',
+          order_type: 'delivery',
           payment_delivery_app: 279,
           memo: 'grab_order:001-ABC|grab_state:COLLECTED|grab_auto_paid:1',
         }
       )
     ).toBe(false)
+  })
+
+  it('skips delivery_app-only delivery settle without grab_auto_paid (Robinhood/manual)', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 2,
+          status: 'ready',
+          order_type: 'delivery',
+          payment_delivery_app: 199,
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        },
+        {
+          id: 2,
+          status: 'completed',
+          order_type: 'delivery',
+          payment_delivery_app: 199,
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('still allows dine-in unpaid→paid with card', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 3,
+          status: 'cooking',
+          order_type: 'dine_in',
+          payment_card: 0,
+          payment_cash: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          payment_delivery_app: 0,
+        },
+        {
+          id: 3,
+          status: 'paid',
+          order_type: 'dine_in',
+          payment_card: 350,
+          payment_cash: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          payment_delivery_app: 0,
+        }
+      )
+    ).toBe(true)
   })
 
   it('allows status unpaid→paid even if payment was already on OLD', () => {

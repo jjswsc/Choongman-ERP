@@ -127,6 +127,7 @@ import {
   posOrderRealtimePricingFieldsChanged,
   shouldAutoprintPaymentReceiptOnRealtimeUpdate,
   shouldRealtimeReprintPaidOrderTaxInvoice,
+  shouldSkipRemotePaymentReceiptAutoprintFromPosOrder,
 } from '@/lib/pos-dine-in-realtime-update'
 import {
   isPosOrderPaidLikeStatus,
@@ -678,11 +679,20 @@ export function usePosMainDeviceSyncHost(): void {
       const orderId = Number(order.id)
       if (!Number.isFinite(orderId) || orderId <= 0) return
       if (!autoPrint.receiptOnPayment) return
+      // Realtime 가드와 동일 — 폴링 폴백이 Grab 라이더 완료·배달앱 전용 결제를 폭주 인쇄하지 않게
+      if (shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order)) {
+        printedPaymentReceiptIdsRef.current.add(orderId)
+        logPosPrintDebug('payment_autoprint_skip_remote_settle', {
+          orderId,
+          orderType: order.orderType,
+        })
+        return
+      }
       const storeForClaim = String(ctx.storeCode || order.storeCode || storeCode || '').trim()
       if (!claimMainPosPaymentReceiptAutoprint(orderId, storeForClaim)) return
       await printPaymentReceiptIfEnabled(order)
     },
-    [autoPrint.receiptOnPayment, storeCode, printPaymentReceiptIfEnabled]
+    [autoPrint.receiptOnPayment, storeCode, printPaymentReceiptIfEnabled, logPosPrintDebug]
   )
 
   const runAutoprintForNewOrder = useCallback(
@@ -1663,6 +1673,10 @@ export function usePosMainDeviceSyncHost(): void {
               if (!isPosOrderPaidLikeStatus(String(order.status ?? ''))) return false
               if (posOrderPaymentSum(order) <= 0) return false
               if (!(order.items || []).length) return false
+              if (shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order)) {
+                printedPaymentReceiptIdsRef.current.add(oid)
+                return false
+              }
               return true
             })
             candidates.sort((a, b) => Number(a.id) - Number(b.id))
