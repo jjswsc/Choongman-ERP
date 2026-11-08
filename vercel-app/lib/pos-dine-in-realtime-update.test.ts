@@ -355,6 +355,60 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
     ).toBe(false)
   })
 
+  it('skips pack-complete promote cooking→paid even if order_type missing on NEW (Grab memo)', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 9,
+          status: 'cooking',
+          payment_delivery_app: 279,
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        },
+        {
+          id: 9,
+          status: 'paid',
+          payment_delivery_app: 279,
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          paid_at: new Date().toISOString(),
+          memo: 'grab_order:PACK1|grab_state:ACCEPTED|grab_auto_paid:1',
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('skips pack-complete promote when order_type missing but table_name looks Robinhood', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        {
+          id: 10,
+          status: 'cooking',
+          payment_delivery_app: 199,
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+        },
+        {
+          id: 10,
+          status: 'paid',
+          payment_delivery_app: 199,
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          paid_at: new Date().toISOString(),
+          table_name: 'Robinhood #88',
+        }
+      )
+    ).toBe(false)
+  })
+
   it('still allows dine-in unpaid→paid with card', () => {
     expect(
       shouldAutoprintPaymentReceiptOnRealtimeUpdate(

@@ -1252,6 +1252,8 @@ export function usePosMainDeviceSyncHost(): void {
         shouldAutoprintPaymentReceiptOnRealtimeUpdate(oldRow, row, { localPrior: localPaymentPrior })
       ) {
         // 인쇄 ON/OFF와 무관 — QR 원격 결제 시 테이블 즉시 비움 + 알림
+        // 배달 포장완료→paid 등은 shouldAutoprint 가드에서 이미 false.
+        // Realtime NEW 필드 누락 대비: 실제 인쇄는 dispatch(가드 재확인)만 사용.
         playPosPaymentCompleteBeep()
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
@@ -1259,16 +1261,13 @@ export function usePosMainDeviceSyncHost(): void {
         const tableName = String(row.table_name ?? '').trim()
         if (tableName) clearTableOrder(storeCode, tableName)
         refetchStores({ scope: 'current' })
-        if (
-          wantPayment &&
-          claimMainPosPaymentReceiptAutoprint(orderId, String(row.store_code ?? storeCode).trim())
-        ) {
+        if (wantPayment) {
           void getPosOrders({ orderId, storeCode })
             .then((list) => {
               const order = list[0]
               if (!order?.items?.length) return
               if (!isPosOrderPaidLikeStatus(order.status) || posOrderPaymentSum(order) <= 0) return
-              return printPaymentReceiptIfEnabled(order)
+              return dispatchPaymentReceiptFromOrder(order)
             })
             .catch(() => {
               /* ignore */

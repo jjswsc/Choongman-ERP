@@ -11,6 +11,7 @@ import {
   posOrderRowPaymentSum,
 } from '@/lib/pos-payment-receipt-from-order'
 import { isGrabAutoPaidMemo } from '@/lib/grab-order-memo'
+import { isApiInboundDeliveryOrderMemo } from '@/lib/pos-delivery-platform'
 import { shouldReprintPaymentReceiptForTaxInvoiceMemoChange } from '@/lib/pos-tax-invoice'
 
 const PACKAGING_STATE_ITEM_KEYS = new Set([
@@ -101,6 +102,9 @@ export function posOrderRealtimePricingFieldsChanged(
 export function shouldSkipRemotePaymentReceiptAutoprint(opts: {
   memo?: unknown
   orderType?: unknown
+  /** Realtime NEW에 order_type 이 빠질 때 memo·채널로 배달 판별 */
+  tableName?: unknown
+  deliveryPaymentChannel?: unknown
   paymentCash?: number | string | null
   paymentCard?: number | string | null
   paymentQr?: number | string | null
@@ -110,7 +114,16 @@ export function shouldSkipRemotePaymentReceiptAutoprint(opts: {
 }): boolean {
   if (isGrabAutoPaidMemo(opts.memo)) return true
   const orderType = String(opts.orderType ?? '').trim().toLowerCase()
-  if (orderType !== 'delivery') return false
+  const memo = String(opts.memo ?? '')
+  const channel = String(opts.deliveryPaymentChannel ?? '').trim().toLowerCase()
+  const looksDelivery =
+    orderType === 'delivery' ||
+    isApiInboundDeliveryOrderMemo(memo) ||
+    Boolean(channel) ||
+    /grab|lineman|shopee|robinhood|foodpanda|delivery/i.test(
+      `${memo} ${String(opts.tableName ?? '')}`
+    )
+  if (!looksDelivery) return false
   const deliveryApp = Math.max(0, Number(opts.paymentDeliveryApp ?? 0) || 0)
   if (deliveryApp <= 0.005) return false
   const customerTender =
@@ -128,6 +141,8 @@ export function shouldSkipRemotePaymentReceiptAutoprintFromDbRow(
   return shouldSkipRemotePaymentReceiptAutoprint({
     memo: row.memo,
     orderType: row.order_type,
+    tableName: row.table_name,
+    deliveryPaymentChannel: row.delivery_payment_channel,
     paymentCash: row.payment_cash as number | string | null | undefined,
     paymentCard: row.payment_card as number | string | null | undefined,
     paymentQr: row.payment_qr as number | string | null | undefined,
@@ -140,6 +155,8 @@ export function shouldSkipRemotePaymentReceiptAutoprintFromDbRow(
 export function shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order: {
   memo?: unknown
   orderType?: unknown
+  tableName?: unknown
+  deliveryPaymentChannel?: unknown
   paymentCash?: number | null
   paymentCard?: number | null
   paymentQr?: number | null
@@ -150,6 +167,8 @@ export function shouldSkipRemotePaymentReceiptAutoprintFromPosOrder(order: {
   return shouldSkipRemotePaymentReceiptAutoprint({
     memo: order.memo,
     orderType: order.orderType,
+    tableName: order.tableName,
+    deliveryPaymentChannel: order.deliveryPaymentChannel,
     paymentCash: order.paymentCash,
     paymentCard: order.paymentCard,
     paymentQr: order.paymentQr,
