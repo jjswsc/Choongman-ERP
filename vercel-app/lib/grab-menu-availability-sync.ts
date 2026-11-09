@@ -26,6 +26,8 @@ import { supabaseSelectFilter, supabaseSelectFilterAllPages, supabaseUpsert } fr
 /** 한 cron 실행에서 Grab PUT 상한. 나머지는 다음 5분에 이어서 보낸다. */
 const CRON_PUSH_CAP = 60
 const PUT_GAP_MS = 40
+/** 품목 PUT 직후 메뉴 알림을 바로 보내면 Grab이 409(동기화 진행 중)로 거절한다. 락은 약 10초. */
+const GRAB_MENU_RECORD_LOCK_MS = 10_000
 
 export type GrabDeliverySyncResult = {
   notificationSent: number
@@ -33,6 +35,7 @@ export type GrabDeliverySyncResult = {
   itemsUpdated: number
   itemsFailed: number
   itemErrors: string[]
+  notificationErrors: string[]
 }
 
 type MenuMeta = {
@@ -336,7 +339,9 @@ export async function syncGrabDeliveryPolicySave(params: {
 
   let notificationSent = 0
   let notificationFailed = 0
+  const notificationErrors: string[] = []
   try {
+    if (itemsUpdated > 0) await sleep(GRAB_MENU_RECORD_LOCK_MS)
     const notified = await triggerGrabMenuNotificationPerStoreCodes({
       reason: 'delivery_policy_updated',
       storeCodes: [storeCode],
@@ -345,8 +350,10 @@ export async function syncGrabDeliveryPolicySave(params: {
     })
     notificationSent = notified.sent
     notificationFailed = notified.failed
+    notificationErrors.push(...(notified.errors || []))
   } catch (error) {
     notificationFailed += 1
+    notificationErrors.push(errText(error))
     console.error('[grab-item-availability] notification_failed', {
       storeCode,
       error: errText(error),
@@ -359,6 +366,7 @@ export async function syncGrabDeliveryPolicySave(params: {
     itemsUpdated,
     itemsFailed,
     itemErrors,
+    notificationErrors,
   }
 }
 
