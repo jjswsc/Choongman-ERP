@@ -189,6 +189,23 @@ import { PosDeliveryOpsSettings } from "@/components/erp/pos-menus-delivery-ops-
 import { PosDeliveryOpsMenuPolicies } from "@/components/erp/pos-menus-delivery-ops-menus"
 import { PosGrabCampaignsPanel } from "@/components/erp/pos-menus-grab-campaigns"
 
+function grabSyncWarningText(
+  t: (k: string) => string,
+  grabSync: { notificationFailed?: number; itemsFailed?: number } | null | undefined
+): string | null {
+  if (!grabSync) return null
+  const notifyFailed = Number(grabSync.notificationFailed || 0)
+  const itemFailed = Number(grabSync.itemsFailed || 0)
+  if (notifyFailed <= 0 && itemFailed <= 0) return null
+  const fallback =
+    "Saved in POS, but Grab rejected the update. The item can stay orderable on GrabFood until this succeeds. Save again in a moment. (menu notification failed: {{notifyFailed}}, item update failed: {{itemFailed}})"
+  const template = t("posDeliveryOpsGrabSyncFailed")
+  const text = !template || template === "posDeliveryOpsGrabSyncFailed" ? fallback : template
+  return text
+    .replace("{{notifyFailed}}", String(notifyFailed))
+    .replace("{{itemFailed}}", String(itemFailed))
+}
+
 export default function PosMenusPage() {
   const { auth } = useAuth()
   const brand = useAppBrandConfig()
@@ -496,6 +513,7 @@ export default function PosMenusPage() {
   const [deliveryOpsAppCode, setDeliveryOpsAppCode] = React.useState<DeliveryAppCode>("grab")
   const [deliveryOpsLoading, setDeliveryOpsLoading] = React.useState(false)
   const [deliveryOpsSaving, setDeliveryOpsSaving] = React.useState(false)
+  const [deliveryOpsGrabSyncWarning, setDeliveryOpsGrabSyncWarning] = React.useState<string | null>(null)
   const [deliveryOpsImageUploadingMenuId, setDeliveryOpsImageUploadingMenuId] = React.useState<string | null>(null)
   const [deliveryOpsCopySourceStore, setDeliveryOpsCopySourceStore] = React.useState("")
   const [deliveryOpsCopying, setDeliveryOpsCopying] = React.useState(false)
@@ -3529,6 +3547,10 @@ export default function PosMenusPage() {
     void loadDeliveryOpsPolicy()
   }, [mainTab, loadDeliveryOpsPolicy])
 
+  React.useEffect(() => {
+    setDeliveryOpsGrabSyncWarning(null)
+  }, [deliveryOpsStoreCode, deliveryOpsAppCode])
+
   const upsertDeliveryMenuPolicy = React.useCallback((menuId: string, patch: Partial<PosDeliveryMenuPolicy>) => {
     setDeliveryOpsMenuPolicyMap((prev) => {
       const base = prev[menuId] || {
@@ -3719,7 +3741,10 @@ export default function PosMenusPage() {
       if (!res?.success) {
         throw new Error(res?.message || "save_failed")
       }
-      await appAlert(t("msg_save_success") || "저장되었습니다.")
+      const warning =
+        deliveryOpsAppCode === "grab" ? grabSyncWarningText(t, res.grabSync) : null
+      setDeliveryOpsGrabSyncWarning(warning)
+      await appAlert(warning || t("msg_save_success") || "저장되었습니다.")
       await loadDeliveryOpsPolicy()
     } catch (e) {
       await appAlert(translateApiMessage(String(e ?? "save_failed"), t))
@@ -3809,6 +3834,8 @@ export default function PosMenusPage() {
     try {
       const { menuPolicies, categoryOrders } = buildDeliveryOpsSavePayload(sourceStoreCode)
       let done = 0
+      let notifyFailed = 0
+      let itemFailed = 0
       for (const targetStore of targets) {
         const res = await savePosDeliveryAppPolicies({
           storeCode: targetStore,
@@ -3828,12 +3855,20 @@ export default function PosMenusPage() {
           throw new Error(`${targetStore}: ${res?.message || "save_failed"}`)
         }
         done += 1
+        notifyFailed += Number(res.grabSync?.notificationFailed || 0)
+        itemFailed += Number(res.grabSync?.itemsFailed || 0)
       }
-      await appAlert(
+      const warning =
+        deliveryOpsAppCode === "grab"
+          ? grabSyncWarningText(t, { notificationFailed: notifyFailed, itemsFailed: itemFailed })
+          : null
+      setDeliveryOpsGrabSyncWarning(warning)
+      const doneText = (
         ((t("posDeliveryOpsApplyAllDone") || "{{n}}개 매장에 전체 적용했습니다.").includes("Applied to")
           ? "{{n}}개 매장에 전체 적용했습니다."
           : t("posDeliveryOpsApplyAllDone") || "{{n}}개 매장에 전체 적용했습니다.").replace("{{n}}", String(done))
       )
+      await appAlert(warning ? `${doneText}\n\n${warning}` : doneText)
     } catch (e) {
       await appAlert(translateApiMessage(String(e ?? "save_failed"), t))
     } finally {
@@ -4562,6 +4597,14 @@ export default function PosMenusPage() {
                 handleSaveDeliveryOpsPolicy={handleSaveDeliveryOpsPolicy}
                 deliveryOpsSaving={deliveryOpsSaving}
               />
+              {deliveryOpsGrabSyncWarning ? (
+                <div
+                  role="alert"
+                  className="rounded-md border border-amber-500/70 bg-amber-500/15 px-3 py-2 text-sm text-amber-950 dark:text-amber-50"
+                >
+                  {deliveryOpsGrabSyncWarning}
+                </div>
+              ) : null}
 
               <PosDeliveryOpsSettings
                 t={t}

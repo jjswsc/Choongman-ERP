@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   GRAB_VALID_OPEN_PERIOD_TYPES,
   grabSectionServiceHours,
+  grabSectionServiceHoursForMenuSync,
   serviceHoursFromRanges,
 } from '@/lib/grab-menu-from-pos'
 
@@ -57,6 +58,19 @@ describe('serviceHoursFromRanges — openPeriodType validity', () => {
       { openPeriodType: string }
     >
     expect(sh.mon.openPeriodType).toBe('OpenAllDay')
+  })
+
+  it('menu sync does not copy one item sell window onto the category', () => {
+    const limited = grabSectionServiceHours('Drinks', [{ start: '09:00', end: '13:50' }]) as Record<
+      string,
+      { openPeriodType: string }
+    >
+    expect(limited.mon.openPeriodType).toBe('OpenPeriod')
+    const synced = grabSectionServiceHoursForMenuSync('Drinks') as Record<
+      string,
+      { openPeriodType: string }
+    >
+    expect(synced.mon.openPeriodType).toBe('OpenAllDay')
   })
 
   it('non-promotion section keeps OpenPeriod for limited ranges', () => {

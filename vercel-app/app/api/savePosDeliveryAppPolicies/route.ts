@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  loadGrabMenuPoliciesForStore,
+  syncGrabDeliveryPolicySave,
+} from '@/lib/grab-menu-availability-sync'
+import {
   savePosDeliveryPolicyBundle,
   type DeliveryAppCode,
   type PosDeliveryCategoryOrder,
   type PosDeliveryMenuPolicy,
 } from '@/lib/pos-delivery-policy'
-import { triggerGrabMenuNotificationPerStoreCodes } from '@/lib/grab-menu-sync-trigger'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -29,23 +33,36 @@ export async function POST(req: NextRequest) {
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode_required' }, { status: 400, headers })
     }
+    const menuPolicies = Array.isArray(body.menuPolicies) ? body.menuPolicies : undefined
+    const previousGrabPolicies =
+      appCode === 'grab' && menuPolicies ? await loadGrabMenuPoliciesForStore(storeCode) : []
     await savePosDeliveryPolicyBundle({
       storeCode,
       appCode,
       appPolicy: body.appPolicy,
-      menuPolicies: Array.isArray(body.menuPolicies) ? body.menuPolicies : undefined,
+      menuPolicies,
       categoryOrders: Array.isArray(body.categoryOrders) ? body.categoryOrders : undefined,
     })
+    let grabSync: Awaited<ReturnType<typeof syncGrabDeliveryPolicySave>> | undefined
     if (appCode === 'grab') {
-      void triggerGrabMenuNotificationPerStoreCodes({
-        reason: 'delivery_policy_updated',
-        storeCodes: [storeCode],
-        partnerMerchantID: storeCode,
-        /** 카테고리·노출 변경만으로 메뉴가 갱신되면 fixPrice 캠페인이 끊겨 정가만 보임 → 함께 sync */
-        syncPromoTargetPriceCampaigns: true,
-      })
+      try {
+        grabSync = await syncGrabDeliveryPolicySave({
+          storeCode,
+          previous: previousGrabPolicies,
+          next: menuPolicies ?? null,
+        })
+      } catch (error) {
+        console.error('savePosDeliveryAppPolicies grab sync:', error)
+        grabSync = {
+          notificationSent: 0,
+          notificationFailed: 1,
+          itemsUpdated: 0,
+          itemsFailed: menuPolicies?.length ?? 1,
+          itemErrors: [String(error instanceof Error ? error.message : error).slice(0, 180)],
+        }
+      }
     }
-    return NextResponse.json({ success: true }, { headers })
+    return NextResponse.json({ success: true, grabSync }, { headers })
   } catch (e) {
     return NextResponse.json(
       { success: false, message: String(e ?? 'unknown_error') },

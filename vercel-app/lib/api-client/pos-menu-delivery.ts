@@ -119,6 +119,14 @@ export async function getPosDeliveryAppPolicies(params: {
   return res.json() as Promise<PosDeliveryPolicyBundle & { success: boolean; message?: string }>
 }
 
+export type GrabDeliveryPolicySyncResult = {
+  notificationSent: number
+  notificationFailed: number
+  itemsUpdated: number
+  itemsFailed: number
+  itemErrors?: string[]
+}
+
 export async function savePosDeliveryAppPolicies(params: {
   storeCode: string
   appCode: DeliveryAppCode
@@ -131,7 +139,11 @@ export async function savePosDeliveryAppPolicies(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    grabSync?: GrabDeliveryPolicySyncResult
+  }>
 }
 
 export type GrabPromoCampaign = {

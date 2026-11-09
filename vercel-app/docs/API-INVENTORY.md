@@ -14,6 +14,7 @@
 | `/api/applyDuePriceSchedules` | POST, GET | cron `*/15 * * * *` |
 | `/api/cron/auto-notices` | GET | cron `0 * * * *` |
 | `/api/cron/marketing-ads-sync` | GET | cron `0 2 * * 1` |
+| `/api/cron/grab-menu-availability` | GET | cron `*/5 * * * *` |
 | `/api/cron/saas-auto-suspend` | GET | cron `15 17 * * *` |
 | `/api/member-portal/cron/expire-pending-payments` | GET | cron `*/10 * * * *` |
 | `/api/member-portal/cron/reconcile-pending-payments` | GET | cron `*/15 * * * *` |
@@ -1162,6 +1163,7 @@
 |---|---|---|
 | `/api/cron/auto-notices` | GET | cron `0 * * * *` |
 | `/api/cron/marketing-ads-sync` | GET | cron `0 2 * * 1` |
+| `/api/cron/grab-menu-availability` | GET | cron `*/5 * * * *` |
 | `/api/cron/saas-auto-suspend` | GET | cron `15 17 * * *` |
 | `/api/cron/work-log-reminders` | GET |  |
 
