@@ -1,20 +1,30 @@
 {
-    "version":  "0.1.21",
-    "files":  [
-                  {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
-                      "name":  "cm-pos-windows-choongman-latest-setup.exe",
-                      "sha256":  "2dc0d0c57e0726b034baa1aebf3d14fde6034cf94811f2933f4d2b945dcffd60"
-                  },
-                  {
-                      "url":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-0.1.21-setup.exe",
-                      "name":  "cm-pos-windows-choongman-0.1.21-setup.exe",
-                      "sha256":  "2dc0d0c57e0726b034baa1aebf3d14fde6034cf94811f2933f4d2b945dcffd60"
-                  }
-              ],
-    "installerSha256":  "2dc0d0c57e0726b034baa1aebf3d14fde6034cf94811f2933f4d2b945dcffd60",
-    "publishedAtUtc":  "2026-10-14T04:25:39.5963096Z",
-    "installerUrl":  "https://raw.githubusercontent.com/jjswsc/Choongman-ERP/main/vercel-app/public/downloads/windows-pos/cm-pos-windows-choongman-latest-setup.exe",
-    "brand":  "choongman",
-    "notes":  "New Printer check option \u0027Send as image (ESC/POS)\u0027: fixes printers that output blank paper from POS while Notepad prints fine (0.1.21)."
+  "version": "0.1.23",
+  "files": [
+    {
+      "url": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-choongman-v0.1.23/cm-pos-windows-choongman-latest-setup.exe",
+      "name": "cm-pos-windows-choongman-latest-setup.exe",
+      "sha256": "65cd11c0a6d7b49b0448421699aea8fa194be366d129a02c4f7514f27b185068"
+    },
+    {
+      "url": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-choongman-v0.1.23/cm-pos-windows-choongman-0.1.23-setup.exe",
+      "name": "cm-pos-windows-choongman-0.1.23-setup.exe",
+      "sha256": "65cd11c0a6d7b49b0448421699aea8fa194be366d129a02c4f7514f27b185068"
+    },
+    {
+      "url": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-choongman-v0.1.23/cm-pos-windows-choongman-latest-portable.exe",
+      "name": "cm-pos-windows-choongman-latest-portable.exe",
+      "sha256": "b88628951b66ebd1491b2fb4aafa479c8d872736eb955ed9d6f00a0e4d8cb029"
+    },
+    {
+      "url": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-choongman-v0.1.23/cm-pos-windows-choongman-0.1.23-portable.exe",
+      "name": "cm-pos-windows-choongman-0.1.23-portable.exe",
+      "sha256": "b88628951b66ebd1491b2fb4aafa479c8d872736eb955ed9d6f00a0e4d8cb029"
+    }
+  ],
+  "installerSha256": "65cd11c0a6d7b49b0448421699aea8fa194be366d129a02c4f7514f27b185068",
+  "publishedAtUtc": "2026-11-09T11:17:20.0035117Z",
+  "installerUrl": "https://github.com/jjswsc/Choongman-ERP/releases/download/windows-pos-choongman-v0.1.23/cm-pos-windows-choongman-latest-setup.exe",
+  "brand": "choongman",
+  "notes": "0.1.23: offline screen follows POS UI language (th/en/...)."
 }
