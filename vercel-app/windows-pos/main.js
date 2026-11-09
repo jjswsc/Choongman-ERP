@@ -2792,6 +2792,56 @@ function normalizePrinterNameValue(value) {
   return s;
 }
 
+const POS_UI_LANGS = ["ko", "en", "th", "mm", "la", "kh", "vi", "ms"];
+
+function normalizePosUiLang(lang) {
+  const s = String(lang || "")
+    .trim()
+    .toLowerCase()
+    .split(/[-_]/)[0];
+  return POS_UI_LANGS.includes(s) ? s : null;
+}
+
+/** offline.html — POS에서 마지막으로 쓴 UI 언어 (runtime-config.uiLang) */
+function getPersistedUiLang() {
+  try {
+    return normalizePosUiLang(readRuntimeConfig().uiLang);
+  } catch {
+    return null;
+  }
+}
+
+function writeRuntimeConfigUserOverlay(nextCfg) {
+  const userPath = path.join(app.getPath("userData"), "runtime-config.json");
+  fs.mkdirSync(path.dirname(userPath), { recursive: true });
+  const text = JSON.stringify(nextCfg, null, 4) + "\n";
+  fs.writeFileSync(userPath, text, "utf8");
+  try {
+    const backupPath = getSharedPosSettingsBackupPath();
+    if (backupPath) {
+      fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+      fs.writeFileSync(backupPath, text, "utf8");
+    }
+  } catch (e) {
+    console.warn("[cm-pos] shared runtime-config backup failed:", e && e.message ? e.message : e);
+  }
+  return userPath;
+}
+
+function saveUiLangFromIpc(lang) {
+  const normalized = normalizePosUiLang(lang);
+  if (!normalized) return { ok: false, reason: "invalid_lang" };
+  const cfg = readRuntimeConfig();
+  const nextCfg = { ...cfg, uiLang: normalized };
+  writeRuntimeConfigUserOverlay(nextCfg);
+  try {
+    runtimeConfig.uiLang = normalized;
+  } catch {
+    /* ignore */
+  }
+  return { ok: true, uiLang: normalized };
+}
+
 /**
  * POS 점검창에서 runtime-config print 설정을 바로 저장한다.
  * - userData/runtime-config.json 에만 기록(매장별 로컬 오버라이드)
@@ -3376,6 +3426,23 @@ if (!gotLock) {
     ipcMain.handle("cm-pos-is-system-online", (event) => {
       if (!senderAllowedForTrustedShell(event.sender)) return false;
       return isSystemOnline();
+    });
+
+    /** offline.html — 저장된 POS UI 언어 (없으면 null) */
+    ipcMain.handle("cm-pos-get-ui-lang", (event) => {
+      if (!senderAllowedForTrustedShell(event.sender)) {
+        return { ok: false, reason: "forbidden", uiLang: null };
+      }
+      return { ok: true, uiLang: getPersistedUiLang() };
+    });
+
+    /** POS 웹앱이 cm_lang 변경 시 셸에 보관 → 오프라인 화면 다국어 */
+    ipcMain.handle("cm-pos-set-ui-lang", (event, payload) => {
+      if (!senderAllowedOrigin(event.sender)) {
+        return { ok: false, reason: "forbidden" };
+      }
+      const lang = payload && typeof payload === "object" ? payload.uiLang : payload;
+      return saveUiLangFromIpc(lang);
     });
 
     ipcMain.handle("cm-pos-reload-pos-url", async (event, opts) => {

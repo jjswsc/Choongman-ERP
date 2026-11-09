@@ -8,6 +8,7 @@
     "main.js",
     "preload.js",
     "offline.html",
+    "offline-i18n.js",
     "pos-shell-recovery.js",
     "escpos-raster.js",
     "runtime-config.json",

@@ -10,8 +10,10 @@
   "postHtmlPrintSpoolFlushMs": 600,
   "printHtmlQueueGapMs": 120,
   "updateManifestUrl": "https://choongman-erp.vercel.app/downloads/windows-pos/latest-choongman.json",
-  "_comment_offlinePilot": "Office ì˜¤í”„ë¼ì¸ Phase B íŒŒì¼ëŸ¿ â€” cold start ì‹œ ?offlinePhaseB=1 ì „ë‹¬. ê°’: office",
+  "_comment_offlinePilot": "Office offline Phase B pilot — cold start passes ?offlinePhaseB=1. value: office",
   "offlinePilot": "",
+  "_comment_uiLang": "Last POS UI language (ko|en|th|mm|la|kh|vi|ms). Synced from web app; used by offline.html",
+  "uiLang": "",
   "linkpos": {
     "_comment": "EDC RS232 bridge. Keep enabled=false unless store has LinkPOS on serialPath (Device Manager COM port).",
     "enabled": false,

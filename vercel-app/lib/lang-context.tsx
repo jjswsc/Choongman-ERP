@@ -126,6 +126,13 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = langCodeToHtmlLang(lang)
   }, [lang])
 
+  /** Windows 하이브리드 오프라인 화면이 POS UI 언어를 따르도록 셸에 보관 */
+  useEffect(() => {
+    const setUiLang = typeof window !== 'undefined' ? window.cmPosShell?.setUiLang : undefined
+    if (typeof setUiLang !== 'function') return
+    void setUiLang(lang).catch(() => {})
+  }, [lang])
+
   const setLang = useCallback((l: LangCode) => {
     clientLang = l
     persistLang(l)

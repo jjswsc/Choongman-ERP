@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld("cmPosShell", {
   reloadPosUrl: (opts) => ipcRenderer.invoke("cm-pos-reload-pos-url", opts || {}),
   /** Electron net.isOnline() — offline.html에서「다시 시도」숨김 판단 */
   isSystemOnline: () => ipcRenderer.invoke("cm-pos-is-system-online"),
+  /** offline.html 다국어 — runtime-config.uiLang */
+  getUiLang: () => ipcRenderer.invoke("cm-pos-get-ui-lang"),
+  /** POS cm_lang 동기화 */
+  setUiLang: (uiLang) => ipcRenderer.invoke("cm-pos-set-ui-lang", { uiLang }),
   getVersion: () => ipcRenderer.invoke("cm-pos-get-version"),
   checkForUpdates: () => ipcRenderer.invoke("cm-pos-check-updates"),
   exitKioskOrFullscreen: () => ipcRenderer.invoke("cm-pos-exit-kiosk"),

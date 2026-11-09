@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,7 +8,7 @@
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: Arial, sans-serif;
+        font-family: Arial, "Noto Sans Thai", "Malgun Gothic", sans-serif;
         background: #111827;
         color: #f9fafb;
         display: flex;
@@ -71,38 +71,40 @@
   </head>
   <body>
     <div class="card">
-      <h1>네트워크 연결을 확인해주세요.</h1>
-      <p>서버 접속이 불안정합니다. 인터넷·Wi‑Fi 연결 후 다시 시도하세요.</p>
-      <p>
-        이 PC에서 POS를 한 번이라도 온라인으로 연 적이 있으면,
-        <span class="emphasis">「캐시로 열기」</span>로 오프라인 모드(저장된 로그인·주문 동기화)에 들어갈 수
-        있습니다.
+      <h1 id="offlineTitle">Please check your network connection.</h1>
+      <p id="offlineBody1">Server connection is unstable. Connect to the internet/Wi‑Fi and try again.</p>
+      <p id="offlineCacheHint">
+        If POS has been opened online on this PC before, use
+        <span class="emphasis">「Open from cache」</span> to enter offline mode (saved login · order sync).
       </p>
-      <p>오프라인 중 저장된 주문은 연결 복구 후 자동 동기화됩니다.</p>
+      <p id="offlineSyncNote">Orders saved while offline will sync automatically after the connection is restored.</p>
       <p id="offlineHint" class="hint" style="display: none">
-        Wi‑Fi/인터넷이 없을 때는 <span class="emphasis">초록 「캐시로 열기」</span>만 사용하세요. 파란 「다시
-        시도」는 연결될 때까지 기다립니다.
+        When there is no Wi‑Fi/internet, use only the green
+        <span class="emphasis">「Open from cache」</span>. 「Retry」 waits until a connection is available.
       </p>
       <p id="retryHint" class="hint" style="display: none">
-        다시 시도 후에도 같으면 앱을 완전히 종료한 뒤 실행하거나, 인터넷 연결 후 POS를 한 번 열어 캐시를
-        갱신해 주세요.
+        If it still fails after retry, fully quit the app and reopen, or connect to the internet and open POS once to
+        refresh the cache.
       </p>
       <div class="actions">
-        <button id="cacheBtn" type="button">캐시로 열기 (오프라인)</button>
-        <button id="retryBtn" type="button">다시 시도 (온라인)</button>
+        <button id="cacheBtn" type="button">Open from cache (offline)</button>
+        <button id="retryBtn" type="button">Retry (online)</button>
       </div>
     </div>
+    <script src="./offline-i18n.js"></script>
     <script>
       var RELOAD_TIMEOUT_MS = 32000;
+      var offlineStrings =
+        typeof CmPosOfflineI18n !== "undefined" ? CmPosOfflineI18n.getStrings("en") : null;
 
       function resetButtons(btn, cacheBtn) {
         if (btn) {
           btn.disabled = false;
-          btn.textContent = "다시 시도 (온라인)";
+          btn.textContent = (offlineStrings && offlineStrings.retryBtn) || "Retry (online)";
         }
         if (cacheBtn) {
           cacheBtn.disabled = false;
-          cacheBtn.textContent = "캐시로 열기 (오프라인)";
+          cacheBtn.textContent = (offlineStrings && offlineStrings.cacheBtn) || "Open from cache (offline)";
         }
       }
 
@@ -112,11 +114,16 @@
         var hint = document.getElementById("retryHint");
         if (btn) {
           btn.disabled = true;
-          btn.textContent = preferFresh ? "연결 중…" : btn.textContent;
+          btn.textContent = preferFresh
+            ? (offlineStrings && offlineStrings.connecting) || "Connecting…"
+            : btn.textContent;
         }
         if (cacheBtn) {
           cacheBtn.disabled = true;
-          if (!preferFresh) cacheBtn.textContent = "캐시 불러오는 중… (최대 30초)";
+          if (!preferFresh) {
+            cacheBtn.textContent =
+              (offlineStrings && offlineStrings.loadingCache) || "Loading cache… (up to 30s)";
+          }
         }
         try {
           if (window.cmPosShell && typeof window.cmPosShell.reloadPosUrl === "function") {
@@ -140,6 +147,24 @@
       }
 
       void (async function initOfflinePage() {
+        var persisted = null;
+        try {
+          if (window.cmPosShell && typeof window.cmPosShell.getUiLang === "function") {
+            var r = await window.cmPosShell.getUiLang();
+            if (r && r.uiLang) persisted = r.uiLang;
+          }
+        } catch (e) {}
+        var lang =
+          typeof CmPosOfflineI18n !== "undefined"
+            ? CmPosOfflineI18n.resolveOfflineLang({
+                persisted: persisted,
+                navigatorLanguage: typeof navigator !== "undefined" ? navigator.language : "",
+              })
+            : "en";
+        if (typeof CmPosOfflineI18n !== "undefined") {
+          offlineStrings = CmPosOfflineI18n.applyOfflineI18n(document, lang);
+        }
+
         var offlineHint = document.getElementById("offlineHint");
         var retryBtn = document.getElementById("retryBtn");
         var online = true;

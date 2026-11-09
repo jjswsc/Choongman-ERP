@@ -8,6 +8,10 @@ declare global {
       reloadPosUrl?: (opts?: { preferFresh?: boolean }) => Promise<{ ok: boolean; reason?: string }>
       /** Electron net.isOnline — Wi‑Fi/랜 연결 여부(서버 도달과 무관) */
       isSystemOnline?: () => Promise<boolean>
+      /** offline.html — 셸에 저장된 POS UI 언어 */
+      getUiLang?: () => Promise<{ ok: boolean; uiLang?: string | null; reason?: string }>
+      /** POS cm_lang → runtime-config.uiLang 동기화 */
+      setUiLang?: (uiLang: string) => Promise<{ ok: boolean; uiLang?: string; reason?: string }>
       getVersion?: () => Promise<string | null>
       checkForUpdates?: () => Promise<Record<string, unknown>>
       /** 키오스크·전체화면 해제 후 창 최대화 */

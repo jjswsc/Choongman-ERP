@@ -78,6 +78,7 @@ explorer $env:APPDATA\choongman-pos-windows
 - `allowedOrigin`: 허용 오리진(외부 이동 차단 기준)
 - `kiosk`: `1`(기본) 키오스크 / `0` 일반창
 - `posLiveBlankPollMs`: 영업 중 흰 화면 검사 간격(ms). 기본 **5000**. 연속 2회 비어 있으면 **온라인**일 때는 Clear Cache 후 새로고침, **오프라인**일 때는 캐시로 다시 연다(캐시를 지우지 않음). 3분에 3번 넘으면 `offline.html`(터치 가능한 다시 시도)로 떨어진다. Windows POS는 서비스워커로 오프라인 셸을 유지한다. 배포 직후 JS 섞임은 CacheFirst(해시 JS)와 오프라인 시 캐시 비우기 금지로 막는다.
+- `uiLang`(0.1.23+): POS 웹 UI 언어(`cm_lang`)를 `runtime-config.json`에 동기화. `offline.html`이 한국어 고정이 아니라 해당 언어(th/en/…)로 표시된다. 웹 배포(LangProvider→`setUiLang`) + Windows POS 재설치가 모두 필요하다.
 - 설치본은 Windows 로그인 시 **Choongman POS 자동 실행**. 끄려면 `WINDOWS_POS_OPEN_AT_LOGIN=0`.
 - 렌더러가 죽거나 창이 예상 밖으로 닫히면 셸이 창을 다시 연다. 메뉴 **Quit** 으로만 종료.
 - `updateManifestUrl`: 업데이트 매니페스트 URL (`latest-choongman.json` 충만 / `latest.json` Omni)
