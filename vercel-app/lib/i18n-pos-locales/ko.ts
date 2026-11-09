@@ -3167,6 +3167,9 @@ export const I18N_POS_KO: Record<string, string> = {
       '하루 판매 시간(HH:mm, 방콕)입니다. 시작·종료를 둘 다 비우면 시간 제한이 없습니다. 이 시간은 해당 메뉴만 적용됩니다. 저장 직후와 5분마다 Grab 품목을 AVAILABLE 또는 UNAVAILABLE로 갱신하며, 같은 분류의 다른 메뉴 시간은 바꾸지 않습니다. 프로모 기간·취소선 가격은 POS 프로모와 Grab 캠페인에서 따로 관리합니다.',
     posDeliveryOpsGrabSyncFailed:
       'POS에는 저장됐지만 Grab 반영이 거절되었습니다. 성공할 때까지 GrabFood에서 주문 가능할 수 있습니다. 잠시 후 다시 저장해 주세요. (메뉴 알림 실패 {{notifyFailed}}건, 품목 갱신 실패 {{itemFailed}}건)',
+    posDeliveryOpsGrabSyncNotifyBusy:
+      '품목 상태(품절·판매시간)는 Grab에 보냈습니다. 메뉴 전체 새로고침만 거절되었습니다(알림 실패 {{notifyFailed}}건). 아직 주문되면 2분 뒤 다시 저장해 주세요.',
+    posDeliveryOpsGrabSyncFailedReason: 'Grab 응답: {{detail}}',
     posDeliveryOpsBulkSellBothRequired: '판매 시작·종료 시간을 모두 입력하거나, 둘 다 비워 두세요(종일 판매).',
     posDeliveryOpsBulkSellNoMenus: '적용할 메뉴가 없습니다.',
     posDeliveryOpsBulkSellFilteredConfirm: '검색 결과 {{n}}개 메뉴에만 판매 시간을 적용할까요?',

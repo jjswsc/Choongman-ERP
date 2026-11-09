@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
           itemsUpdated: 0,
           itemsFailed: menuPolicies?.length ?? 1,
           itemErrors: [String(error instanceof Error ? error.message : error).slice(0, 180)],
+          notificationErrors: [String(error instanceof Error ? error.message : error).slice(0, 180)],
         }
       }
     }
