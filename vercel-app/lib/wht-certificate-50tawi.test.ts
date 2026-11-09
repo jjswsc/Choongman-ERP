@@ -13,6 +13,13 @@ describe('thaiBahtInWords', () => {
     expect(thaiBahtInWords(279)).toContain('บาท')
     expect(thaiBahtInWords(279)).toContain('ถ้วน')
   })
+
+  it('uses ยี่สิบ for twenties (not สองสิบ)', () => {
+    expect(thaiBahtInWords(23)).toBe('ยี่สิบสามบาทถ้วน')
+    expect(thaiBahtInWords(4923.72)).toBe('สี่พันเก้าร้อยยี่สิบสามบาทเจ็ดสิบสองสตางค์')
+    expect(thaiBahtInWords(20)).toBe('ยี่สิบบาทถ้วน')
+    expect(thaiBahtInWords(21)).toBe('ยี่สิบเอ็ดบาทถ้วน')
+  })
 })
 
 describe('resolveWht50Tawi', () => {

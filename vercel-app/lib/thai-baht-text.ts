@@ -9,7 +9,9 @@ function readThreeDigits(n: number): string {
   const unit = n % 10
   let out = ''
   if (hundred > 0) out += `${DIGITS[hundred]}ร้อย`
-  if (ten > 1) out += `${DIGITS[ten]}สิบ`
+  // 20–29: ยี่สิบ… (ไม่ใช่ สองสิบ…)
+  if (ten === 2) out += 'ยี่สิบ'
+  else if (ten > 1) out += `${DIGITS[ten]}สิบ`
   else if (ten === 1) out += 'สิบ'
   if (unit > 0) {
     if (ten > 0 && unit === 1) out += 'เอ็ด'
