@@ -125,6 +125,7 @@ export type GrabDeliveryPolicySyncResult = {
   itemsUpdated: number
   itemsFailed: number
   itemErrors?: string[]
+  notificationErrors?: string[]
 }
 
 export async function savePosDeliveryAppPolicies(params: {

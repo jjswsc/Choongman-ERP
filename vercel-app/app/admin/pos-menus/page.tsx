@@ -191,19 +191,44 @@ import { PosGrabCampaignsPanel } from "@/components/erp/pos-menus-grab-campaigns
 
 function grabSyncWarningText(
   t: (k: string) => string,
-  grabSync: { notificationFailed?: number; itemsFailed?: number } | null | undefined
+  grabSync:
+    | {
+        notificationFailed?: number
+        itemsFailed?: number
+        itemsUpdated?: number
+        notificationErrors?: string[]
+        itemErrors?: string[]
+      }
+    | null
+    | undefined
 ): string | null {
   if (!grabSync) return null
   const notifyFailed = Number(grabSync.notificationFailed || 0)
   const itemFailed = Number(grabSync.itemsFailed || 0)
+  const itemsUpdated = Number(grabSync.itemsUpdated || 0)
   if (notifyFailed <= 0 && itemFailed <= 0) return null
-  const fallback =
-    "Saved in POS, but Grab rejected the update. The item can stay orderable on GrabFood until this succeeds. Save again in a moment. (menu notification failed: {{notifyFailed}}, item update failed: {{itemFailed}})"
-  const template = t("posDeliveryOpsGrabSyncFailed")
-  const text = !template || template === "posDeliveryOpsGrabSyncFailed" ? fallback : template
-  return text
+  const detail = [...(grabSync.notificationErrors || []), ...(grabSync.itemErrors || [])]
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(" | ")
+    .slice(0, 220)
+  const itemSent = itemsUpdated > 0 && itemFailed <= 0 && notifyFailed > 0
+  const fallback = itemSent
+    ? "Item status was sent to Grab. The full menu refresh is busy or was rejected ({{notifyFailed}}). If the item is still orderable, save again in about 2 minutes."
+    : "Saved in POS, but Grab rejected the update. The item can stay orderable on GrabFood until this succeeds. Save again in a moment. (menu notification failed: {{notifyFailed}}, item update failed: {{itemFailed}})"
+  const key = itemSent ? "posDeliveryOpsGrabSyncNotifyBusy" : "posDeliveryOpsGrabSyncFailed"
+  const template = t(key)
+  const text = !template || template === key ? fallback : template
+  const base = text
     .replace("{{notifyFailed}}", String(notifyFailed))
     .replace("{{itemFailed}}", String(itemFailed))
+  if (!detail) return base
+  const reasonKey = "posDeliveryOpsGrabSyncFailedReason"
+  const reasonTemplate = t(reasonKey)
+  const reason =
+    !reasonTemplate || reasonTemplate === reasonKey ? "Grab said: {{detail}}" : reasonTemplate
+  return `${base} ${reason.replace("{{detail}}", detail)}`
 }
 
 export default function PosMenusPage() {
@@ -3836,6 +3861,9 @@ export default function PosMenusPage() {
       let done = 0
       let notifyFailed = 0
       let itemFailed = 0
+      let itemsUpdated = 0
+      const notificationErrors: string[] = []
+      const itemErrors: string[] = []
       for (const targetStore of targets) {
         const res = await savePosDeliveryAppPolicies({
           storeCode: targetStore,
@@ -3857,10 +3885,23 @@ export default function PosMenusPage() {
         done += 1
         notifyFailed += Number(res.grabSync?.notificationFailed || 0)
         itemFailed += Number(res.grabSync?.itemsFailed || 0)
+        itemsUpdated += Number(res.grabSync?.itemsUpdated || 0)
+        for (const line of res.grabSync?.notificationErrors || []) {
+          if (notificationErrors.length < 2) notificationErrors.push(line)
+        }
+        for (const line of res.grabSync?.itemErrors || []) {
+          if (itemErrors.length < 2) itemErrors.push(line)
+        }
       }
       const warning =
         deliveryOpsAppCode === "grab"
-          ? grabSyncWarningText(t, { notificationFailed: notifyFailed, itemsFailed: itemFailed })
+          ? grabSyncWarningText(t, {
+              notificationFailed: notifyFailed,
+              itemsFailed: itemFailed,
+              itemsUpdated,
+              notificationErrors,
+              itemErrors,
+            })
           : null
       setDeliveryOpsGrabSyncWarning(warning)
       const doneText = (

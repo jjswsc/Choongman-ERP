@@ -3489,6 +3489,9 @@ export const I18N_POS_TH: Record<string, string> = {
       'ช่วงเวลาขายรายวัน (HH:mm เวลาไทย) ว่างทั้งเริ่มและสิ้นสุด = ไม่จำกัดเวลา ใช้กับเมนูนี้เมนูเดียว อัปเดต Grab เป็น AVAILABLE หรือ UNAVAILABLE ตอนบันทึก และทุก 5 นาที ไม่เปลี่ยนเวลาของเมนูอื่นในหมวดเดียวกัน ระยะโปรโมชันและราคาขีดฆ่าอยู่ที่โปรโมชัน POS และแคมเปญ Grab ครับ',
     posDeliveryOpsGrabSyncFailed:
       'บันทึกในระบบแล้ว แต่ Grab ยังไม่รับการอัปเดต เมนูอาจยังกดสั่งบน GrabFood ได้จนกว่าจะสำเร็จ ลองบันทึกอีกครั้งอีกสักครู่ครับ (แจ้งเมนูล้มเหลว {{notifyFailed}}, อัปเดตรายการล้มเหลว {{itemFailed}})',
+    posDeliveryOpsGrabSyncNotifyBusy:
+      'ส่งสถานะเมนู (หมด/เวลาขาย) ไป Grab แล้ว แต่การรีเฟรชเมนูทั้งร้านไม่ผ่าน ({{notifyFailed}}) ถ้ายังกดสั่งได้ รอประมาณ 2 นาทีแล้วบันทึกอีกครั้งครับ',
+    posDeliveryOpsGrabSyncFailedReason: 'Grab ตอบว่า: {{detail}}',
     posDeliveryOpsBulkSellNoMenus: 'No menus to apply.',
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',

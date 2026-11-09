@@ -1,3 +1,7 @@
+import {
+  grabMenuNotificationErrorText,
+  isGrabMenuNotificationBusyError,
+} from '@/lib/grab-menu-notification-busy'
 import { grabUpdateMenuNotification } from '@/lib/grab-partner-api'
 import { syncGrabPromoTargetPriceCampaigns } from '@/lib/grab-promo-target-price-campaign'
 import {
@@ -13,6 +17,17 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 /** Grab menu notification 연속 호출 시 409 완화(초) */
 const GRAB_MENU_SYNC_INTER_STORE_DELAY_MS = 2000
+/** 같은 매장 동기화 진행 중(409)이면 4초·8초 뒤 다시 알린다 */
+const GRAB_MENU_NOTIFICATION_BUSY_DELAYS_MS = [4000, 8000]
+
+export type GrabMenuNotificationResult = {
+  attempted: number
+  sent: number
+  failed: number
+  promoCampaignSynced: number
+  promoCampaignSyncFailed: number
+  errors: string[]
+}
 
 type TriggerParams = {
   reason: string
@@ -121,14 +136,7 @@ function sleep(ms: number): Promise<void> {
 /** 매장별 Grab menu notification — 설명·메뉴 저장 시 409·미반영 완화 */
 export async function triggerGrabMenuNotificationPerStoreCodes(
   params: TriggerParams & { storeCodes?: string[] }
-): Promise<{
-  attempted: number
-  sent: number
-  failed: number
-  promoCampaignSynced: number
-  promoCampaignSyncFailed: number
-  storeCodes: string[]
-}> {
+): Promise<GrabMenuNotificationResult & { storeCodes: string[] }> {
   const explicit = normalizeGrabMenuSyncStoreCodes(params.storeCodes)
   const legacy = String(params.partnerMerchantID ?? '').trim()
   const targets =
@@ -148,6 +156,7 @@ export async function triggerGrabMenuNotificationPerStoreCodes(
   let failed = 0
   let promoCampaignSynced = 0
   let promoCampaignSyncFailed = 0
+  const errors: string[] = []
   for (let i = 0; i < targets.length; i++) {
     if (i > 0) await sleep(GRAB_MENU_SYNC_INTER_STORE_DELAY_MS)
     const r = await triggerGrabMenuNotification({
@@ -160,6 +169,9 @@ export async function triggerGrabMenuNotificationPerStoreCodes(
     failed += r.failed
     promoCampaignSynced += r.promoCampaignSynced
     promoCampaignSyncFailed += r.promoCampaignSyncFailed
+    for (const error of r.errors) {
+      if (errors.length < 5) errors.push(error)
+    }
   }
   console.info('[grab-menu-sync] per_store_notifications_done', {
     reason: params.reason,
@@ -174,27 +186,45 @@ export async function triggerGrabMenuNotificationPerStoreCodes(
     failed,
     promoCampaignSynced,
     promoCampaignSyncFailed,
+    errors,
     storeCodes: targets,
   }
 }
 
-export async function triggerGrabMenuNotification(params: TriggerParams): Promise<{
-  attempted: number
-  sent: number
-  failed: number
-  promoCampaignSynced: number
-  promoCampaignSyncFailed: number
-}> {
+async function grabUpdateMenuNotificationWithBusyRetry(merchantID: string): Promise<void> {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= GRAB_MENU_NOTIFICATION_BUSY_DELAYS_MS.length; attempt++) {
+    try {
+      await grabUpdateMenuNotification(merchantID)
+      return
+    } catch (error) {
+      lastError = error
+      const delay = GRAB_MENU_NOTIFICATION_BUSY_DELAYS_MS[attempt]
+      if (!isGrabMenuNotificationBusyError(error) || delay == null) throw error
+      console.warn('[grab-menu-sync] notification_busy_retry', {
+        merchantID,
+        attempt: attempt + 1,
+        delayMs: delay,
+        error: grabMenuNotificationErrorText(error),
+      })
+      await sleep(delay)
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'grab_menu_notification_failed'))
+}
+
+export async function triggerGrabMenuNotification(params: TriggerParams): Promise<GrabMenuNotificationResult> {
   const merchants = await loadActiveGrabMerchants(params.partnerMerchantID)
   let sent = 0
   let failed = 0
   let promoCampaignSynced = 0
   let promoCampaignSyncFailed = 0
+  const errors: string[] = []
   const shouldSyncPromoCampaigns =
     params.syncPromoTargetPriceCampaigns === true || isPromoMenuSyncReason(params.reason)
   for (const merchantID of merchants) {
     try {
-      await grabUpdateMenuNotification(merchantID)
+      await grabUpdateMenuNotificationWithBusyRetry(merchantID)
       sent += 1
       console.info('[grab-menu-sync] notification_sent', {
         merchantID,
@@ -213,7 +243,7 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
             ...result,
           })
           /** 캠페인 반영 후 메뉴 재알림 — Grab 앱 컷프라이스 표시용 */
-          await grabUpdateMenuNotification(merchantID)
+          await grabUpdateMenuNotificationWithBusyRetry(merchantID)
           console.info('[grab-menu-sync] notification_sent_after_promo_campaigns', {
             merchantID,
             reason: params.reason,
@@ -229,12 +259,14 @@ export async function triggerGrabMenuNotification(params: TriggerParams): Promis
       }
     } catch (e) {
       failed += 1
+      const error = grabMenuNotificationErrorText(e)
+      if (errors.length < 5) errors.push(`${merchantID}: ${error}`)
       console.error('[grab-menu-sync] notification_failed', {
         merchantID,
         reason: params.reason,
-        error: String(e ?? 'unknown'),
+        error,
       })
     }
   }
-  return { attempted: merchants.length, sent, failed, promoCampaignSynced, promoCampaignSyncFailed }
+  return { attempted: merchants.length, sent, failed, promoCampaignSynced, promoCampaignSyncFailed, errors }
 }

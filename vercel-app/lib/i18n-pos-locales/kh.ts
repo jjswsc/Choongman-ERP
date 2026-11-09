@@ -2869,6 +2869,8 @@ export const I18N_POS_KH: Record<string, string> = {
     posDeliveryOpsBulkSellFilteredConfirm: 'Apply sell hours to {{n}} filtered menus only?',
     posDeliveryOpsBulkSellHint: 'Daily sell window (HH:mm, Bangkok time). Leave both empty for no time limit. This window applies to this item only: on save, and every 5 minutes, Grab is updated with AVAILABLE or UNAVAILABLE. It does not change other items in the same category. Promo dates and strikethrough prices stay on POS promos and Grab campaigns.',
     posDeliveryOpsGrabSyncFailed: 'Saved in POS, but Grab rejected the update. The item can stay orderable on GrabFood until this succeeds. Save again in a moment. (menu notification failed: {{notifyFailed}}, item update failed: {{itemFailed}})',
+    posDeliveryOpsGrabSyncNotifyBusy: 'Item status was sent to Grab. The full menu refresh is busy or was rejected ({{notifyFailed}}). If the item is still orderable, save again in about 2 minutes.',
+    posDeliveryOpsGrabSyncFailedReason: 'Grab said: {{detail}}',
     posDeliveryOpsBulkSellNoMenus: 'No menus to apply.',
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankCallbackWaitingHint: 'If the customer already paid, tap Inquiry to sync approval. Waiting for callback.',
