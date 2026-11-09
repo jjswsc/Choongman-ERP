@@ -69,6 +69,32 @@ export function isDailyPlanProgressDone(status: string): boolean {
   return status === "done" || status === "awaiting_verify"
 }
 
+/**
+ * 일정표 마감 후에도 상태 변경을 허용하는 액션.
+ * 위임받은 사본(delegated_from)만 — 직원이 「เสร็จ」를 눌러야 매니저 화면에 ยืนยันเสร็จ가 뜬다.
+ * 마감 후 사진·메모만 되고 완료가 막히면 원본이 มอบหมายแล้ว에 영원히 남는 사고가 난다.
+ */
+export function canMutateDelegatedCopyWhenPlanClosed(opts: {
+  action: string
+  delegatedFromItemId?: number | null
+}): boolean {
+  if (!(Number(opts.delegatedFromItemId) > 0)) return false
+  return opts.action === "start" || opts.action === "done" || opts.action === "skip" || opts.action === "reopen"
+}
+
+/** UI: 마감돼도 위임받은 미완료 사본은 เสร็จ/못 함/시작 버튼을 보여 준다 */
+export function canEditDailyPlanItemStatus(opts: {
+  readOnly?: boolean
+  planClosed: boolean
+  status: string
+  delegatedFromItemId?: number | null
+}): boolean {
+  if (opts.readOnly) return false
+  if (!opts.planClosed) return true
+  if (!(Number(opts.delegatedFromItemId) > 0)) return false
+  return opts.status === "todo" || opts.status === "doing" || opts.status === "done" || opts.status === "skipped"
+}
+
 /** 사진 URL 합치기 (뒤쪽 우선, 최대 max개) */
 export function mergeDailyPlanPhotoUrls(a: string[] | null | undefined, b: string[] | null | undefined, max = 6): string[] {
   const out: string[] = []

@@ -6,6 +6,8 @@ import {
   computeActualMinutes,
   diffPersonalAgainstSharedTemplate,
   canCancelDailyPlanItem,
+  canEditDailyPlanItemStatus,
+  canMutateDelegatedCopyWhenPlanClosed,
   dailyPlanDismissBlock,
   isDailyPlanProgressDone,
   isoWeekdayOfYmd,
@@ -394,6 +396,36 @@ describe("delegate progress helpers", () => {
     expect(isDailyPlanProgressDone("awaiting_verify")).toBe(true)
     expect(mergeDailyPlanPhotoUrls(["a", "b"], ["b", "c"], 6)).toEqual(["a", "b", "c"])
     expect(mergeDailyPlanPhotoUrls(["1", "2", "3"], ["4", "5", "6", "7"], 4)).toEqual(["4", "5", "6", "7"])
+  })
+  it("allows delegated-copy finish after plan close so manager can verify", () => {
+    expect(canMutateDelegatedCopyWhenPlanClosed({ action: "done", delegatedFromItemId: 9 })).toBe(true)
+    expect(canMutateDelegatedCopyWhenPlanClosed({ action: "skip", delegatedFromItemId: 9 })).toBe(true)
+    expect(canMutateDelegatedCopyWhenPlanClosed({ action: "start", delegatedFromItemId: 9 })).toBe(true)
+    expect(canMutateDelegatedCopyWhenPlanClosed({ action: "reopen", delegatedFromItemId: 9 })).toBe(true)
+    expect(canMutateDelegatedCopyWhenPlanClosed({ action: "done", delegatedFromItemId: null })).toBe(false)
+    expect(canMutateDelegatedCopyWhenPlanClosed({ action: "note", delegatedFromItemId: 9 })).toBe(false)
+    expect(
+      canEditDailyPlanItemStatus({
+        planClosed: true,
+        status: "doing",
+        delegatedFromItemId: 9,
+      })
+    ).toBe(true)
+    expect(
+      canEditDailyPlanItemStatus({
+        planClosed: true,
+        status: "doing",
+        delegatedFromItemId: null,
+      })
+    ).toBe(false)
+    expect(
+      canEditDailyPlanItemStatus({
+        readOnly: true,
+        planClosed: true,
+        status: "doing",
+        delegatedFromItemId: 9,
+      })
+    ).toBe(false)
   })
 })
 

@@ -6,7 +6,13 @@ import {
   supabaseSelectFilter,
   supabaseUpdateByFilterReturning,
 } from '@/lib/supabase-server'
-import { canCancelDailyPlanItem, computeActualMinutes, isDailyPlanCancelReason, mergeDailyPlanPhotoUrls } from '@/lib/daily-plan-generate'
+import {
+  canCancelDailyPlanItem,
+  canMutateDelegatedCopyWhenPlanClosed,
+  computeActualMinutes,
+  isDailyPlanCancelReason,
+  mergeDailyPlanPhotoUrls,
+} from '@/lib/daily-plan-generate'
 import {
   canAssignDailyPlan,
   canDismissDailyPlan,
@@ -186,10 +192,14 @@ export async function POST(request: NextRequest) {
     if (!canViewDailyPlan(scope, plan)) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
     }
-    // 마감 후에도 증빙(사진·메모)·위임 검수(확인/반려)는 허용 — 그 외 상태 변경·추가/삭제 불가
+    // 마감 후에도 증빙(사진·메모)·위임 검수(확인/반려)·위임 사본 완료(done/skip/start/reopen)는 허용
     const evidenceOnly = action === 'photo' || action === 'note'
     const verifyOnly = action === 'verify_pass' || action === 'verify_reject'
-    if (plan.status === 'closed' && !evidenceOnly && !verifyOnly) {
+    const delegatedCopyFinish = canMutateDelegatedCopyWhenPlanClosed({
+      action,
+      delegatedFromItemId: item.delegated_from_item_id,
+    })
+    if (plan.status === 'closed' && !evidenceOnly && !verifyOnly && !delegatedCopyFinish) {
       return NextResponse.json({ success: false, messageKey: 'dp_err_closed', message: '마감된 일정표입니다.' }, { status: 409 })
     }
     if (plan.status === 'cancelled' && !evidenceOnly) {

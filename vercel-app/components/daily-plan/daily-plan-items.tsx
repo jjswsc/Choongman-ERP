@@ -34,7 +34,7 @@ import { addBangkokCalendarDays, getBangkokDateTimeString, getBangkokTodayDateSt
 import { useLang } from "@/lib/lang-context"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
-import { canCancelDailyPlanItem, DAILY_PLAN_CANCEL_REASONS } from "@/lib/daily-plan-generate"
+import { canCancelDailyPlanItem, canEditDailyPlanItemStatus, DAILY_PLAN_CANCEL_REASONS } from "@/lib/daily-plan-generate"
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
   computePlanTimeline,
@@ -126,8 +126,15 @@ export function DailyPlanItems(props: {
   const [cancelReason, setCancelReason] = useState<(typeof DAILY_PLAN_CANCEL_REASONS)[number]>("not_needed")
   const closed = plan.status === "closed" || plan.status === "cancelled"
   const editable = !readOnly && !closed
-  /** 마감 후에도 사진·메모 소급 첨부 가능 (상태 변경은 editable만) */
+  /** 마감 후에도 사진·메모 소급 첨부 가능. 위임 사본 완료는 canEditItemStatus */
   const canAttachEvidence = !readOnly
+  const canEditItemStatus = (it: DailyPlanItem) =>
+    canEditDailyPlanItemStatus({
+      readOnly,
+      planClosed: closed,
+      status: it.status,
+      delegatedFromItemId: it.delegated_from_item_id,
+    })
   const calendarToday = getBangkokTodayDateString()
   const [wallNowMin, setWallNowMin] = useState(bangkokNowMin)
   /** 자정 이후에도 전날 야간 근무표는 퇴근 전까지 오늘 표처럼 진행·지연을 표시 */
@@ -499,7 +506,7 @@ export function DailyPlanItems(props: {
                       {t("dp_btn_cancel_item")}
                     </Button>
                   ) : null}
-                  {editable && it.status === "todo" && !isVisit ? (
+                  {canEditItemStatus(it) && it.status === "todo" && !isVisit ? (
                     <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void run(it, "start")}>
                       <Play className="mr-1 h-3 w-3" />
                       {t("dp_btn_start")}
@@ -511,7 +518,7 @@ export function DailyPlanItems(props: {
                       {t("dp_btn_handle_action")}
                     </Button>
                   ) : null}
-                  {editable && (it.status === "todo" || it.status === "doing") ? (
+                  {canEditItemStatus(it) && (it.status === "todo" || it.status === "doing") ? (
                     <>
                       <Button size="sm" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void run(it, "done")}>
                         <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -565,7 +572,7 @@ export function DailyPlanItems(props: {
                       </Button>
                     </>
                   ) : null}
-                  {editable && (it.status === "done" || it.status === "skipped") ? (
+                  {canEditItemStatus(it) && (it.status === "done" || it.status === "skipped") ? (
                     <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" disabled={busy} onClick={() => void run(it, "reopen")}>
                       <RotateCcw className="mr-1 h-3 w-3" />
                       {t("dp_btn_reopen")}
