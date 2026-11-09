@@ -3485,7 +3485,10 @@ export const I18N_POS_TH: Record<string, string> = {
     posDeliveryOpsBulkSellBothRequired: 'Enter both sell start and end, or leave both empty (open all day).',
     posDeliveryOpsBulkSellCleared: 'Cleared sell hours on {{n}} menus (open all day). Save to push to Grab.',
     posDeliveryOpsBulkSellFilteredConfirm: 'Apply sell hours to {{n}} filtered menus only?',
-    posDeliveryOpsBulkSellHint: 'Daily sell window (HH:mm). Empty = OpenAllDay on Grab. Saved settings sync to Grab menu serviceHours. Promo dates and cut-price strikethrough use POS promos and Grab campaigns separately.',
+    posDeliveryOpsBulkSellHint:
+      'ช่วงเวลาขายรายวัน (HH:mm เวลาไทย) ว่างทั้งเริ่มและสิ้นสุด = ไม่จำกัดเวลา ใช้กับเมนูนี้เมนูเดียว อัปเดต Grab เป็น AVAILABLE หรือ UNAVAILABLE ตอนบันทึก และทุก 5 นาที ไม่เปลี่ยนเวลาของเมนูอื่นในหมวดเดียวกัน ระยะโปรโมชันและราคาขีดฆ่าอยู่ที่โปรโมชัน POS และแคมเปญ Grab ครับ',
+    posDeliveryOpsGrabSyncFailed:
+      'บันทึกในระบบแล้ว แต่ Grab ยังไม่รับการอัปเดต เมนูอาจยังกดสั่งบน GrabFood ได้จนกว่าจะสำเร็จ ลองบันทึกอีกครั้งอีกสักครู่ครับ (แจ้งเมนูล้มเหลว {{notifyFailed}}, อัปเดตรายการล้มเหลว {{itemFailed}})',
     posDeliveryOpsBulkSellNoMenus: 'No menus to apply.',
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posKbankVoidFailedAlert: 'Void payment failed. Check the KBank panel response below or run Inquiry and try again.',

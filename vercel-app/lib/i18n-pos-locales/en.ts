@@ -3039,7 +3039,9 @@ export const I18N_POS_EN: Record<string, string> = {
     posDeliveryOpsBulkSellTimes: 'Bulk sell hours',
     posDeliveryOpsBulkSellApply: 'Apply to all menus',
     posDeliveryOpsBulkSellHint:
-      'Daily sell window (HH:mm). Empty = OpenAllDay on Grab. Saved settings sync to Grab menu serviceHours. Promo dates and cut-price strikethrough use POS promos and Grab campaigns separately.',
+      'Daily sell window (HH:mm, Bangkok time). Leave both empty for no time limit. This window applies to this item only: on save, and every 5 minutes, Grab is updated with AVAILABLE or UNAVAILABLE. It does not change other items in the same category. Promo dates and strikethrough prices stay on POS promos and Grab campaigns.',
+    posDeliveryOpsGrabSyncFailed:
+      'Saved in POS, but Grab rejected the update. The item can stay orderable on GrabFood until this succeeds. Save again in a moment. (menu notification failed: {{notifyFailed}}, item update failed: {{itemFailed}})',
     posDeliveryOpsBulkSellBothRequired: 'Enter both sell start and end, or leave both empty (open all day).',
     posDeliveryOpsBulkSellNoMenus: 'No menus to apply.',
     posDeliveryOpsBulkSellFilteredConfirm: 'Apply sell hours to {{n}} filtered menus only?',

@@ -90,7 +90,7 @@ export function PosDeliveryOpsMenuPolicies({
         </div>
         <p className="text-[11px] text-muted-foreground leading-snug">
           {t("posDeliveryOpsBulkSellHint") ||
-            "하루 판매 가능 시간(HH:mm)입니다. 공란이면 Grab에 종일 판매(OpenAllDay)로 전송됩니다. 저장 시 Grab 메뉴(serviceHours)에 반영됩니다. 프로모 기간·컷프라이스(취소선)는 POS 프로모·Grab 캠페인과 별도입니다."}
+            "하루 판매 시간(HH:mm, 방콕)입니다. 시작·종료를 둘 다 비우면 시간 제한이 없습니다. 이 시간은 해당 메뉴만 적용되며, 저장 직후와 5분마다 Grab 품목을 열거나 닫습니다. 같은 분류의 다른 메뉴는 바꾸지 않습니다."}
         </p>
         <p className="text-[11px] text-muted-foreground leading-snug">
           {formatPosMenuImageUploadSpecHint(t)}

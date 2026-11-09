@@ -371,11 +371,16 @@ export function grabSectionServiceHours(
   return serviceHoursFromRanges(ranges)
 }
 
-function parseHHmm(raw: unknown): string | null {
-  const s = String(raw ?? '').trim()
-  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(s)
-  if (!m) return null
-  return `${m[1].padStart(2, '0')}:${m[2]}`
+/**
+ * 메뉴 동기화에 넣는 대분류 serviceHours.
+ * 품목 sell_start_time/sell_end_time 은 카테고리에 합치지 않는다.
+ * 한 메뉴(예: 7UP 09:00–13:50)가 Drinks 전체를 닫거나, 옆 메뉴 시간과 합쳐져 무시되던 문제(2026-11).
+ * 품목 판매 여부는 availableStatus 와 PUT /partner/v1/menu 로만 반영한다.
+ */
+export function grabSectionServiceHoursForMenuSync(
+  sectionName: string
+): ReturnType<typeof serviceHoursFromRanges> {
+  return grabSectionServiceHours(sectionName, [])
 }
 
 function sectionSortKey(name: string): number {
@@ -967,7 +972,6 @@ export async function buildGrabMenuFromPos(params: {
   }
 
   const categoriesBySection = new Map<string, unknown[]>()
-  const sectionRanges = new Map<string, TimeRange[]>()
 
   const sortedCategoryEntries = Array.from(groups.entries()).sort(([groupA], [groupB]) => {
       const [mainA, categoryA] = groupA.split('::')
@@ -1233,16 +1237,6 @@ export async function buildGrabMenuFromPos(params: {
       }
     })
 
-    const sectionRangesCurrent = sectionRanges.get(sectionName) || []
-    for (const m of sortedMenus) {
-      const pid = Number(m.id ?? 0)
-      const policy = menuPolicyMap.get(pid)
-      const start = parseHHmm(policy?.sellStartTime)
-      const end = parseHHmm(policy?.sellEndTime)
-      if (start && end) sectionRangesCurrent.push({ start, end })
-    }
-    if (sectionRangesCurrent.length > 0) sectionRanges.set(sectionName, sectionRangesCurrent)
-
     sectionCategoryList.push({
       id: categoryId,
       name: categoryName,
@@ -1260,7 +1254,7 @@ export async function buildGrabMenuFromPos(params: {
       categories: (categories || []).filter(
         (cat) => Array.isArray((cat as { items?: unknown[] }).items) && (cat as { items?: unknown[] }).items!.length > 0
       ),
-      serviceHours: grabSectionServiceHours(sectionName, sectionRanges.get(sectionName) || []),
+      serviceHours: grabSectionServiceHoursForMenuSync(sectionName),
     }))
     .filter((s) => s.categories.length > 0)
     .sort((a, b) => {
