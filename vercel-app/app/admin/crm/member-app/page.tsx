@@ -261,6 +261,9 @@ export default function CrmMemberAppContentPage() {
           return
         }
         setSignupStats(data.stats)
+        setSignupStatsStartYmd(data.stats.startYmd)
+        setSignupStatsEndYmd(data.stats.endYmd)
+        if (data.stats.days != null) setSignupStatsDays(data.stats.days)
         setSignupGoalsMonth(data.stats.monthYmd)
         setCanEditSignupGoals(Boolean(data.scope?.canEditGoals))
       } catch {
@@ -1098,11 +1101,9 @@ export default function CrmMemberAppContentPage() {
                       key={days}
                       type="button"
                       size="sm"
-                      variant={signupStatsDays === days && !signupStatsStartYmd ? "default" : "outline"}
+                      variant={signupStats?.days === days ? "default" : "outline"}
                       onClick={() => {
                         setSignupStatsDays(days)
-                        setSignupStatsStartYmd("")
-                        setSignupStatsEndYmd("")
                         void loadSignupStoreStats({ days })
                       }}
                     >
@@ -1154,12 +1155,6 @@ export default function CrmMemberAppContentPage() {
                 </div>
                 {signupStats ? (
                   <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      {tr(t, "mpAdmin_signupStoreStatsPeriod", {
-                        start: signupStats.startYmd,
-                        end: signupStats.endYmd,
-                      })}
-                    </p>
                     <p className="text-sm font-medium">
                       {t("mpAdmin_signupStoreStatsTotal")}: {signupStats.totalSignups.toLocaleString()}
                     </p>
