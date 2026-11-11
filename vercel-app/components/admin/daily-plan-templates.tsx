@@ -292,6 +292,24 @@ export function DailyPlanTemplates({ t }: { t: T }) {
       await appAlert(t("dp_tpl_name_required"))
       return
     }
+    const missingTitle = edit.items.some((i) => {
+      const hasDraft =
+        !!i.timeSlot.trim() ||
+        !!i.block.trim() ||
+        !!i.description.trim() ||
+        !!i.perStore ||
+        !!i.photoRequired ||
+        (i.linkType && i.linkType !== "none") ||
+        Number(i.employeeId) > 0 ||
+        (i.weekdays && i.weekdays !== "1234567") ||
+        (i.category && i.category !== "기타") ||
+        (Number(i.estMinutes) > 0 && Number(i.estMinutes) !== 15)
+      return hasDraft && !i.title.trim()
+    })
+    if (missingTitle) {
+      await appAlert(t("dp_tpl_item_title_required"))
+      return
+    }
     const titled = edit.items.filter((i) => i.title.trim())
     if (titled.length > 0 && titled.every((i) => !(Number(i.estMinutes) > 0))) {
       if (!(await appConfirm(t("dp_tpl_est_all_zero_confirm")))) return

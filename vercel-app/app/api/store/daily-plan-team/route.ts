@@ -19,6 +19,7 @@ import {
   loadTravelMinutesByTemplate,
   normalizePlanRow,
   resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
   travelMinutesOfPlan,
   type DailyPlanRole,
   type DailyPlanRow,
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request, 'any')
   if (authResult.errorResponse) return authResult.errorResponse
   const scope = resolveDailyPlanScope(authResult.auth)
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
   const sp = new URL(request.url).searchParams
   const today = getBangkokTodayDateString()
   const dateParam = String(sp.get('date') || '').trim()
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const emps = await loadActivePlanEmployees()
+    const emps = await loadActivePlanEmployees(tenantScope)
     const candidates = emps
       .map((e) => ({ ...e, planRole: dailyPlanRoleOf(e) || '' }))
       .filter((e) => {

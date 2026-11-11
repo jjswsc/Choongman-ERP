@@ -19,7 +19,16 @@ import {
   dailyPlanRoleOf,
   loadPlanEmployeeById,
   resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
 } from '@/lib/daily-plan-server'
+import {
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  selectWithSaasTenantFallback,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 
 type ItemIn = {
   timeSlot?: string
@@ -122,25 +131,51 @@ async function withEmployeeFallback<T>(
 }
 
 /** employee_id 컬럼 미배포(daily_plans_06 전)여도 권한 검사용 조회가 되도록 */
-async function loadTemplateAccessRow(id: number): Promise<{
+async function loadTemplateAccessRow(
+  id: number,
+  tenantScope?: SaasTenantScope | null
+): Promise<{
   id?: number
   role_scope?: string
   store_name?: string
   employee_id?: number | null
+  tenant_id?: string | null
 } | null> {
+  const base = `id=eq.${id}`
   try {
-    const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
-      select: 'id,role_scope,store_name,employee_id',
-      limit: 1,
-    })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
+    const cur = (await selectWithSaasTenantFallback('routine_templates', tenantScope, base, (filter) =>
+      supabaseSelectFilter('routine_templates', filter, {
+        select: 'id,role_scope,store_name,employee_id,tenant_id',
+        limit: 1,
+      })
+    )) as {
+      id?: number
+      role_scope?: string
+      store_name?: string
+      employee_id?: number | null
+      tenant_id?: string | null
+    }[]
     return cur?.[0] ?? null
   } catch (e) {
-    if (!/employee_id/i.test(e instanceof Error ? e.message : String(e))) throw e
-    const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
-      select: 'id,role_scope,store_name',
-      limit: 1,
-    })) as { id?: number; role_scope?: string; store_name?: string }[]
-    return cur?.[0] ? { ...cur[0], employee_id: null } : null
+    const msg = e instanceof Error ? e.message : String(e)
+    if (/employee_id/i.test(msg)) {
+      const cur = (await selectWithSaasTenantFallback('routine_templates', tenantScope, base, (filter) =>
+        supabaseSelectFilter('routine_templates', filter, {
+          select: 'id,role_scope,store_name,tenant_id',
+          limit: 1,
+        })
+      )) as { id?: number; role_scope?: string; store_name?: string; tenant_id?: string | null }[]
+      return cur?.[0] ? { ...cur[0], employee_id: null } : null
+    }
+    if (/tenant_id/i.test(msg)) {
+      markSaasTenantColumnMissing('routine_templates')
+      const cur = (await supabaseSelectFilter('routine_templates', base, {
+        select: 'id,role_scope,store_name,employee_id',
+        limit: 1,
+      })) as { id?: number; role_scope?: string; store_name?: string; employee_id?: number | null }[]
+      return cur?.[0] ? { ...cur[0], tenant_id: null } : null
+    }
+    throw e
   }
 }
 
@@ -170,6 +205,7 @@ export async function POST(request: NextRequest) {
   if (!scope.canEditTemplates) {
     return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
   }
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
 
   try {
     const body = (await request.json()) as Body
@@ -186,7 +222,7 @@ export async function POST(request: NextRequest) {
 
     if (body.deleteTemplate) {
       if (!id) return NextResponse.json({ success: false, message: 'id required' }, { status: 400 })
-      const row = await loadTemplateAccessRow(id)
+      const row = await loadTemplateAccessRow(id, tenantScope)
       if (!row) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
       if (
         !canEditRoutineTemplate(scope, {
@@ -203,6 +239,14 @@ export async function POST(request: NextRequest) {
         updated_at: now,
       })
       return NextResponse.json({ success: true, id })
+    }
+
+    const writeBlock = assertSaasTenantWritable(tenantScope, {
+      tableHint: 'routine_templates',
+      label: '루틴 템플릿',
+    })
+    if (writeBlock) {
+      return NextResponse.json({ success: false, message: writeBlock }, { status: 403 })
     }
 
     const name = String(body.name || '').trim().slice(0, 120)
@@ -236,7 +280,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (id) {
-      const existing = await loadTemplateAccessRow(id)
+      const existing = await loadTemplateAccessRow(id, tenantScope)
       if (!existing) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
       if (
         !canEditRoutineTemplate(scope, {
@@ -249,18 +293,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const header: Record<string, unknown> = {
-      name,
-      role_scope: roleScope,
-      position: pick(body.position, DAILY_PLAN_POSITIONS, 'all'),
-      store_name: storeName,
-      employee_id: employeeId > 0 ? employeeId : null,
-      status: pick(body.status, ROUTINE_TEMPLATE_STATUSES, 'draft'),
-      note: String(body.note || '').trim().slice(0, 1000),
-      travel_minutes: Math.max(0, Math.min(240, Math.round(Number(body.travelMinutes ?? 30) || 0))),
-      updated_by: scope.actorName,
-      updated_at: now,
-    }
+    const header = stampSaasTenantId(
+      {
+        name,
+        role_scope: roleScope,
+        position: pick(body.position, DAILY_PLAN_POSITIONS, 'all'),
+        store_name: storeName,
+        employee_id: employeeId > 0 ? employeeId : null,
+        status: pick(body.status, ROUTINE_TEMPLATE_STATUSES, 'draft'),
+        note: String(body.note || '').trim().slice(0, 1000),
+        travel_minutes: Math.max(0, Math.min(240, Math.round(Number(body.travelMinutes ?? 30) || 0))),
+        updated_by: scope.actorName,
+        updated_at: now,
+      } as Record<string, unknown>,
+      tenantScope,
+      'routine_templates'
+    )
 
     const items = (Array.isArray(body.items) ? body.items : [])
       .map((it, idx) => {
@@ -286,7 +334,7 @@ export async function POST(request: NextRequest) {
     if (storeLeadOnly) {
       const assigneeIds = [...new Set(items.map((it) => Number(it.employee_id || 0)).filter((n) => n > 0))]
       for (const eid of assigneeIds) {
-        const emp = await loadPlanEmployeeById(eid)
+        const emp = await loadPlanEmployeeById(eid, tenantScope)
         const role = emp ? dailyPlanRoleOf(emp) : null
         if (!emp || !role || !canAssignDailyPlan(scope, { role, store: emp.store, employeeId: emp.id })) {
           return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
@@ -296,28 +344,83 @@ export async function POST(request: NextRequest) {
 
     let templateId = id
     if (id) {
-      const cur = (await supabaseSelectFilter('routine_templates', `id=eq.${id}`, {
-        select: 'id,version',
-        limit: 1,
-      })) as { id?: number; version?: number }[]
-      if (!cur?.[0]) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
-      await withEmployeeFallback(header, (h) =>
-        supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
-          ...h,
-          version: Number(cur[0].version || 1) + 1,
+      const cur = (await selectWithSaasTenantFallback('routine_templates', tenantScope, `id=eq.${id}`, (filter) =>
+        supabaseSelectFilter('routine_templates', filter, {
+          select: 'id,version',
+          limit: 1,
         })
-      )
+      )) as { id?: number; version?: number }[]
+      if (!cur?.[0]) return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
+
+      /** 항목 교체 실패 시 복구용 스냅샷 — 삭제 후 insert 실패로 빈 템플릿이 되는 사고 방지 */
+      const prevItems = ((await supabaseSelectFilter('routine_template_items', `template_id=eq.${id}`, {
+        limit: 500,
+      })) || []) as Record<string, unknown>[]
+
+      try {
+        await withEmployeeFallback(header, (h) =>
+          supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
+            ...h,
+            version: Number(cur[0].version || 1) + 1,
+          })
+        )
+      } catch (e) {
+        if (isMissingSaasTenantColumnError(e)) {
+          markSaasTenantColumnMissing('routine_templates')
+          const { tenant_id: _tid, ...rest } = header
+          void _tid
+          await withEmployeeFallback(rest, (h) =>
+            supabaseUpdateByFilter('routine_templates', `id=eq.${id}`, {
+              ...h,
+              version: Number(cur[0].version || 1) + 1,
+            })
+          )
+        } else {
+          throw e
+        }
+      }
+
       await supabaseDeleteByFilter('routine_template_items', `template_id=eq.${id}`)
+      try {
+        await insertTemplateItems(templateId, items)
+      } catch (e) {
+        if (prevItems.length > 0) {
+          try {
+            await supabaseInsertMany(
+              'routine_template_items',
+              prevItems.map((it) => {
+                const copy = { ...it }
+                delete copy.id
+                return { ...copy, template_id: id }
+              })
+            )
+          } catch (restoreErr) {
+            console.error('saveRoutineTemplate restore items:', restoreErr)
+          }
+        }
+        throw e
+      }
     } else {
-      const res = (await withEmployeeFallback(header, (h) =>
-        supabaseInsert('routine_templates', { ...h, version: 1, created_at: now })
-      )) as Record<string, unknown>[] | Record<string, unknown>
+      let res: Record<string, unknown>[] | Record<string, unknown>
+      try {
+        res = (await withEmployeeFallback(header, (h) =>
+          supabaseInsert('routine_templates', { ...h, version: 1, created_at: now })
+        )) as Record<string, unknown>[] | Record<string, unknown>
+      } catch (e) {
+        if (!isMissingSaasTenantColumnError(e)) throw e
+        markSaasTenantColumnMissing('routine_templates')
+        const { tenant_id: _tid, ...rest } = header
+        void _tid
+        res = (await withEmployeeFallback(rest, (h) =>
+          supabaseInsert('routine_templates', { ...h, version: 1, created_at: now })
+        )) as Record<string, unknown>[] | Record<string, unknown>
+      }
       const row = Array.isArray(res) ? res[0] : res
       templateId = Number(row?.id || 0)
       if (!templateId) return NextResponse.json({ success: false, message: '저장 실패' }, { status: 500 })
+      await insertTemplateItems(templateId, items)
     }
 
-    await insertTemplateItems(templateId, items)
     return NextResponse.json({ success: true, id: templateId })
   } catch (e) {
     console.error('saveRoutineTemplate:', e)
@@ -325,7 +428,9 @@ export async function POST(request: NextRequest) {
     // 클라이언트에는 짧은 안내 + 원인 힌트(컬럼 미배포 등)
     const hint = /employee_id/i.test(detail)
       ? ' (DB: daily_plans_06·07 SQL 실행 필요할 수 있음)'
-      : ''
+      : /tenant_id/i.test(detail)
+        ? ' (DB: daily_plans_10_tenant_id.sql 실행 필요할 수 있음)'
+        : ''
     return NextResponse.json({ success: false, message: `저장 실패${hint}` }, { status: 500 })
   }
 }

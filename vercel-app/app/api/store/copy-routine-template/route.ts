@@ -6,7 +6,14 @@ import {
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
 import { DAILY_PLAN_LINK_TYPES, DAILY_PLAN_POSITIONS, DAILY_PLAN_ROLES } from '@/lib/daily-plan-generate'
-import { resolveDailyPlanScope } from '@/lib/daily-plan-server'
+import { resolveDailyPlanScope, resolveDailyPlanTenantScope } from '@/lib/daily-plan-server'
+import {
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  markSaasTenantColumnMissing,
+  selectWithSaasTenantFallback,
+  stampSaasTenantId,
+} from '@/lib/saas-tenant-scope'
 
 type Body = {
   sourceId?: number | string
@@ -67,6 +74,14 @@ export async function POST(request: NextRequest) {
   if (!scope.canCopyTemplates) {
     return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
   }
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
+  const writeBlock = assertSaasTenantWritable(tenantScope, {
+    tableHint: 'routine_templates',
+    label: '루틴 템플릿',
+  })
+  if (writeBlock) {
+    return NextResponse.json({ success: false, message: writeBlock }, { status: 403 })
+  }
 
   try {
     const body = (await request.json()) as Body
@@ -87,9 +102,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'targetStoreNames required' }, { status: 400 })
     }
 
-    const srcRows = ((await supabaseSelectFilter('routine_templates', `id=eq.${sourceId}`, {
-      limit: 1,
-    })) || []) as TemplateRow[]
+    const srcRows = ((await selectWithSaasTenantFallback(
+      'routine_templates',
+      tenantScope,
+      `id=eq.${sourceId}`,
+      (filter) => supabaseSelectFilter('routine_templates', filter, { limit: 1 })
+    )) || []) as TemplateRow[]
     const src = srcRows[0]
     if (!src) {
       return NextResponse.json({ success: false, message: 'not found' }, { status: 404 })
@@ -120,10 +138,15 @@ export async function POST(request: NextRequest) {
       }))
       .filter((it) => it.title)
 
-    const existing = ((await supabaseSelectFilter(
+    const existing = ((await selectWithSaasTenantFallback(
       'routine_templates',
+      tenantScope,
       `role_scope=eq.${roleScope}&position=eq.${position}&status=in.(draft,pilot,active)`,
-      { select: 'id,store_name', limit: 500 }
+      (filter) =>
+        supabaseSelectFilter('routine_templates', filter, {
+          select: 'id,store_name',
+          limit: 500,
+        })
     )) || []) as { id?: number; store_name?: string }[]
     const existingStores = new Set(existing.map((r) => String(r.store_name || '').trim()).filter(Boolean))
 
@@ -138,23 +161,41 @@ export async function POST(request: NextRequest) {
       }
 
       const name = `${baseName} · ${storeName}`.slice(0, 120)
-      const header: Record<string, unknown> = {
-        name,
-        role_scope: roleScope,
-        position,
-        store_name: storeName,
-        status: 'draft',
-        note: String(src.note || '').trim().slice(0, 1000),
-        travel_minutes: Math.max(0, Math.min(240, Math.round(Number(src.travel_minutes ?? 30) || 0))),
-        version: 1,
-        created_at: now,
-        updated_by: scope.actorName,
-        updated_at: now,
-      }
+      const header = stampSaasTenantId(
+        {
+          name,
+          role_scope: roleScope,
+          position,
+          store_name: storeName,
+          status: 'draft',
+          note: String(src.note || '').trim().slice(0, 1000),
+          travel_minutes: Math.max(0, Math.min(240, Math.round(Number(src.travel_minutes ?? 30) || 0))),
+          version: 1,
+          created_at: now,
+          updated_by: scope.actorName,
+          updated_at: now,
+        } as Record<string, unknown>,
+        tenantScope,
+        'routine_templates'
+      )
 
-      const res = (await withTravelFallback(header, (h) => supabaseInsert('routine_templates', h))) as
-        | Record<string, unknown>[]
-        | Record<string, unknown>
+      let res: Record<string, unknown>[] | Record<string, unknown>
+      try {
+        res = (await withTravelFallback(header, (h) => supabaseInsert('routine_templates', h))) as
+          | Record<string, unknown>[]
+          | Record<string, unknown>
+      } catch (e) {
+        if (!isMissingSaasTenantColumnError(e)) {
+          skipped.push({ storeName, reason: 'insert_failed' })
+          continue
+        }
+        markSaasTenantColumnMissing('routine_templates')
+        const { tenant_id: _tid, ...rest } = header
+        void _tid
+        res = (await withTravelFallback(rest, (h) => supabaseInsert('routine_templates', h))) as
+          | Record<string, unknown>[]
+          | Record<string, unknown>
+      }
       const row = Array.isArray(res) ? res[0] : res
       const templateId = Number(row?.id || 0)
       if (!templateId) {

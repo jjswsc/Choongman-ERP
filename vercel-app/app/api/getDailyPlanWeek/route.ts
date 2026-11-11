@@ -8,7 +8,9 @@ import {
   dailyPlanScopeFilter,
   normalizePlanRow,
   resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
 } from '@/lib/daily-plan-server'
+import { selectWithSaasTenantFallback } from '@/lib/saas-tenant-scope'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
@@ -17,6 +19,7 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
   const scope = resolveDailyPlanScope(authResult.auth)
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
   const sp = new URL(request.url).searchParams
   const today = getBangkokTodayDateString()
   const startParam = String(sp.get('start') || '').trim()
@@ -25,13 +28,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const sf = dailyPlanScopeFilter(scope)
-    const filter = [`plan_date=gte.${start}`, `plan_date=lte.${end}`, sf].filter(Boolean).join('&')
+    const baseFilter = [`plan_date=gte.${start}`, `plan_date=lte.${end}`, sf].filter(Boolean).join('&')
     const plans = (
-      ((await supabaseSelectFilter('daily_plans', filter, {
-        select: 'id,plan_date,employee_id,employee_name,employee_store,role_scope,position,store_name,route_stores,status,published_at,shift_in,shift_out',
-        order: 'plan_date.asc,employee_name.asc',
-        limit: 5000,
-      })) || []) as Record<string, unknown>[]
+      ((await selectWithSaasTenantFallback('daily_plans', tenantScope, baseFilter, (filter) =>
+        supabaseSelectFilter('daily_plans', filter, {
+          select:
+            'id,plan_date,employee_id,employee_name,employee_store,role_scope,position,store_name,route_stores,status,published_at,shift_in,shift_out',
+          order: 'plan_date.asc,employee_name.asc',
+          limit: 5000,
+        })
+      )) || []) as Record<string, unknown>[]
     )
       .map(normalizePlanRow)
       .filter((p) => canViewDailyPlan(scope, p))

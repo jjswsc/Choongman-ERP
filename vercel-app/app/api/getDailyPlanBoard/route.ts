@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokDateTimeString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import {
+  appendDailyPlanTenantFilter,
   canListDailyPlanCandidate,
   canViewDailyPlan,
   dailyPlanRoleOf,
@@ -13,9 +14,11 @@ import {
   normalizePlanItemRow,
   normalizePlanRow,
   resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
   travelMinutesOfPlan,
   type DailyPlanItemRow,
 } from '@/lib/daily-plan-server'
+import { selectWithSaasTenantFallback } from '@/lib/saas-tenant-scope'
 import { isDailyPlanProgressDone } from '@/lib/daily-plan-generate'
 import {
   DAILY_PLAN_LATE_GRACE_MINUTES,
@@ -31,6 +34,7 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
   const scope = resolveDailyPlanScope(authResult.auth)
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
   const sp = new URL(request.url).searchParams
   const today = getBangkokTodayDateString()
   const dateParam = String(sp.get('date') || '').trim()
@@ -39,17 +43,23 @@ export async function GET(request: NextRequest) {
 
   try {
     const sf = dailyPlanScopeFilter(scope)
-    const filter = [`plan_date=eq.${date}`, sf].filter(Boolean).join('&')
-    let planRows = ((await supabaseSelectFilter('daily_plans', filter, {
-      order: 'role_scope.desc,store_name.asc,employee_name.asc',
-      limit: 2000,
-    })) || []) as Record<string, unknown>[]
+    const baseFilter = [`plan_date=eq.${date}`, sf].filter(Boolean).join('&')
+    let planRows = ((await selectWithSaasTenantFallback('daily_plans', tenantScope, baseFilter, (filter) =>
+      supabaseSelectFilter('daily_plans', filter, {
+        order: 'role_scope.desc,store_name.asc,employee_name.asc',
+        limit: 2000,
+      })
+    )) || []) as Record<string, unknown>[]
     if (!scope.all && scope.actorEmployeeId) {
-      const own = (await supabaseSelectFilter(
-        'daily_plans',
+      const ownFilter = appendDailyPlanTenantFilter(
         `plan_date=eq.${date}&employee_id=eq.${scope.actorEmployeeId}`,
-        { limit: 1 }
-      )) as Record<string, unknown>[]
+        tenantScope,
+        'daily_plans'
+      )
+      const own = (await supabaseSelectFilter('daily_plans', ownFilter, { limit: 1 })) as Record<
+        string,
+        unknown
+      >[]
       if (own?.[0] && !planRows.some((r) => Number(r.id) === Number(own[0].id))) planRows = [...own, ...planRows]
     }
     const plans = planRows.map(normalizePlanRow).filter((p) => canViewDailyPlan(scope, p))
@@ -112,7 +122,7 @@ export async function GET(request: NextRequest) {
 
     let candidates: { id: number; name: string; nick: string; store: string; job: string; planRole: string }[] = []
     if (sp.get('candidates') === '1') {
-      const emps = await loadActivePlanEmployees()
+      const emps = await loadActivePlanEmployees(tenantScope)
       candidates = emps
         .map((e) => {
           const planRole = dailyPlanRoleOf(e)

@@ -36,7 +36,6 @@ import {
   supabaseDeleteByFilter,
   supabaseInsert,
   supabaseInsertMany,
-  supabaseSelect,
   supabaseSelectFilter,
   supabaseUpdateByFilter,
   supabaseUpdateByFilterReturning,
@@ -48,6 +47,17 @@ import { workLogStoredNameFromEmployeeMaster } from '@/lib/work-log-name'
 import { writeWorkLogAudit } from '@/lib/work-log-audit'
 import { pushStoreActionNotice, type StoreActionRecipient } from '@/lib/store-action-server'
 import { parseExtraStoresColumn } from '@/lib/extra-stores-column'
+import {
+  appendSaasTenantFilter,
+  assertSaasTenantWritable,
+  isMissingSaasTenantColumnError,
+  isSaasTenantQueryBlocked,
+  markSaasTenantColumnMissing,
+  resolveSaasTenantScope,
+  selectWithSaasTenantFallback,
+  stampSaasTenantId,
+  type SaasTenantScope,
+} from '@/lib/saas-tenant-scope'
 import { DAILY_PLAN_DEFAULT_TRAVEL_MINUTES, suggestVisitStores } from '@/lib/daily-plan-timeline'
 import {
   addDaysYmdUtc,
@@ -141,6 +151,18 @@ export type PlanEmployee = {
   role: string
   /** 슈퍼바이저 담당 매장 등 추가 매장 */
   extraStores: string[]
+  /** Omni SaaS tenant_id (없으면 '') */
+  tenantId: string
+}
+
+export type { SaasTenantScope }
+
+/** API·크론 공용 — JWT/회사로 Omni 테넌트 스코프 */
+export async function resolveDailyPlanTenantScope(auth?: {
+  tenantId?: string
+  company?: string
+} | null): Promise<SaasTenantScope> {
+  return resolveSaasTenantScope({ auth: auth || null })
 }
 
 // ─── 직원·직급 ──────────────────────────────────────
@@ -155,6 +177,7 @@ type EmployeeDbRow = {
   extra_stores?: unknown
   resign_date?: string | null
   employment_status?: string | null
+  tenant_id?: string | null
 }
 
 function toPlanEmployee(e: EmployeeDbRow): PlanEmployee {
@@ -166,34 +189,62 @@ function toPlanEmployee(e: EmployeeDbRow): PlanEmployee {
     job: String(e.job || '').trim(),
     role: String(e.role || '').trim(),
     extraStores: parseExtraStoresColumn(e.extra_stores),
+    tenantId: String(e.tenant_id || '').trim(),
   }
 }
 
 const EMPLOYEE_SELECT = 'id,name,nick,store,job,role,extra_stores'
+const EMPLOYEE_SELECT_TENANT = `${EMPLOYEE_SELECT},tenant_id`
 
-export async function loadActivePlanEmployees(): Promise<PlanEmployee[]> {
-  const today = getBangkokTodayDateString()
-  const rows = ((await supabaseSelect('employees', {
-    order: 'id.asc',
-    select: `${EMPLOYEE_SELECT},resign_date,employment_status`,
-    limit: 5000,
-  })) || []) as EmployeeDbRow[]
-  return rows
-    .filter((e) => {
-      if (!String(e.name || '').trim() || !Number(e.id)) return false
-      const resign = String(e.resign_date || '').trim().slice(0, 10)
-      if (resign && resign < today) return false
-      return !/퇴사|resign|terminated/i.test(String(e.employment_status || ''))
-    })
-    .map(toPlanEmployee)
+async function selectPlanEmployees(
+  baseFilter: string,
+  tenantScope: SaasTenantScope | null | undefined,
+  opts: { selectExtra?: string; limit?: number; order?: string } = {}
+): Promise<EmployeeDbRow[]> {
+  if (tenantScope && isSaasTenantQueryBlocked(tenantScope, 'employees')) return []
+  const selectExtra = opts.selectExtra ? `,${opts.selectExtra}` : ''
+  const limit = opts.limit ?? 5000
+  const order = opts.order || 'id.asc'
+  const run = async (filter: string, withTenantCol: boolean) =>
+    ((await supabaseSelectFilter('employees', filter, {
+      order,
+      select: `${withTenantCol ? EMPLOYEE_SELECT_TENANT : EMPLOYEE_SELECT}${selectExtra}`,
+      limit,
+    })) || []) as EmployeeDbRow[]
+
+  try {
+    return await selectWithSaasTenantFallback('employees', tenantScope, baseFilter, (f) => run(f, true))
+  } catch (e) {
+    if (!/tenant_id/i.test(e instanceof Error ? e.message : String(e))) throw e
+    markSaasTenantColumnMissing('employees')
+    return selectWithSaasTenantFallback('employees', tenantScope, baseFilter, (f) => run(f, false))
+  }
 }
 
-export async function loadPlanEmployeeById(id: number): Promise<PlanEmployee | null> {
+function isActivePlanEmployeeRow(e: EmployeeDbRow, today: string): boolean {
+  if (!String(e.name || '').trim() || !Number(e.id)) return false
+  const resign = String(e.resign_date || '').trim().slice(0, 10)
+  if (resign && resign < today) return false
+  return !/퇴사|resign|terminated/i.test(String(e.employment_status || ''))
+}
+
+/** Omni: tenantScope 있으면 해당 회사 직원만. 크론 등 null 이면 전체(레거시·백필용). */
+export async function loadActivePlanEmployees(
+  tenantScope?: SaasTenantScope | null
+): Promise<PlanEmployee[]> {
+  const today = getBangkokTodayDateString()
+  const rows = await selectPlanEmployees('id=gt.0', tenantScope, {
+    selectExtra: 'resign_date,employment_status',
+  })
+  return rows.filter((e) => isActivePlanEmployeeRow(e, today)).map(toPlanEmployee)
+}
+
+export async function loadPlanEmployeeById(
+  id: number,
+  tenantScope?: SaasTenantScope | null
+): Promise<PlanEmployee | null> {
   if (!Number.isFinite(id) || id <= 0) return null
-  const rows = (await supabaseSelectFilter('employees', `id=eq.${id}`, {
-    select: EMPLOYEE_SELECT,
-    limit: 1,
-  })) as EmployeeDbRow[]
+  const rows = await selectPlanEmployees(`id=eq.${id}`, tenantScope, { limit: 1 })
   return rows?.[0] ? toPlanEmployee(rows[0]) : null
 }
 
@@ -202,22 +253,31 @@ export async function findPlanEmployee(params: {
   userId?: string | number | null
   name?: string | null
   store?: string | null
+  tenantScope?: SaasTenantScope | null
 }): Promise<PlanEmployee | null> {
   const id = Number(params.userId || 0)
   if (id > 0) {
-    const e = await loadPlanEmployeeById(id)
+    const e = await loadPlanEmployeeById(id, params.tenantScope)
     if (e) return e
   }
   const name = String(params.name || '').trim()
   if (!name) return null
   const enc = encodeURIComponent(name)
-  const rows = ((await supabaseSelectFilter('employees', `or=(name.eq.${enc},nick.eq.${enc})`, {
-    select: EMPLOYEE_SELECT,
+  const rows = await selectPlanEmployees(`or=(name.eq.${enc},nick.eq.${enc})`, params.tenantScope, {
     limit: 10,
-  })) || []) as EmployeeDbRow[]
+  })
   const store = String(params.store || '').trim().toLowerCase()
   const hit = rows.find((r) => String(r.store || '').trim().toLowerCase() === store) || rows[0]
   return hit ? toPlanEmployee(hit) : null
+}
+
+export function appendDailyPlanTenantFilter(
+  baseFilter: string,
+  tenantScope: SaasTenantScope | null | undefined,
+  tableHint: string
+): string {
+  if (!tenantScope) return baseFilter
+  return appendSaasTenantFilter(baseFilter, tenantScope, tableHint)
 }
 
 /** 슈퍼바이저 > 매니저 > 직원. 본사 소속(슈퍼바이저 제외)은 자동 생성 대상 아님(null) */
@@ -316,22 +376,32 @@ function mapRoutineTemplateRow(r: TemplateDbRow, items: RoutineTemplateItem[]): 
   }
 }
 
-export async function loadRoutineTemplates(opts: { usableOnly?: boolean } = {}): Promise<RoutineTemplate[]> {
-  const filter = opts.usableOnly ? 'status=in.(pilot,active)' : 'id=gt.0'
-  let rows: TemplateDbRow[]
-  try {
-    rows = ((await supabaseSelectFilter('routine_templates', filter, {
+export async function loadRoutineTemplates(
+  opts: { usableOnly?: boolean; tenantScope?: SaasTenantScope | null } = {}
+): Promise<RoutineTemplate[]> {
+  if (opts.tenantScope && isSaasTenantQueryBlocked(opts.tenantScope, 'routine_templates')) return []
+  const baseFilter = opts.usableOnly ? 'status=in.(pilot,active)' : 'id=gt.0'
+  const run = async (filter: string, select?: string) =>
+    ((await supabaseSelectFilter('routine_templates', filter, {
+      ...(select ? { select } : {}),
       order: 'role_scope.asc,id.asc',
       limit: 500,
     })) || []) as TemplateDbRow[]
+
+  let rows: TemplateDbRow[]
+  try {
+    rows = await selectWithSaasTenantFallback('routine_templates', opts.tenantScope, baseFilter, (f) =>
+      run(f)
+    )
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (!/employee_id/.test(msg)) throw e
-    rows = ((await supabaseSelectFilter('routine_templates', filter, {
-      select: 'id,name,role_scope,position,store_name,status,version,note,travel_minutes,updated_by,updated_at',
-      order: 'role_scope.asc,id.asc',
-      limit: 500,
-    })) || []) as TemplateDbRow[]
+    rows = await selectWithSaasTenantFallback('routine_templates', opts.tenantScope, baseFilter, (f) =>
+      run(
+        f,
+        'id,name,role_scope,position,store_name,status,version,note,travel_minutes,updated_by,updated_at'
+      )
+    )
   }
   if (rows.length === 0) return []
   const ids = rows.map((r) => Number(r.id)).filter((n) => n > 0)
@@ -740,8 +810,13 @@ export type DailyPlanGenContext = {
   carry?: Map<number, CarryLite[]>
 }
 
-export async function loadDailyPlanGenContext(): Promise<DailyPlanGenContext> {
-  const [templates, actions] = await Promise.all([loadRoutineTemplates({ usableOnly: true }), loadOpenActionsLite()])
+export async function loadDailyPlanGenContext(
+  tenantScope?: SaasTenantScope | null
+): Promise<DailyPlanGenContext> {
+  const [templates, actions] = await Promise.all([
+    loadRoutineTemplates({ usableOnly: true, tenantScope }),
+    loadOpenActionsLite(),
+  ])
   return { templates, actions }
 }
 
@@ -768,6 +843,7 @@ export type EnsurePlanParams = {
   /** 배정 화면에서 취소된 날을 다시 저장할 때 취소 기록을 풀고 재생성 */
   reviveCancelled?: boolean
   ctx?: DailyPlanGenContext
+  tenantScope?: SaasTenantScope | null
 }
 
 /** 개선 과제 화면에서 직접 넣은 항목 — 재생성 때 지우지 않음 */
@@ -779,7 +855,7 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
   if (existing?.status === 'closed') return { plan: existing, created: false }
   if (existing?.status === 'cancelled' && !p.reviveCancelled) return { plan: existing, created: false }
 
-  const ctx = p.ctx || (await loadDailyPlanGenContext())
+  const ctx = p.ctx || (await loadDailyPlanGenContext(p.tenantScope))
   const routeStores = (p.routeStores ?? existing?.route_stores ?? []).map((s) => String(s || '').trim()).filter(Boolean)
   const homeStore = String(p.store ?? existing?.store_name ?? p.employee.store).trim()
   const position = String(p.position ?? existing?.position ?? 'all').toLowerCase() || 'all'
@@ -830,25 +906,47 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
     const summary = summarizePlanItems(drafts.map((d) => ({ ...d, status: 'todo', actualMinutes: null, skipReason: '' })))
     let inserted: DailyPlanRow | null = null
     try {
-      const res = (await supabaseInsert('daily_plans', {
-        plan_date: p.date,
-        employee_id: p.employee.id,
-        employee_name: p.employee.name,
-        employee_store: p.employee.store,
-        role_scope: p.role,
-        position,
-        store_name: homeStore,
-        route_stores: routeStores,
-        shift_in: p.shiftIn || '',
-        shift_out: p.shiftOut || '',
-        template_id: template?.id ?? null,
-        status: 'planned',
-        briefing_note: String(p.briefing || '').slice(0, 2000),
-        est_total: summary.estTotal,
-        created_by: p.actor,
-        created_at: now,
-        updated_at: now,
-      })) as Record<string, unknown>[] | Record<string, unknown>
+      const tenantForStamp: SaasTenantScope = p.tenantScope?.enforce
+        ? p.tenantScope
+        : {
+            enforce: !!p.employee.tenantId,
+            tenantId: p.employee.tenantId || '',
+          }
+      const planRow = stampSaasTenantId(
+        {
+          plan_date: p.date,
+          employee_id: p.employee.id,
+          employee_name: p.employee.name,
+          employee_store: p.employee.store,
+          role_scope: p.role,
+          position,
+          store_name: homeStore,
+          route_stores: routeStores,
+          shift_in: p.shiftIn || '',
+          shift_out: p.shiftOut || '',
+          template_id: template?.id ?? null,
+          status: 'planned',
+          briefing_note: String(p.briefing || '').slice(0, 2000),
+          est_total: summary.estTotal,
+          created_by: p.actor,
+          created_at: now,
+          updated_at: now,
+        } as Record<string, unknown>,
+        tenantForStamp,
+        'daily_plans'
+      )
+      let res: Record<string, unknown>[] | Record<string, unknown>
+      try {
+        res = (await supabaseInsert('daily_plans', planRow)) as
+          | Record<string, unknown>[]
+          | Record<string, unknown>
+      } catch (e) {
+        if (!isMissingSaasTenantColumnError(e)) throw e
+        markSaasTenantColumnMissing('daily_plans')
+        const { tenant_id: _tid, ...rest } = planRow
+        void _tid
+        res = (await supabaseInsert('daily_plans', rest)) as Record<string, unknown>[] | Record<string, unknown>
+      }
       const first = Array.isArray(res) ? res[0] : res
       inserted = first ? normalizePlanRow(first) : null
     } catch (e) {
@@ -951,19 +1049,27 @@ async function runInBatches<T>(list: T[], size: number, fn: (x: T) => Promise<vo
 }
 
 /** 날짜 일정표 일괄 생성 — 슈퍼바이저·매니저 전원 + 그날 근무표가 있는 직원 */
-export async function generateDailyPlansForDate(date: string, actor: string): Promise<GeneratePlansResult> {
+export async function generateDailyPlansForDate(
+  date: string,
+  actor: string,
+  tenantScope?: SaasTenantScope | null
+): Promise<GeneratePlansResult> {
   const result: GeneratePlansResult = { created: 0, existing: 0, skipped: 0, failed: 0 }
   const [employees, ctx, existingRows, schedules] = await Promise.all([
-    loadActivePlanEmployees(),
-    loadDailyPlanGenContext(),
-    supabaseSelectFilter('daily_plans', `plan_date=eq.${date}`, {
-      select: 'employee_id,route_stores,template_id',
-      limit: 5000,
-    }) as Promise<{ employee_id?: number; route_stores?: unknown; template_id?: number | null }[]>,
-    supabaseSelectFilter('schedules', `schedule_date=eq.${date}`, {
-      select: 'employee_id,name,store_name,plan_in,plan_out,memo',
-      limit: 5000,
-    }).catch(() => []) as Promise<ScheduleLite[]>,
+    loadActivePlanEmployees(tenantScope),
+    loadDailyPlanGenContext(tenantScope),
+    selectWithSaasTenantFallback('daily_plans', tenantScope, `plan_date=eq.${date}`, (f) =>
+      supabaseSelectFilter('daily_plans', f, {
+        select: 'employee_id,route_stores,template_id',
+        limit: 5000,
+      })
+    ) as Promise<{ employee_id?: number; route_stores?: unknown; template_id?: number | null }[]>,
+    selectWithSaasTenantFallback('schedules', tenantScope, `schedule_date=eq.${date}`, (f) =>
+      supabaseSelectFilter('schedules', f, {
+        select: 'employee_id,name,store_name,plan_in,plan_out,memo',
+        limit: 5000,
+      })
+    ).catch(() => []) as Promise<ScheduleLite[]>,
   ])
   ctx.carry = await loadCarryMap(date)
   const existingByEmp = new Map(
@@ -1026,6 +1132,7 @@ export async function generateDailyPlansForDate(date: string, actor: string): Pr
         regenerate: shellWithoutTemplate,
         force: shellWithoutTemplate,
         ctx,
+        tenantScope,
       })
       if (r.created) result.created += 1
       else if (shellWithoutTemplate && r.plan) result.created += 1

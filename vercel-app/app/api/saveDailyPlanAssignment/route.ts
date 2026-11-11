@@ -12,6 +12,7 @@ import {
   loadPlanEmployeeById,
   planRecipient,
   resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
 } from '@/lib/daily-plan-server'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
   const scope = resolveDailyPlanScope(authResult.auth)
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
 
   try {
     const body = (await request.json()) as Body
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!YMD.test(date) || date < getBangkokTodayDateString()) {
       return NextResponse.json({ success: false, message: '오늘 이후 날짜만 배정할 수 있습니다.' }, { status: 400 })
     }
-    const emp = await loadPlanEmployeeById(Number(body.employeeId || 0))
+    const emp = await loadPlanEmployeeById(Number(body.employeeId || 0), tenantScope)
     if (!emp) return NextResponse.json({ success: false, message: '직원을 찾을 수 없습니다.' }, { status: 404 })
     const role = dailyPlanRoleOf(emp) || 'staff'
     if (!canAssignDailyPlan(scope, { role, store: emp.store, employeeId: emp.id })) {
@@ -78,6 +80,7 @@ export async function POST(request: NextRequest) {
       regenerate: true,
       reviveCancelled: true,
       force: true,
+      tenantScope,
     })
     if (!plan) return NextResponse.json({ success: false, message: '일정표를 만들 수 없습니다.' }, { status: 500 })
 

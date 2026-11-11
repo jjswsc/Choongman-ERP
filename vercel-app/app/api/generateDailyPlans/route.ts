@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { generateDailyPlansForDate, resolveDailyPlanScope } from '@/lib/daily-plan-server'
+import {
+  generateDailyPlansForDate,
+  resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
+} from '@/lib/daily-plan-server'
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
 
@@ -19,7 +23,8 @@ export async function POST(request: NextRequest) {
     if (!YMD.test(date) || date < getBangkokTodayDateString()) {
       return NextResponse.json({ success: false, message: '오늘 이후 날짜만 생성할 수 있습니다.' }, { status: 400 })
     }
-    const result = await generateDailyPlansForDate(date, scope.actorName || 'admin')
+    const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
+    const result = await generateDailyPlansForDate(date, scope.actorName || 'admin', tenantScope)
     return NextResponse.json({ success: true, result })
   } catch (e) {
     console.error('generateDailyPlans:', e)

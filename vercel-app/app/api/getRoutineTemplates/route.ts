@@ -4,6 +4,7 @@ import {
   canViewRoutineTemplate,
   loadRoutineTemplates,
   resolveDailyPlanScope,
+  resolveDailyPlanTenantScope,
 } from '@/lib/daily-plan-server'
 
 /** 직급별 루틴 템플릿 목록 (항목 포함). 매장 매니저는 자기 매장 manager/staff만. */
@@ -11,8 +12,9 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request, 'manager')
   if (authResult.errorResponse) return authResult.errorResponse
   const scope = resolveDailyPlanScope(authResult.auth)
+  const tenantScope = await resolveDailyPlanTenantScope(authResult.auth)
   try {
-    const all = await loadRoutineTemplates()
+    const all = await loadRoutineTemplates({ tenantScope })
     const list = all.filter((t) =>
       canViewRoutineTemplate(scope, {
         roleScope: t.roleScope,
