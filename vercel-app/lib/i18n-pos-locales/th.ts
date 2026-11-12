@@ -1018,6 +1018,15 @@ export const I18N_POS_TH: Record<string, string> = {
       'บันทึกการอนุมัติที่เครื่อง EDC แล้วลง POS — กรุณากรอก PIN ลิ้นชักเงินครับ',
     posManualEdcHintAfterFail:
       'ถ้าอนุมัติที่เครื่อง EDC แล้ว ให้กด「ชำระที่เครื่อง EDC แล้ว」ครับ อย่ากดยืนยันการชำระซ้ำ — อาจตัดบัตรซ้ำได้ครับ',
+    posPendingEdcCloseBanner:
+      'อนุมัติบัตรที่เครื่อง EDC แล้ว แต่บิลยังไม่ปิดในระบบครับ อย่ากด「ยืนยันการชำระ」ซ้ำ — อาจตัดบัตรซ้ำได้ครับ ให้ปิดบิลด้วยเลขอนุมัติด้านล่างครับ',
+    posPendingEdcCloseButton: 'ปิดบิลด้วยเลขอนุมัติ',
+    posPendingEdcCloseSaveFailHint:
+      '\n\nถ้าอนุมัติบัตรแล้ว ให้ใช้「ชำระที่เครื่อง EDC แล้ว」หรือปุ่ม「ปิดบิลด้วยเลขอนุมัติ」ที่โต๊ะครับ อย่ากดยืนยันการชำระซ้ำ — อาจตัดบัตรซ้ำได้ครับ',
+    posFloorPayWarnShort: 'PAY',
+    posFloorPayWarnTitle: 'ค้างชำระ/รอปิดบิล — ห้ามตัดซ้ำ ใช้เลขอนุมัติปิดบิลครับ',
+    posFloorEdcWarnShort: 'EDC',
+    posFloorEdcWarnTitle: 'อนุมัติ EDC แล้ว · บิลยังไม่ปิด — ห้ามตัดซ้ำครับ',
     posFilterPreparing: 'รอดำเนินการ',
     posFilterComplete: 'ชำระแล้ว',
     posFilterMemberPortal: 'แอปสมาชิก',

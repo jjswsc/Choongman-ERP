@@ -2558,6 +2558,15 @@ export const I18N_POS_EN: Record<string, string> = {
       'This records an EDC approval already done on the terminal. Enter the cash drawer PIN.',
     posManualEdcHintAfterFail:
       'If already approved on EDC, use “Paid on EDC machine”. Pressing Confirm payment again may double-charge.',
+    posPendingEdcCloseBanner:
+      'Card was approved on EDC but the bill is not closed on the server yet. Do not press Confirm payment again — it may double-charge. Close with the approval code below.',
+    posPendingEdcCloseButton: 'Close bill with approval code',
+    posPendingEdcCloseSaveFailHint:
+      '\n\nIf the card was already approved, use “Paid on EDC machine” / “Close bill with approval code” on the table. Pressing Confirm payment again may double-charge.',
+    posFloorPayWarnShort: 'PAY',
+    posFloorPayWarnTitle: 'Unpaid / close pending — do not double-charge; close with approval code',
+    posFloorEdcWarnShort: 'EDC',
+    posFloorEdcWarnTitle: 'EDC approved · bill not closed — do not double-charge',
     posFilterPreparing: 'In progress',
     posFilterComplete: 'Paid',
     posFilterMemberPortal: 'Member app',

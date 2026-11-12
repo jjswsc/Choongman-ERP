@@ -97,6 +97,8 @@ export interface TableFloorViewProps {
   timeTourSpotlights?: TableFloorTimeTourSpotlights | null
   /** QR 테이블오더 세션 뱃지: awaiting | active | call | call_bill | call_help */
   getQrSessionMarker?: (id: string, name: string) => QrFloorMarker
+  /** EDC 마감 대기 / 장기 미결제 경고 (우상단) */
+  getPayWarnMarker?: (id: string, name: string) => 'edc' | 'pay' | null
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -190,6 +192,7 @@ export function TableFloorView({
   timeTourSpotlights = null,
   displayScale = 1,
   getQrSessionMarker,
+  getPayWarnMarker,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const floorLabelFallback = t('posFloorLabel') || 'Floor {n}'
@@ -484,6 +487,7 @@ export function TableFloorView({
         const floorTableLabel = formatDisplayTableLabel(tab.name, tab.id)
         const tableBadgeLabel = floorTableLabel
         const qrMarker = getQrSessionMarker?.(tab.id, tab.name) || null
+        const payWarnMarker = getPayWarnMarker?.(tab.id, tab.name) || null
 
         return (
           <div
@@ -542,6 +546,25 @@ export function TableFloorView({
                     : qrMarker === 'call'
                       ? t('qrTableSessionStaffCallShort') || '호출'
                       : 'QR'}
+              </span>
+            ) : null}
+            {payWarnMarker ? (
+              <span
+                className={cn(
+                  'pointer-events-none absolute -right-1 -top-1 z-[15] rounded-full px-1.5 py-0.5 text-[9px] font-black tracking-wide shadow-md ring-1 backdrop-blur-[1px] animate-pulse',
+                  payWarnMarker === 'edc'
+                    ? 'bg-violet-700/85 text-white ring-violet-300/80'
+                    : 'bg-orange-600/85 text-white ring-orange-200/80'
+                )}
+                title={
+                  payWarnMarker === 'edc'
+                    ? t('posFloorEdcWarnTitle') || 'EDC 승인됨 · 빌 미마감 — 이중결제 금지'
+                    : t('posFloorPayWarnTitle') || '미결제·마감 대기 — 이중결제 금지'
+                }
+              >
+                {payWarnMarker === 'edc'
+                  ? t('posFloorEdcWarnShort') || 'EDC'
+                  : t('posFloorPayWarnShort') || 'PAY'}
               </span>
             ) : null}
             {/* AABB(바깥) + w×h 논리 면(안): 회전 90/270이어도 보이는 점유 면·그리드와 맞음 */}

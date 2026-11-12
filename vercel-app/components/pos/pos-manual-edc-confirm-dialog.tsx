@@ -20,6 +20,9 @@ export type PosManualEdcConfirmDialogProps = {
   onOpenChange: (open: boolean) => void
   cardAmountBaht: number
   loading?: boolean
+  /** 로컬 마감 대기에서 넘어온 승인번호 프리필 */
+  initialApprovalCode?: string
+  initialTraceNo?: string
   onConfirm: (payload: { approvalCode: string; traceNo: string }) => void | Promise<void>
 }
 
@@ -29,6 +32,8 @@ export function PosManualEdcConfirmDialog({
   onOpenChange,
   cardAmountBaht,
   loading = false,
+  initialApprovalCode = '',
+  initialTraceNo = '',
   onConfirm,
 }: PosManualEdcConfirmDialogProps) {
   const { lang } = useLang()
@@ -44,8 +49,11 @@ export function PosManualEdcConfirmDialog({
     if (!open) {
       setApprovalCode('')
       setTraceNo('')
+      return
     }
-  }, [open])
+    setApprovalCode(String(initialApprovalCode || '').trim().toUpperCase())
+    setTraceNo(String(initialTraceNo || '').trim())
+  }, [open, initialApprovalCode, initialTraceNo])
 
   const codeOk = approvalCode.trim().length >= 4
 

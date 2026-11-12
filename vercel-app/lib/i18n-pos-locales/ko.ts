@@ -2547,6 +2547,15 @@ export const I18N_POS_KO: Record<string, string> = {
       '이미 EDC에서 승인한 결제를 POS에 반영합니다. 금전 서랍 PIN을 입력하세요.',
     posManualEdcHintAfterFail:
       '이미 EDC에서 승인했다면 「EDC에서 결제 완료」로 마감하세요. 다시 결제 완료를 누르면 이중 승인될 수 있습니다.',
+    posPendingEdcCloseBanner:
+      '카드(EDC) 승인 후 빌이 아직 서버에 안 닫혔습니다. 「결제 완료」를 다시 누르지 마세요 — 이중승인될 수 있습니다. 아래 승인번호로 마감하세요.',
+    posPendingEdcCloseButton: '승인번호로 빌 마감',
+    posPendingEdcCloseSaveFailHint:
+      '\n\n카드 승인이 이미 됐다면 「EDC에서 결제 완료」/테이블의 「승인번호로 빌 마감」을 사용하세요. 다시 결제 완료를 누르면 이중 승인될 수 있습니다.',
+    posFloorPayWarnShort: 'PAY',
+    posFloorPayWarnTitle: '미결제·마감 대기 — 이중결제 금지, 승인번호로 마감',
+    posFloorEdcWarnShort: 'EDC',
+    posFloorEdcWarnTitle: 'EDC 승인됨 · 빌 미마감 — 이중결제 금지',
     posFilterPreparing: '준비중',
     posFilterComplete: '결제 완료',
     posFilterMemberPortal: '회원앱',

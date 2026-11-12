@@ -93,6 +93,14 @@ import { runKbankVoidBoundToOrder } from '@/lib/pos-kbank-void-for-order-client'
 import { canVoidKbankQrPayment } from '@/lib/permissions'
 import { mergeQueuedSavePosOrderByLocalOrderNo, savePosOrderWithOffline } from '@/lib/offline'
 import {
+  clearPendingEdcClose,
+  findPendingEdcCloseForTable,
+  getPendingEdcClose,
+  pendingEdcCloseFromLinkpos,
+  shouldWarnUnpaidOpenTable,
+  upsertPendingEdcClose,
+} from '@/lib/pos-pending-edc-close'
+import {
   consumeSuppressMainPosAutoPrintForQueuedSync,
   registerLocallyPrintedQueuedOrderNo,
 } from '@/lib/offline/pos-queued-sync-print-suppress'
@@ -592,6 +600,50 @@ export default function PosTerminalPage() {
     loadingTables,
   } = usePosStore()
   const { getQrSessionMarker } = useQrFloorSessionHints(isPosDemo ? null : currentStoreId)
+  /** 카드 결제 저장 실패 시 플로어 PAY/EDC 뱃지 즉시 갱신 */
+  const [pendingEdcFloorTick, setPendingEdcFloorTick] = useState(0)
+  const getPayWarnMarker = useCallback(
+    (id: string, name: string): 'edc' | 'pay' | null => {
+      if (isPosDemo || !currentStoreId) return null
+      const byId = currentStore?.tables.find((tbl) => tbl.id === id)
+      const sameNameCount = (currentStore?.tables || []).filter((x) => x.name === name).length
+      const tbl =
+        byId ??
+        (sameNameCount <= 1 ? currentStore?.tables.find((t) => t.name === name) : undefined)
+      const order = tbl?.order
+      const pending =
+        (order ? getPendingEdcClose(order.id) : null) ||
+        findPendingEdcCloseForTable(currentStoreId, name)
+      if (pending) {
+        return pending.mode === 'linkpos' || Boolean(pending.approvalCode) ? 'edc' : 'pay'
+      }
+      if (!order) return null
+      const st = String(order.status || '').toLowerCase()
+      if (st === 'completed' || st === 'paid' || st === 'cancelled' || st === 'canceled') return null
+      const paidSum = orderPaymentsSum(order)
+      const createdAtRaw = order.createdAt
+      const createdAtMs =
+        createdAtRaw instanceof Date
+          ? createdAtRaw.getTime()
+          : createdAtRaw
+            ? new Date(String(createdAtRaw)).getTime()
+            : NaN
+      if (
+        shouldWarnUnpaidOpenTable({
+          status: order.status,
+          paidSum,
+          total: order.total,
+          createdAtMs,
+        })
+      ) {
+        return 'pay'
+      }
+      return null
+    },
+    // pendingEdcFloorTick: 카드 저장 실패 직후 플로어 뱃지 재계산
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tick forces localStorage re-read
+    [isPosDemo, currentStoreId, currentStore?.tables, pendingEdcFloorTick]
+  )
   const { formatStoreLabel, resolveStoreKey, legacyToCanonical, storeLabels, posStores } = useStoreList()
 
   const businessOpenGate = usePosBusinessOpenGate(currentStoreId, { skip: isPosDemo })
@@ -719,18 +771,63 @@ export default function PosTerminalPage() {
   const applyPaidStatusAfterPaymentSave = useCallback(
     async (params: { id: number; status: 'paid' | 'completed' }): Promise<boolean> => {
       if (!isOmniPaymentFastPath) {
-        return applyOrderStatusWithRetry(params)
+        const ok = await applyOrderStatusWithRetry(params)
+        if (ok) clearPendingEdcClose(params.id)
+        return ok
       }
       void applyOrderStatusWithRetry(params)
         .then((ok) => {
-          if (ok) void refetchStores({ scope: 'current', immediate: true })
+          if (ok) {
+            clearPendingEdcClose(params.id)
+            void refetchStores({ scope: 'current', immediate: true })
+          }
         })
         .catch((e) => {
           console.error('Omni post-payment status background failed:', e)
         })
+      // Omni: 결제 금액 저장까지 성공한 뒤라 로컬 마감대기도 즉시 해제(이중 경고 방지)
+      clearPendingEdcClose(params.id)
       return true
     },
     [isOmniPaymentFastPath, applyOrderStatusWithRetry, refetchStores]
+  )
+
+  /** 카드 금액이 있으면 EDC/수기 마감 대기를 로컬에 남김 (저장 실패·네 끊김 대비) */
+  const rememberPendingCardClose = useCallback(
+    (params: {
+      orderId: number
+      tableName?: string | null
+      paymentCard?: number | null
+      linkposPayment?: LinkposPaymentSummary | null
+    }) => {
+      const amount = Math.max(0, Number(params.paymentCard) || 0)
+      if (!(params.orderId > 0) || amount <= 0.005 || !currentStoreId) return
+      const input = pendingEdcCloseFromLinkpos({
+        orderId: params.orderId,
+        storeCode: currentStoreId,
+        tableName: params.tableName,
+        amount,
+        linkposPayment: params.linkposPayment ?? null,
+      })
+      if (input) {
+        upsertPendingEdcClose(input)
+        setPendingEdcFloorTick((n) => n + 1)
+      }
+    },
+    [currentStoreId]
+  )
+
+  const alertPaymentSaveFailMaybeEdc = useCallback(
+    async (apiMessage: string | undefined, hadCardPayment: boolean) => {
+      const base = localizeApiMessage(apiMessage, t, t('msg_save_fail') || '저장 실패', lang)
+      const hint = hadCardPayment
+        ? t('posPendingEdcCloseSaveFailHint') ||
+          '\n\n카드 승인이 이미 됐다면 「EDC에서 결제 완료」로 마감하세요. 다시 결제 완료를 누르면 이중 승인될 수 있습니다.'
+        : ''
+      if (hadCardPayment) setPendingEdcFloorTick((n) => n + 1)
+      await appAlert(base + hint)
+    },
+    [t, lang]
   )
 
   /** 결제 merge용 — Omni만 로컬 목록 우선(getPosOrders 왕복 생략). 충만은 항상 서버 fetch. */
@@ -9568,6 +9665,12 @@ export default function PosTerminalPage() {
                   }
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
+                  rememberPendingCardClose({
+                    orderId: existingOrderId,
+                    tableName: payload.orderLabel,
+                    paymentCard: payload.payment.paymentCard,
+                    linkposPayment: linkpos.linkposPayment,
+                  })
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: 'delivery',
                     orderLabel: payload.orderLabel,
@@ -9606,8 +9709,9 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
-                    await appAlert(
-                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    await alertPaymentSaveFailMaybeEdc(
+                      updateRes.message,
+                      Math.max(0, Number(payload.payment.paymentCard) || 0) > 0.005
                     )
                     return false
                   }
@@ -9759,6 +9863,12 @@ export default function PosTerminalPage() {
                   }
                   const linkpos = await runLinkposPaymentIfNeeded(payload.payment)
                   if (!linkpos.ok) return false
+                  rememberPendingCardClose({
+                    orderId: existingOrderId,
+                    tableName: payload.orderLabel,
+                    paymentCard: payload.payment.paymentCard,
+                    linkposPayment: linkpos.linkposPayment,
+                  })
                   const kbankQr = await runKbankQrPaymentIfNeeded(payload.payment, {
                     orderType: 'takeout',
                     orderLabel: payload.orderLabel,
@@ -9797,8 +9907,9 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
-                    await appAlert(
-                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    await alertPaymentSaveFailMaybeEdc(
+                      updateRes.message,
+                      Math.max(0, Number(payload.payment.paymentCard) || 0) > 0.005
                     )
                     return false
                   }
@@ -10894,6 +11005,14 @@ export default function PosTerminalPage() {
                 const pay = payload.payment
                 const linkpos = pay ? await runLinkposPaymentIfNeeded(pay) : { ok: true as const, linkposPayment: null as LinkposPaymentSummary | null }
                 if (!linkpos.ok) return false
+                if (existingOrderId != null && existingOrderId > 0 && pay != null) {
+                  rememberPendingCardClose({
+                    orderId: existingOrderId,
+                    tableName: payload.tableName,
+                    paymentCard: pay.paymentCard,
+                    linkposPayment: linkpos.linkposPayment,
+                  })
+                }
                 const kbankQr = pay
                   ? await runKbankQrPaymentIfNeeded(pay, {
                       orderType: 'dine_in',
@@ -10952,8 +11071,9 @@ export default function PosTerminalPage() {
                     pricingAdjustments,
                   })
                   if (!updateRes.success) {
-                    await appAlert(
-                      localizeApiMessage(updateRes.message, t, t('msg_save_fail') || '저장 실패', lang)
+                    await alertPaymentSaveFailMaybeEdc(
+                      updateRes.message,
+                      Math.max(0, Number(pay.paymentCard) || 0) > 0.005
                     )
                     return false
                   }
@@ -12629,6 +12749,7 @@ export default function PosTerminalPage() {
                         delaySoundEnabled={cookingRules.delaySoundEnabled}
                         delayAlertOverMin={cookingRules.delayAlertOverMin}
                         getQrSessionMarker={getQrSessionMarker}
+                        getPayWarnMarker={getPayWarnMarker}
                       />
                     </div>
                   )}

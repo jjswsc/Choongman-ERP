@@ -63,6 +63,13 @@ import {
   isPosOrderFullyPaidButOpen,
   resolveCounterKbankQrCloseStatus,
 } from '@/lib/pos-kbank-counter-qr-finalize-shared'
+import {
+  clearPendingEdcClose,
+  getPendingEdcClose,
+  type PendingEdcCloseRecord,
+} from '@/lib/pos-pending-edc-close'
+import { PosManualEdcConfirmDialog } from '@/components/pos/pos-manual-edc-confirm-dialog'
+import type { LinkposPaymentSummary } from '@/lib/payments/types'
 import { kitchenRoutingItemFromOrderItem } from '@/lib/pos-kitchen-slip-routing'
 import { orderItemLineQty } from '@/lib/pos-order-line-cancel'
 import {
@@ -180,6 +187,13 @@ export function TableOrderPanel({
     [order?.items, menusFromProps, promosFromProps, menuOptionsFromProps]
   )
   const isPaidPrepaid = order?.status === 'paid'
+  const pendingEdcClose: PendingEdcCloseRecord | null = useMemo(() => {
+    const id = Number(order?.id)
+    if (!Number.isFinite(id) || id <= 0) return null
+    return getPendingEdcClose(id)
+  }, [order?.id, order?.status, order?.paymentCard, order?.total])
+  const [showPendingEdcDialog, setShowPendingEdcDialog] = useState(false)
+  const [closingPendingEdc, setClosingPendingEdc] = useState(false)
   const hasTaxInvoice = Boolean(parsePosOrderMemo(order?.memo).taxInvoice)
   const mergeDisabledByPayment = isPaidPrepaid
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
@@ -621,6 +635,88 @@ export function TableOrderPanel({
     onPay?.()
   }
 
+  /** EDC 승인 후 서버 저장 실패로 남은 로컬 마감 대기 — 승인번호로 카드 반영·테이블 닫기 */
+  const handleConfirmPendingEdcClose = async (payload: { approvalCode: string; traceNo: string }) => {
+    if (!order || closingPendingEdc || closingPaidBill) return
+    const id = Number(order.id)
+    if (!(id > 0)) return
+    const amount = Math.max(
+      0.01,
+      Number(pendingEdcClose?.amount) ||
+        Math.max(0, (Number(order.total) || 0) - orderPaymentsSum(order)) ||
+        Number(order.total) ||
+        0
+    )
+    const approvalCode = String(payload.approvalCode || '').trim().toUpperCase()
+    if (approvalCode.length < 4) {
+      await appAlert(tr('posManualEdcApprovalRequired', 'EDC 전표의 승인번호를 입력해 주세요.'))
+      return
+    }
+    setClosingPendingEdc(true)
+    try {
+      if (isDemo && onDemoOrderReplace) {
+        onDemoOrderReplace({
+          ...order,
+          paymentCard: amount,
+          status: 'completed',
+        })
+        clearPendingEdcClose(id)
+        setShowPendingEdcDialog(false)
+        await onLeaveTable?.()
+        onServed?.()
+        return
+      }
+      const nowIso = new Date().toISOString()
+      const linkposPayment: LinkposPaymentSummary = {
+        provider: 'kbtg_linkpos',
+        mode: 'manual_edc',
+        txCode: '20',
+        bankId: '',
+        responseCode: '00',
+        approvalCode,
+        traceNo: String(payload.traceNo || '').trim() || undefined,
+        reference1: `MAN${Date.now().toString().slice(-14)}`.slice(0, 20),
+        requestedAmount: amount,
+        approvedAmount: amount,
+        requestedAt: nowIso,
+        respondedAt: nowIso,
+      }
+      const saveRes = await updatePosOrder({
+        id,
+        terminalStoreCode: storeCode || undefined,
+        paymentCard: amount,
+        linkposPayment,
+      })
+      if (!saveRes.success) {
+        await appAlert(
+          localizeApiMessage(
+            saveRes.message,
+            t,
+            t('msg_save_fail') || '저장 실패',
+            lang
+          )
+        )
+        return
+      }
+      const orderTypeKey =
+        order.type === 'dine-in' ? 'dine_in' : order.type === 'takeout' ? 'takeout' : 'delivery'
+      const targetStatus = resolveCounterKbankQrCloseStatus(orderTypeKey)
+      const statusRes = await updatePosOrderStatus({ id, status: targetStatus })
+      if (!statusRes.success) {
+        await appAlert(buildPosStatusFailureMessage(statusRes, t('processFail') || '처리 실패'))
+        return
+      }
+      clearPendingEdcClose(id)
+      setShowPendingEdcDialog(false)
+      await onLeaveTable?.()
+      onServed?.()
+    } catch (e) {
+      await appAlert(i18nTr(tDefault, 'posUnexpectedErrorDetail', { detail: String(e) }))
+    } finally {
+      setClosingPendingEdc(false)
+    }
+  }
+
   /** QR 등 전액 입금됐는데 status가 열린 채 남은 주문 — 원탭 마감 (이중 QR 방지) */
   const handleCloseFullyPaidBill = async () => {
     if (!order || closingPaidBill || clearingPaymentTender) return
@@ -656,6 +752,7 @@ export function TableOrderPanel({
           return
         }
       }
+      clearPendingEdcClose(id)
       await onLeaveTable?.()
       onServed?.()
     } catch (e) {
@@ -1187,6 +1284,27 @@ export function TableOrderPanel({
           ) : null}
           {(isPaidPrepaid || fullyPaidButOpen) && showTableActions ? (
             <div className="@container/tbl flex flex-wrap items-center gap-1">{renderTableActions()}</div>
+          ) : null}
+
+          {pendingEdcClose && !fullyPaidButOpen && !isPaidPrepaid ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-violet-500/40 bg-violet-50 p-3 text-violet-950 dark:bg-violet-950/40 dark:text-violet-100">
+              <p className="text-sm font-semibold leading-snug">
+                {t('posPendingEdcCloseBanner') ||
+                  '카드(EDC) 승인 후 빌이 아직 서버에 안 닫혔습니다. 「결제 완료」를 다시 누르지 마세요.'}
+              </p>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {(Number(pendingEdcClose.amount) || 0).toLocaleString()} ฿
+                {pendingEdcClose.approvalCode ? ` · ${pendingEdcClose.approvalCode}` : ''}
+              </p>
+              <Button
+                type="button"
+                className="h-11 w-full text-base font-semibold"
+                disabled={closingPendingEdc || closingPaidBill || cancelling}
+                onClick={() => setShowPendingEdcDialog(true)}
+              >
+                {t('posPendingEdcCloseButton') || '승인번호로 빌 마감'}
+              </Button>
+            </div>
           ) : null}
 
           {fullyPaidButOpen ? (
@@ -1821,6 +1939,24 @@ export function TableOrderPanel({
           if (!selectedLineItemId) return
           void applyLineCancel(selectedLineItemId, cq, false)
         }}
+      />
+
+      <PosManualEdcConfirmDialog
+        open={showPendingEdcDialog}
+        onOpenChange={(open) => {
+          if (!closingPendingEdc) setShowPendingEdcDialog(open)
+        }}
+        cardAmountBaht={Math.max(
+          0,
+          Number(pendingEdcClose?.amount) ||
+            Math.max(0, (Number(order?.total) || 0) - (order ? orderPaymentsSum(order) : 0)) ||
+            Number(order?.total) ||
+            0
+        )}
+        loading={closingPendingEdc}
+        initialApprovalCode={pendingEdcClose?.approvalCode || ''}
+        initialTraceNo={pendingEdcClose?.traceNo || ''}
+        onConfirm={(payload) => void handleConfirmPendingEdcClose(payload)}
       />
     </div>
   )
