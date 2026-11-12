@@ -465,7 +465,8 @@ export function TableFloorView({
         )
 
         const labelTextClass = cn(
-          'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-0.5 pointer-events-none overflow-hidden rounded-sm px-0.5 text-center antialiased',
+          /** QR 뱃지(z-15)보다 위 — 테이블 번호·손님 수가 QR에 가리지 않도록 */
+          'absolute inset-0 z-[30] flex flex-col items-center justify-center gap-0.5 pointer-events-none overflow-hidden rounded-sm px-0.5 text-center antialiased',
           /** 밝은 테이블 면 위에서도 글자가 잘 보이도록 */
           '[text-shadow:0_1px_2px_rgba(0,0,0,0.45)]',
           !isOccupied && (emptyTextDark ? 'text-stone-800' : 'text-white'),
@@ -515,11 +516,12 @@ export function TableFloorView({
             {qrMarker ? (
               <span
                 className={cn(
-                  'pointer-events-none absolute -left-1 -top-1 z-20 rounded-full px-1.5 py-0.5 text-[9px] font-black tracking-wide shadow-md ring-1',
+                  /** 테이블 번호(z-30) 아래 + 반투명 — 번호가 항상 읽히고 QR 표시는 모서리에서 유지 */
+                  'pointer-events-none absolute -left-1 -top-1 z-[15] rounded-full px-1.5 py-0.5 text-[9px] font-black tracking-wide shadow-md ring-1 backdrop-blur-[1px]',
                   (qrMarker === 'call' || qrMarker === 'call_bill' || qrMarker === 'call_help') &&
-                    'animate-pulse bg-rose-600 text-white ring-rose-300',
-                  qrMarker === 'active' && 'bg-emerald-600 text-white ring-emerald-300',
-                  qrMarker === 'awaiting' && 'bg-amber-500 text-white ring-amber-200'
+                    'animate-pulse bg-rose-600/80 text-white ring-rose-300/80',
+                  qrMarker === 'active' && 'bg-emerald-600/70 text-white ring-emerald-300/70',
+                  qrMarker === 'awaiting' && 'bg-amber-500/70 text-white ring-amber-200/70'
                 )}
                 title={
                   qrMarker === 'call_bill'
