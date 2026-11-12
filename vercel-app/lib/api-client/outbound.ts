@@ -512,6 +512,7 @@ export type InvoicePrintOverridePayload = InvoicePrintOverrideRef & {
   referenceNo?: string
   documentNo?: string
   shipTo?: string
+  paymentTerms?: string
 }
 
 export async function getInvoicePrintOverrides(refs: InvoicePrintOverrideRef[]) {
@@ -530,6 +531,7 @@ export async function getInvoicePrintOverrides(refs: InvoicePrintOverrideRef[]) 
         referenceNo?: string
         documentNo?: string
         shipTo?: string
+        paymentTerms?: string
         updatedAt?: string
       }
     >

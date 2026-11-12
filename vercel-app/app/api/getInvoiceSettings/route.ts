@@ -23,7 +23,7 @@ export async function GET() {
     console.error("getInvoiceSettings:", e)
     return NextResponse.json(
       {
-        payment_terms: "Net 30 Days",
+        payment_terms: "Cash",
         shipping_method: "Company Delivery",
         bank_name: "Kasikorn Bank (KBank)",
         account_no: "166-2-97079-0",

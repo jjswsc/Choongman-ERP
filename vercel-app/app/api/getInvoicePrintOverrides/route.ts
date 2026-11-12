@@ -14,6 +14,7 @@ type InvoicePrintOverride = {
   referenceNo?: string
   documentNo?: string
   shipTo?: string
+  paymentTerms?: string
   updatedAt?: string
 }
 

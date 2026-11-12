@@ -31,6 +31,11 @@ import {
 } from "@/lib/tax-invoice-doc-no"
 import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 import { isSalesTaxInvoicePrintDoc } from "@/lib/sales-tax-document-title"
+import {
+  dueDateFromPaymentTerms,
+  INVOICE_PAYMENT_TERM_OPTIONS,
+  normalizeInvoicePaymentTerms,
+} from "@/lib/invoice-payment-terms"
 
 const STORAGE_KEY = "invoice-print-data"
 
@@ -173,6 +178,11 @@ function InvoicePrintPageInner() {
                 const referenceNo = taxDoc
                   ? normalizeTaxInvoiceReferenceNo(mergedReferenceNo, documentNo)
                   : mergedReferenceNo || dataRef || "-"
+                const ovPaymentTerms = normalizeInvoicePaymentTerms(ov.paymentTerms)
+                const paymentTerms =
+                  ovPaymentTerms ||
+                  normalizeInvoicePaymentTerms(d.paymentTerms) ||
+                  d.paymentTerms
                 return {
                   ...d,
                   issueDate: ov.issueDate || d.issueDate,
@@ -180,6 +190,7 @@ function InvoicePrintPageInner() {
                   referenceNo,
                   documentNo,
                   shipTo: ov.shipTo ?? d.shipTo,
+                  paymentTerms: paymentTerms || d.paymentTerms,
                 }
               })
               // 순차 재할당 + 즉시 예약 — Promise.all 병렬 시 같은 순번 중복 방지
@@ -218,23 +229,26 @@ function InvoicePrintPageInner() {
   }, [preparing])
 
   const buildOverridePayload = React.useCallback((datas: InvoiceData[]): InvoicePrintOverridePayload[] => {
-    return datas.flatMap((d) => {
+    // 동일 refType+refId+docKind가 여러 장이면 마지막 값만 (upsert 중복 code 방지)
+    const byKey = new Map<string, InvoicePrintOverridePayload>()
+    for (const d of datas) {
       const refType = String(d.sourceRefType || "").trim()
       const refId = Number(d.sourceRefId || 0)
-      if (!refType || !Number.isFinite(refId) || refId <= 0) return []
-      return [
-        {
-          refType,
-          refId,
-          docKind: normalizeDocKind(d),
-          issueDate: d.issueDate || undefined,
-          dueDate: d.dueDate || undefined,
-          referenceNo: d.referenceNo || undefined,
-          documentNo: d.documentNo || undefined,
-          shipTo: d.shipTo || undefined,
-        } satisfies InvoicePrintOverridePayload,
-      ]
-    })
+      if (!refType || !Number.isFinite(refId) || refId <= 0) continue
+      const docKind = normalizeDocKind(d)
+      byKey.set(`${docKind}:${refType}:${refId}`, {
+        refType,
+        refId,
+        docKind,
+        issueDate: d.issueDate || undefined,
+        dueDate: d.dueDate || undefined,
+        referenceNo: d.referenceNo || undefined,
+        documentNo: d.documentNo || undefined,
+        shipTo: d.shipTo || undefined,
+        paymentTerms: d.paymentTerms || undefined,
+      })
+    }
+    return [...byKey.values()]
   }, [])
 
   const handlePrint = async () => {
@@ -338,32 +352,84 @@ function InvoicePrintPageInner() {
                   <div className="text-xs font-semibold mb-2">
                     {data.documentType} #{i + 1}
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
                     <Input
                       value={data.issueDate || ""}
                       type="date"
+                      title="Issue Date"
+                      aria-label="Issue Date"
                       onChange={(e) => {
                         const nextIssueDate = e.target.value
+                        const terms = normalizeInvoicePaymentTerms(data.paymentTerms)
+                        const nextDue =
+                          terms && /^\d{4}-\d{2}-\d{2}$/.test(nextIssueDate)
+                            ? dueDateFromPaymentTerms(nextIssueDate, terms)
+                            : data.dueDate
                         // 즉시 state 반영 — async 순번 예약 전에 Update를 누르면 이전 날짜가 저장되던 레이스 방지
-                        updateField(i, { issueDate: nextIssueDate })
+                        updateField(i, {
+                          issueDate: nextIssueDate,
+                          ...(nextDue ? { dueDate: nextDue } : {}),
+                        })
                         if (!taxDoc) return
                         void resolveTaxInvoiceDocNo(nextIssueDate, {
                           ...data,
                           issueDate: nextIssueDate,
+                          ...(nextDue ? { dueDate: nextDue } : {}),
                         }).then((documentNo) => {
                           const referenceNo = normalizeTaxInvoiceReferenceNo(
                             data.referenceNo,
                             documentNo
                           )
-                          updateField(i, { issueDate: nextIssueDate, documentNo, referenceNo })
+                          updateField(i, {
+                            issueDate: nextIssueDate,
+                            documentNo,
+                            referenceNo,
+                            ...(nextDue ? { dueDate: nextDue } : {}),
+                          })
                         })
                       }}
                     />
                     <Input
                       value={data.dueDate || ""}
                       type="date"
+                      title={t("inv_due_date")}
+                      aria-label={t("inv_due_date")}
                       onChange={(e) => updateField(i, { dueDate: e.target.value })}
                     />
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={
+                        normalizeInvoicePaymentTerms(data.paymentTerms) ||
+                        (data.paymentTerms ? data.paymentTerms : "")
+                      }
+                      title={t("inv_payment_terms")}
+                      aria-label={t("inv_payment_terms")}
+                      onChange={(e) => {
+                        const paymentTerms = e.target.value
+                        const issueDate = String(data.issueDate || "").trim().slice(0, 10)
+                        const dueDate =
+                          paymentTerms &&
+                          normalizeInvoicePaymentTerms(paymentTerms) &&
+                          /^\d{4}-\d{2}-\d{2}$/.test(issueDate)
+                            ? dueDateFromPaymentTerms(issueDate, paymentTerms)
+                            : data.dueDate
+                        updateField(i, {
+                          paymentTerms,
+                          ...(dueDate ? { dueDate } : {}),
+                        })
+                      }}
+                    >
+                      <option value="">{t("inv_payment_terms")}</option>
+                      {INVOICE_PAYMENT_TERM_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                      {data.paymentTerms &&
+                        !normalizeInvoicePaymentTerms(data.paymentTerms) && (
+                          <option value={data.paymentTerms}>{data.paymentTerms}</option>
+                        )}
+                    </select>
                     <Input
                       value={data.referenceNo || ""}
                       placeholder="Reference"

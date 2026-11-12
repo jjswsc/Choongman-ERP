@@ -31,6 +31,10 @@ import { cn } from "@/lib/utils"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 import { SALES_OUTBOUND_INVOICE_TITLE } from "@/lib/sales-tax-document-title"
 import { resolveOutboundInvoiceDates } from "@/lib/outbound-invoice-dates"
+import {
+  INVOICE_PAYMENT_TERM_OPTIONS,
+  normalizeInvoicePaymentTerms,
+} from "@/lib/invoice-payment-terms"
 import { buildThaiSalesInvoiceData } from "@/lib/thai-sales-invoice-data"
 import { collectOutboundInvoiceNosForPrintStatus } from "@/lib/outbound-invoice-print-status"
 import {
@@ -2868,12 +2872,29 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   <div className="space-y-4">
                     <div>
                       <label className="text-xs font-semibold">{t("inv_payment_terms")}</label>
-                      <Input
-                        value={invSettings.payment_terms ?? ""}
-                        onChange={(e) => setInvSettings((p) => ({ ...p, payment_terms: e.target.value }))}
-                        placeholder="Net 30 Days"
-                        className="mt-1 h-9"
-                      />
+                      <select
+                        className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={
+                          normalizeInvoicePaymentTerms(invSettings.payment_terms) ||
+                          invSettings.payment_terms ||
+                          "Cash"
+                        }
+                        onChange={(e) =>
+                          setInvSettings((p) => ({ ...p, payment_terms: e.target.value }))
+                        }
+                      >
+                        {INVOICE_PAYMENT_TERM_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                        {invSettings.payment_terms &&
+                          !normalizeInvoicePaymentTerms(invSettings.payment_terms) && (
+                            <option value={invSettings.payment_terms}>
+                              {invSettings.payment_terms}
+                            </option>
+                          )}
+                      </select>
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("inv_shipping_method")}</label>

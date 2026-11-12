@@ -2,6 +2,7 @@ import type { InvoiceData } from "@/components/invoice"
 import type { InvoiceDataClient, InvoiceDataCompany } from "@/lib/api-client"
 import type { OrderInvoiceTotals } from "@/lib/api-client"
 import { HEAD_OFFICE_DEFAULTS } from "@/lib/head-office-defaults"
+import { normalizeInvoicePaymentTerms } from "@/lib/invoice-payment-terms"
 import { thaiInvoiceTotalsFromRawSubtotal } from "@/lib/invoice-vat-total"
 
 export type ThaiSalesInvoiceLineInput = {
@@ -72,7 +73,10 @@ export function buildThaiSalesInvoiceData(params: {
     referenceNo,
     issueDate,
     shipTo: (invSettings.ship_to ?? "-") || "-",
-    paymentTerms: (params.paymentTerms ?? invSettings.payment_terms) || "Net 30 Days",
+    paymentTerms:
+      normalizeInvoicePaymentTerms(params.paymentTerms ?? invSettings.payment_terms) ||
+      String(params.paymentTerms ?? invSettings.payment_terms ?? "").trim() ||
+      "Cash",
     shippingMethod: (params.shippingMethod ?? invSettings.shipping_method) || "Company Delivery",
     seller: {
       name: companyName,
