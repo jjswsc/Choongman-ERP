@@ -28,10 +28,14 @@ export type QrOrderStoreSettings = {
   printBrandColor?: string
   printAccentColor?: string
   printBrandLine?: string
-  /** 손님 QR 카테고리 홈 — 대표메뉴 배너 이미지 URL (고정) */
+  /** 손님 QR 카테고리 홈 — 대표메뉴 배너 이미지 URL (선택) */
   guestHomeHeroBannerUrl?: string
-  /** 손님 QR 카테고리 홈 — 신메뉴 안내 칸 이미지 URL (고정) */
+  /** 손님 QR 카테고리 홈 — 신메뉴 안내 칸 이미지 URL (선택) */
   guestHomeNewMenuBannerUrl?: string
+  /** 대표메뉴 배너 클릭 시 보여줄 메뉴 id */
+  guestHomeFeaturedMenuIds?: number[]
+  /** 신메뉴 배너 클릭 시 보여줄 메뉴 id */
+  guestHomeNewMenuIds?: number[]
   /**
    * 이 매장 손님 QR에서만 숨길 메뉴 id (POS 직원 화면·다른 매장은 그대로).
    * undefined로 저장 요청하면 기존 값을 유지한다.
@@ -499,6 +503,8 @@ export function defaultQrOrderStoreSettings(storeCode: string): QrOrderStoreSett
     printBrandLine: '',
     guestHomeHeroBannerUrl: '',
     guestHomeNewMenuBannerUrl: '',
+    guestHomeFeaturedMenuIds: [],
+    guestHomeNewMenuIds: [],
     hiddenMenuIds: [],
   }
 }

@@ -18,11 +18,16 @@ export function QrTableGuestCategoryHome(props: {
   logoUrl?: string
   heroBannerUrl?: string
   newMenuBannerUrl?: string
+  featuredCount: number
+  newMenuCount: number
   categories: QrGuestCategoryHomeTile[]
   heroTitle: string
   newMenuTitle: string
   newMenuEmptyHint: string
+  featuredEmptyHint: string
   qrOrderLabel: string
+  onSelectFeatured: () => void
+  onSelectNewMenu: () => void
   onSelectCategory: (key: string) => void
 }) {
   const {
@@ -30,11 +35,16 @@ export function QrTableGuestCategoryHome(props: {
     logoUrl,
     heroBannerUrl,
     newMenuBannerUrl,
+    featuredCount,
+    newMenuCount,
     categories,
     heroTitle,
     newMenuTitle,
     newMenuEmptyHint,
+    featuredEmptyHint,
     qrOrderLabel,
+    onSelectFeatured,
+    onSelectNewMenu,
     onSelectCategory,
   } = props
 
@@ -58,8 +68,10 @@ export function QrTableGuestCategoryHome(props: {
       </div>
 
       <div className="space-y-2 px-3 pt-2">
-        <div
-          className={`relative overflow-hidden rounded-2xl bg-stone-200 shadow-sm ${QR_GUEST_HOME_HERO_HEIGHT_CLASS}`}
+        <button
+          type="button"
+          onClick={onSelectFeatured}
+          className={`relative block w-full overflow-hidden rounded-2xl bg-stone-200 text-left shadow-sm touch-manipulation active:scale-[0.99] ${QR_GUEST_HOME_HERO_HEIGHT_CLASS}`}
         >
           {heroBannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -68,29 +80,43 @@ export function QrTableGuestCategoryHome(props: {
             <div className="absolute inset-0 bg-gradient-to-br from-stone-300 via-stone-200 to-amber-100" />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent" />
-          <p className="absolute bottom-2 left-3 right-3 text-[15px] font-black leading-snug text-white drop-shadow">
-            {heroTitle}
-          </p>
-        </div>
+          <div className="absolute bottom-2 left-3 right-3">
+            <p className="text-[15px] font-black leading-snug text-white drop-shadow">{heroTitle}</p>
+            <p className="mt-0.5 text-[11px] font-medium text-white/85">
+              {featuredCount > 0 ? `${featuredCount}` : featuredEmptyHint}
+            </p>
+          </div>
+        </button>
 
-        <div
-          className={`relative overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm ${QR_GUEST_HOME_NEW_MENU_HEIGHT_CLASS}`}
+        <button
+          type="button"
+          onClick={onSelectNewMenu}
+          className={`relative block w-full overflow-hidden rounded-2xl border border-stone-200 bg-white text-left shadow-sm touch-manipulation active:scale-[0.99] ${QR_GUEST_HOME_NEW_MENU_HEIGHT_CLASS}`}
         >
           {newMenuBannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={newMenuBannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-1 bg-stone-50 px-4 text-center">
+            <div className="flex h-full flex-col items-start justify-center gap-1 bg-stone-50 px-4 text-left">
               <p className="text-[13px] font-bold text-stone-800">{newMenuTitle}</p>
-              <p className="text-[11px] text-stone-500">{newMenuEmptyHint}</p>
+              <p className="text-[11px] text-stone-500">
+                {newMenuCount > 0 ? `${newMenuCount}` : newMenuEmptyHint}
+              </p>
             </div>
           )}
           {newMenuBannerUrl ? (
-            <div className="absolute left-2 top-2 rounded-full bg-[var(--qr-brand,#b45309)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-              NEW
-            </div>
+            <>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+              <div className="absolute left-2 top-2 rounded-full bg-[var(--qr-brand,#b45309)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                NEW
+              </div>
+              <p className="absolute bottom-2 left-3 right-3 text-[13px] font-bold text-white drop-shadow">
+                {newMenuTitle}
+                {newMenuCount > 0 ? ` · ${newMenuCount}` : ''}
+              </p>
+            </>
           ) : null}
-        </div>
+        </button>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2.5 px-3">

@@ -122,6 +122,8 @@ export function PosQrTableOrderContent() {
   const [savedHiddenIds, setSavedHiddenIds] = React.useState<number[]>([])
   const [hiddenScope, setHiddenScope] = React.useState<'store' | 'all'>('store')
   const [hiddenSaving, setHiddenSaving] = React.useState(false)
+  const [homeMenuSearch, setHomeMenuSearch] = React.useState('')
+  const [homeMenuTab, setHomeMenuTab] = React.useState<'featured' | 'new'>('featured')
   const [loading, setLoading] = React.useState(false)
   const [editing, setEditing] = React.useState(false)
   const [tierForm, setTierForm] = React.useState(EMPTY_TIER_FORM)
@@ -140,6 +142,24 @@ export function PosQrTableOrderContent() {
   }, [menus, menuSearch])
 
   const hiddenMenuIdSet = React.useMemo(() => new Set(settings.hiddenMenuIds || []), [settings.hiddenMenuIds])
+  const featuredMenuIdSet = React.useMemo(
+    () => new Set(settings.guestHomeFeaturedMenuIds || []),
+    [settings.guestHomeFeaturedMenuIds]
+  )
+  const newMenuIdSet = React.useMemo(
+    () => new Set(settings.guestHomeNewMenuIds || []),
+    [settings.guestHomeNewMenuIds]
+  )
+
+  function groupMenusByCategory(list: QrAdminMenu[]) {
+    const groups = new Map<string, QrAdminMenu[]>()
+    for (const m of list) {
+      const arr = groups.get(m.category)
+      if (arr) arr.push(m)
+      else groups.set(m.category, [m])
+    }
+    return [...groups.entries()].map(([category, items]) => ({ category, items }))
+  }
 
   const hiddenMenuGroups = React.useMemo(() => {
     const q = hiddenMenuSearch.trim().toLowerCase()
@@ -152,14 +172,22 @@ export function PosQrTableOrderContent() {
             String(m.id).includes(q)
         )
       : menus
-    const groups = new Map<string, QrAdminMenu[]>()
-    for (const m of list) {
-      const arr = groups.get(m.category)
-      if (arr) arr.push(m)
-      else groups.set(m.category, [m])
-    }
-    return [...groups.entries()].map(([category, items]) => ({ category, items }))
+    return groupMenusByCategory(list)
   }, [menus, hiddenMenuSearch])
+
+  const homeMenuGroups = React.useMemo(() => {
+    const q = homeMenuSearch.trim().toLowerCase()
+    const list = q
+      ? menus.filter(
+          (m) =>
+            m.name.toLowerCase().includes(q) ||
+            m.code.toLowerCase().includes(q) ||
+            m.category.toLowerCase().includes(q) ||
+            String(m.id).includes(q)
+        )
+      : menus
+    return groupMenusByCategory(list)
+  }, [menus, homeMenuSearch])
 
   function toggleHiddenMenu(id: number) {
     setSettings((s) => {
@@ -179,6 +207,32 @@ export function PosQrTableOrderContent() {
       return {
         ...s,
         hiddenMenuIds: allHidden
+          ? cur.filter((x) => !ids.includes(x))
+          : [...cur, ...ids.filter((id) => !cur.includes(id))],
+      }
+    })
+  }
+
+  function toggleHomeMenu(kind: 'featured' | 'new', id: number) {
+    setSettings((s) => {
+      const key = kind === 'featured' ? 'guestHomeFeaturedMenuIds' : 'guestHomeNewMenuIds'
+      const cur = s[key] || []
+      return {
+        ...s,
+        [key]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+      }
+    })
+  }
+
+  function toggleHomeCategory(kind: 'featured' | 'new', items: QrAdminMenu[]) {
+    const ids = items.map((m) => Number(m.id)).filter((n) => n > 0)
+    setSettings((s) => {
+      const key = kind === 'featured' ? 'guestHomeFeaturedMenuIds' : 'guestHomeNewMenuIds'
+      const cur = s[key] || []
+      const allOn = ids.every((id) => cur.includes(id))
+      return {
+        ...s,
+        [key]: allOn
           ? cur.filter((x) => !ids.includes(x))
           : [...cur, ...ids.filter((id) => !cur.includes(id))],
       }
@@ -208,7 +262,7 @@ export function PosQrTableOrderContent() {
         await appAlert(
           tr(
             'qrTableGuestHomeBannersSchemaMissing',
-            '손님 홈 배너 컬럼이 없습니다. Supabase에서 pos_qr_guest_home_banners_01_ddl.sql 을 먼저 실행해 주세요.'
+            '손님 홈 배너·메뉴 컬럼이 없습니다. Supabase에서 pos_qr_guest_home_banners_01_ddl.sql 과 pos_qr_guest_home_menu_ids_01_ddl.sql 을 먼저 실행해 주세요.'
           )
         )
         return
@@ -717,12 +771,12 @@ export function PosQrTableOrderContent() {
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {tr(
                       'qrTableGuestHomeBannersHint',
-                      'office(본사) 매장 손님 QR에만 카테고리 홈이 보입니다. 대표메뉴·신메뉴는 이미지 URL을 넣으면 됩니다.'
+                      'office(본사)만 카테고리 홈이 보입니다. 아래「대표·신메뉴」에서 메뉴를 체크하고, 배너 이미지는 선택입니다.'
                     )}
                   </p>
                 </div>
                 <div>
-                  <Label>{tr('qrTableGuestHomeHeroBannerUrl', '대표메뉴 배너 URL')}</Label>
+                  <Label>{tr('qrTableGuestHomeHeroBannerUrl', '대표메뉴 배너 URL (선택)')}</Label>
                   <Input
                     placeholder="https://…"
                     value={settings.guestHomeHeroBannerUrl || ''}
@@ -732,7 +786,7 @@ export function PosQrTableOrderContent() {
                   />
                 </div>
                 <div>
-                  <Label>{tr('qrTableGuestHomeNewMenuBannerUrl', '신메뉴 안내 배너 URL')}</Label>
+                  <Label>{tr('qrTableGuestHomeNewMenuBannerUrl', '신메뉴 배너 URL (선택)')}</Label>
                   <Input
                     placeholder="https://…"
                     value={settings.guestHomeNewMenuBannerUrl || ''}
@@ -745,6 +799,109 @@ export function PosQrTableOrderContent() {
             </div>
           </details>
 
+          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+        </section>
+
+        {/* 대표·신메뉴 (손님 QR 홈 배너 클릭) */}
+        <section className="space-y-3 rounded-lg border border-amber-200/80 bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">
+                {tr('qrTableGuestHomeMenus', '대표·신메뉴 (손님 QR 홈)')}
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {tr(
+                  'qrTableGuestHomeMenusHint',
+                  '체크한 메뉴가 손님 QR 홈의 대표메뉴·신메뉴 배너를 탭하면 나타납니다. office 매장에서만 홈 UI가 켜집니다.'
+                )}
+              </p>
+            </div>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {tr('qrTableGuestHomeMenusCount', '대표 {f} · 신메뉴 {n}')
+                .replace('{f}', String(featuredMenuIdSet.size))
+                .replace('{n}', String(newMenuIdSet.size))}
+            </span>
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                homeMenuTab === 'featured' ? 'bg-amber-600 text-white' : 'bg-muted text-muted-foreground'
+              }`}
+              onClick={() => setHomeMenuTab('featured')}
+            >
+              {tr('qrTableGuestHomeFeaturedTab', '대표메뉴')}
+            </button>
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                homeMenuTab === 'new' ? 'bg-amber-600 text-white' : 'bg-muted text-muted-foreground'
+              }`}
+              onClick={() => setHomeMenuTab('new')}
+            >
+              {tr('qrTableGuestHomeNewTab', '신메뉴')}
+            </button>
+          </div>
+          <Input
+            placeholder={tr('qrTableMenuSearch', '메뉴 검색…')}
+            value={homeMenuSearch}
+            onChange={(e) => setHomeMenuSearch(e.target.value)}
+          />
+          <div className="max-h-80 overflow-auto rounded-md border bg-background p-2">
+            {homeMenuGroups.length === 0 ? (
+              <p className="px-1 py-3 text-sm text-muted-foreground">
+                {menus.length === 0
+                  ? tr('qrTableIncludedMenusEmpty', '이 매장에 등록된 메뉴가 없습니다.')
+                  : tr('qrTableMenuSearchEmpty', '검색 결과가 없습니다.')}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {homeMenuGroups.map(({ category, items }) => {
+                  const idSet = homeMenuTab === 'featured' ? featuredMenuIdSet : newMenuIdSet
+                  const onInGroup = items.filter((m) => idSet.has(Number(m.id))).length
+                  const allOn = onInGroup === items.length
+                  return (
+                    <div key={`home-${homeMenuTab}-${category}`}>
+                      <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 rounded-md bg-muted px-2 py-1.5 text-xs font-semibold">
+                        <CategoryCheckbox
+                          checked={allOn}
+                          indeterminate={onInGroup > 0 && !allOn}
+                          onChange={() => toggleHomeCategory(homeMenuTab, items)}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{category}</span>
+                        <span className="tabular-nums font-normal text-muted-foreground">
+                          {onInGroup}/{items.length}
+                        </span>
+                      </label>
+                      <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                        {items.map((m) => {
+                          const id = Number(m.id)
+                          const checked = idSet.has(id)
+                          return (
+                            <label
+                              key={`home-${homeMenuTab}-${m.id}`}
+                              className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60 ${
+                                checked ? 'bg-amber-500/10' : ''
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleHomeMenu(homeMenuTab, id)}
+                              />
+                              <span className="min-w-0 truncate">
+                                <span className="text-muted-foreground">{m.code}</span> {m.name}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
           <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
         </section>
 

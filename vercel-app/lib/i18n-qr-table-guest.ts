@@ -172,7 +172,9 @@ const EN: Record<string, string> = {
   qrOrderLabel: 'QR Order / Mobile order',
   homeHeroTitle: 'Signature menus',
   homeNewMenuTitle: 'New menus',
-  homeNewMenuEmpty: 'Upload a new-menu banner in admin (store settings).',
+  homeNewMenuEmpty: 'No new menus yet — ask staff.',
+  homeFeaturedEmpty: 'No signature menus yet — ask staff.',
+  homeCollectionEmpty: 'No menus in this list yet.',
   backToCategories: 'Back to categories',
 }
 
@@ -348,7 +350,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     qrOrderLabel: 'QR Order / สั่งอาหารมือถือ',
     homeHeroTitle: 'เมนูแนะนำ',
     homeNewMenuTitle: 'เมนูใหม่',
-    homeNewMenuEmpty: 'อัปโหลดแบนเนอร์เมนูใหม่ที่หน้าตั้งค่าแอดมิน',
+    homeNewMenuEmpty: 'ยังไม่มีเมนูใหม่ — เรียกพนักงานได้ครับ',
+    homeFeaturedEmpty: 'ยังไม่มีเมนูแนะนำ — เรียกพนักงานได้ครับ',
+    homeCollectionEmpty: 'ยังไม่มีเมนูในรายการนี้',
     backToCategories: 'กลับไปหมวดหมู่',
   },
   ko: {
@@ -521,7 +525,9 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     qrOrderLabel: 'QR Order / 모바일 주문',
     homeHeroTitle: '충만 대표메뉴',
     homeNewMenuTitle: '신메뉴 안내',
-    homeNewMenuEmpty: '관리자 매장 설정에서 신메뉴 배너 이미지를 등록해 주세요.',
+    homeNewMenuEmpty: '아직 신메뉴가 없습니다. 직원에게 문의해 주세요.',
+    homeFeaturedEmpty: '아직 대표메뉴가 없습니다. 직원에게 문의해 주세요.',
+    homeCollectionEmpty: '아직 등록된 메뉴가 없습니다.',
     backToCategories: '카테고리로',
   },
   zh: {
