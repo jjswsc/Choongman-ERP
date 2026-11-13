@@ -121,6 +121,8 @@ type DbSettings = {
   print_brand_color?: string | null
   print_accent_color?: string | null
   print_brand_line?: string | null
+  guest_home_hero_banner_url?: string | null
+  guest_home_new_menu_banner_url?: string | null
   hidden_menu_ids?: unknown
 }
 
@@ -232,6 +234,8 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
     printBrandColor: String(row.print_brand_color || '').trim() || '#b45309',
     printAccentColor: String(row.print_accent_color || '').trim() || '#faf7f2',
     printBrandLine: String(row.print_brand_line || '').trim(),
+    guestHomeHeroBannerUrl: String(row.guest_home_hero_banner_url || '').trim(),
+    guestHomeNewMenuBannerUrl: String(row.guest_home_new_menu_banner_url || '').trim(),
     hiddenMenuIds: normalizeQrHiddenMenuIds(row.hidden_menu_ids),
   }
 }
@@ -239,6 +243,11 @@ function mapSettings(row: DbSettings | null | undefined, storeCode: string): QrO
 function isMissingHiddenMenuIdsColumnError(e: unknown): boolean {
   const msg = String(e instanceof Error ? e.message : e || '').toLowerCase()
   return msg.includes('hidden_menu_ids')
+}
+
+function isMissingGuestHomeBannerColumnError(e: unknown): boolean {
+  const msg = String(e instanceof Error ? e.message : e || '').toLowerCase()
+  return msg.includes('guest_home_hero_banner_url') || msg.includes('guest_home_new_menu_banner_url')
 }
 
 function mapTier(row: DbTier, includedMenuIds?: number[], extraMenuIds?: number[]): QrBuffetTier {
@@ -416,6 +425,8 @@ export async function upsertQrOrderStoreSettings(
     print_brand_color: String(settings.printBrandColor || '').trim() || null,
     print_accent_color: String(settings.printAccentColor || '').trim() || null,
     print_brand_line: String(settings.printBrandLine || '').trim() || null,
+    guest_home_hero_banner_url: String(settings.guestHomeHeroBannerUrl || '').trim() || null,
+    guest_home_new_menu_banner_url: String(settings.guestHomeNewMenuBannerUrl || '').trim() || null,
     updated_at: now,
   }
   const hiddenMenuIds =
@@ -424,6 +435,23 @@ export async function upsertQrOrderStoreSettings(
   try {
     await upsertRowsTenantStore('pos_qr_order_store_settings', 'store_code', [row], tenantScope)
   } catch (e) {
+    if (isMissingGuestHomeBannerColumnError(e)) {
+      const hasBanner =
+        Boolean(String(settings.guestHomeHeroBannerUrl || '').trim()) ||
+        Boolean(String(settings.guestHomeNewMenuBannerUrl || '').trim())
+      if (hasBanner) throw new Error('guest_home_banners_schema_missing')
+      delete row.guest_home_hero_banner_url
+      delete row.guest_home_new_menu_banner_url
+      try {
+        await upsertRowsTenantStore('pos_qr_order_store_settings', 'store_code', [row], tenantScope)
+      } catch (e2) {
+        if (!('hidden_menu_ids' in row) || !isMissingHiddenMenuIdsColumnError(e2)) throw e2
+        if (hiddenMenuIds && hiddenMenuIds.length > 0) throw new Error('hidden_menu_ids_schema_missing')
+        delete row.hidden_menu_ids
+        await upsertRowsTenantStore('pos_qr_order_store_settings', 'store_code', [row], tenantScope)
+      }
+      return loadQrOrderStoreSettings(storeCode, tenantId)
+    }
     if (!('hidden_menu_ids' in row) || !isMissingHiddenMenuIdsColumnError(e)) throw e
     if (hiddenMenuIds && hiddenMenuIds.length > 0) throw new Error('hidden_menu_ids_schema_missing')
     delete row.hidden_menu_ids

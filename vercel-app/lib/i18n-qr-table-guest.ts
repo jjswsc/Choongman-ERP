@@ -169,6 +169,11 @@ const EN: Record<string, string> = {
   memberConflict: 'Another member is already linked to this order.',
   memberTenantMismatch: 'This membership cannot be used at this store.',
   memberRequired: 'Please log in first.',
+  qrOrderLabel: 'QR Order / Mobile order',
+  homeHeroTitle: 'Signature menus',
+  homeNewMenuTitle: 'New menus',
+  homeNewMenuEmpty: 'Upload a new-menu banner in admin (store settings).',
+  backToCategories: 'Back to categories',
 }
 
 const DICT: Record<QrGuestLang, Record<string, string>> = {
@@ -340,6 +345,11 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     memberConflict: 'ออเดอร์นี้ผูกกับสมาชิกอื่นแล้วครับ',
     memberTenantMismatch: 'สมาชิกนี้ใช้ที่ร้านนี้ไม่ได้ครับ',
     memberRequired: 'กรุณาเข้าสู่ระบบก่อนครับ',
+    qrOrderLabel: 'QR Order / สั่งอาหารมือถือ',
+    homeHeroTitle: 'เมนูแนะนำ',
+    homeNewMenuTitle: 'เมนูใหม่',
+    homeNewMenuEmpty: 'อัปโหลดแบนเนอร์เมนูใหม่ที่หน้าตั้งค่าแอดมิน',
+    backToCategories: 'กลับไปหมวดหมู่',
   },
   ko: {
     loading: '불러오는 중…',
@@ -508,6 +518,11 @@ const DICT: Record<QrGuestLang, Record<string, string>> = {
     memberConflict: '이미 다른 회원이 이 주문에 연결되어 있습니다.',
     memberTenantMismatch: '이 매장에서는 사용할 수 없는 회원입니다.',
     memberRequired: '먼저 로그인해 주세요.',
+    qrOrderLabel: 'QR Order / 모바일 주문',
+    homeHeroTitle: '충만 대표메뉴',
+    homeNewMenuTitle: '신메뉴 안내',
+    homeNewMenuEmpty: '관리자 매장 설정에서 신메뉴 배너 이미지를 등록해 주세요.',
+    backToCategories: '카테고리로',
   },
   zh: {
     loading: '加载中…',

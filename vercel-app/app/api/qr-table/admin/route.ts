@@ -72,6 +72,10 @@ export async function PUT(req: NextRequest) {
       printBrandColor: body.printBrandColor != null ? String(body.printBrandColor) : '',
       printAccentColor: body.printAccentColor != null ? String(body.printAccentColor) : '',
       printBrandLine: body.printBrandLine != null ? String(body.printBrandLine) : '',
+      guestHomeHeroBannerUrl:
+        body.guestHomeHeroBannerUrl != null ? String(body.guestHomeHeroBannerUrl) : '',
+      guestHomeNewMenuBannerUrl:
+        body.guestHomeNewMenuBannerUrl != null ? String(body.guestHomeNewMenuBannerUrl) : '',
       hiddenMenuIds: Array.isArray(body.hiddenMenuIds) ? normalizeQrHiddenMenuIds(body.hiddenMenuIds) : undefined,
     }, write.auth.tenantId)
     return applyPosApiCors(NextResponse.json({ success: true, settings }, { headers }))

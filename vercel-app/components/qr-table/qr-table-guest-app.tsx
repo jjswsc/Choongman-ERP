@@ -55,7 +55,9 @@ import {
 } from '@/components/qr-table/qr-table-guest-member-sheet'
 import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr-table/qr-table-guest-option-sheet'
 import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
+import { QrTableGuestCategoryHome } from '@/components/qr-table/qr-table-guest-category-home'
 import { QrTableGuestScrollRow } from '@/components/qr-table/qr-table-guest-scroll-row'
+import { isQrGuestCategoryHomePilotStore } from '@/lib/qr-table-guest-category-home'
 import { orderPosMainCategoryTabs, uniqueSubcategoriesForMainMenu } from '@/lib/pos-promo-constants'
 import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
@@ -338,7 +340,7 @@ function GuestPayQrImg({
   return <GuestPayPlainQrImg payload={payload} alt={alt} className={className} />
 }
 
-type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'menu' | 'error'
+type Step = 'boot' | 'tier' | 'pay_entry' | 'wait_staff' | 'category_home' | 'menu' | 'error'
 
 const AUTH_KEY = 'cm_qr_table_session_auth'
 const LANG_KEY = 'cm_qr_table_guest_lang'
@@ -429,6 +431,13 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
   const g = React.useCallback((key: string) => qrGuestT(lang, key), [lang])
 
+  const goToOrderingHome = React.useCallback((code?: string) => {
+    if (isQrGuestCategoryHomePilotStore(code ?? storeCode)) setStep('category_home')
+    else setStep('menu')
+  }, [storeCode])
+
+  const categoryHomePilot = isQrGuestCategoryHomePilotStore(storeCode)
+
   function humanizeApiError(raw: string): string {
     const msg = String(raw || '').trim()
     if (!msg) return g('cannotOpen')
@@ -511,7 +520,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
             setSessionAuth(claimed.sessionAuth)
             setSession(claimed.session)
             if (claimed.session.status === 'active' && claimed.session.entryPaid) {
-              setStep('menu')
+              goToOrderingHome(data.token?.storeCode || '')
               return
             }
             if (
@@ -545,7 +554,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   }, [token])
 
   React.useEffect(() => {
-    if (step !== 'menu' || !sessionAuth) return
+    if ((step !== 'menu' && step !== 'category_home') || !sessionAuth) return
     let cancelled = false
     ;(async () => {
       const menus = await qrTableGetMenus(sessionAuth)
@@ -599,11 +608,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
       const st = await qrTablePollEntryPay(sessionAuth)
       if (st?.entryPaid) {
         setQrPayload('')
-        setStep('menu')
+        goToOrderingHome()
       }
     }, QR_TABLE_GUEST_PAY_POLL_MS)
     return () => window.clearInterval(t)
-  }, [step, sessionAuth, qrPayload])
+  }, [step, sessionAuth, qrPayload, goToOrderingHome])
 
   function persistLang(next: QrGuestLang) {
     setLang(next)
@@ -649,7 +658,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (res.session.entryPaymentModeResolved === 'prepay' && !res.session.entryPaid) {
         setStep('pay_entry')
       } else if (res.session.status === 'active' && res.session.entryPaid) {
-        setStep('menu')
+        goToOrderingHome()
       } else {
         setStep('wait_staff')
       }
@@ -1339,6 +1348,50 @@ export function QrTableGuestApp({ token }: { token: string }) {
     setSearch('')
   }
 
+  const categoryHomeTiles = React.useMemo(() => {
+    const seen = new Set<number>()
+    const homeMenus: MenuItem[] = []
+    for (const m of [...includedMenus, ...extraMenus]) {
+      if (seen.has(m.menuId)) continue
+      seen.add(m.menuId)
+      homeMenus.push(m)
+    }
+    const set = new Set<string>()
+    let hasEmpty = false
+    for (const m of homeMenus) {
+      const main = String(m.categoryMain || '').trim()
+      if (main) set.add(main)
+      else hasEmpty = true
+    }
+    const list = orderPosMainCategoryTabs(set, categoryTabOrder.mains)
+    if (hasEmpty) list.push(uncategorizedLabel)
+    return list.map((key) => {
+      const items = homeMenus.filter((m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === key)
+      const imageUrl = items.find((m) => m.imageUrl)?.imageUrl || ''
+      return {
+        key,
+        label: resolvePosMenuGuestLabel(key),
+        imageUrl,
+        count: items.length,
+      }
+    })
+  }, [includedMenus, extraMenus, categoryTabOrder, uncategorizedLabel])
+
+  function openCategoryFromHome(categoryKey: string) {
+    const inIncluded = includedMenus.some(
+      (m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === categoryKey
+    )
+    const inExtras = extraMenus.some(
+      (m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === categoryKey
+    )
+    if (inIncluded && includedMenus.length > 0) setTab('included')
+    else if (inExtras) setTab('extras')
+    setMainCategory(categoryKey)
+    setSubCategory('')
+    setSearch('')
+    setStep('menu')
+  }
+
   if (step === 'boot') {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-[var(--qr-accent,#faf7f2)] text-stone-600" style={brandCss(settings)}>
@@ -1368,6 +1421,16 @@ export function QrTableGuestApp({ token }: { token: string }) {
       <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="flex items-center justify-between gap-2 px-3 pt-1.5">
           <h1 className="flex min-w-0 items-center gap-1.5 text-[15px] font-semibold leading-tight">
+            {step === 'menu' && categoryHomePilot ? (
+              <button
+                type="button"
+                className="mr-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-700 touch-manipulation"
+                onClick={() => setStep('category_home')}
+                aria-label={g('backToCategories')}
+              >
+                ←
+              </button>
+            ) : null}
             <span className="shrink-0 text-stone-500">{g('table')}</span>
             <span className="truncate rounded-lg bg-[var(--qr-brand,#b45309)] px-2 py-0.5 font-bold text-white">
               {tableName || '—'}
@@ -1402,7 +1465,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
               </button>
             )
           ) : null}
-          {step === 'menu' &&
+          {(step === 'menu' || step === 'category_home') &&
           sessionAuth &&
           guestPayEnabled &&
           Number(orderSummary?.balanceDue || 0) >= 1 ? (
@@ -1415,7 +1478,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
               {g('payBill')}
             </button>
           ) : null}
-          {step === 'menu' && sessionAuth ? (
+          {(step === 'menu' || step === 'category_home') && sessionAuth ? (
             <button
               type="button"
               className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
@@ -1425,7 +1488,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
               {sentLines.length > 0 ? ` (${sentLines.reduce((n, l) => n + l.qty, 0)})` : ''}
             </button>
           ) : null}
-          {(step === 'menu' || step === 'wait_staff' || step === 'pay_entry') && sessionAuth ? (
+          {(step === 'menu' ||
+            step === 'category_home' ||
+            step === 'wait_staff' ||
+            step === 'pay_entry') &&
+          sessionAuth ? (
             <button
               type="button"
               className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
@@ -1643,6 +1710,39 @@ export function QrTableGuestApp({ token }: { token: string }) {
             {g('refresh')}
           </button>
         </section>
+      ) : null}
+
+      {step === 'category_home' ? (
+        <>
+          <QrTableGuestCategoryHome
+            brandLine={String(settings?.printBrandLine || '').trim() || undefined}
+            logoUrl={String(settings?.printLogoUrl || '').trim() || undefined}
+            heroBannerUrl={String(settings?.guestHomeHeroBannerUrl || '').trim() || undefined}
+            newMenuBannerUrl={String(settings?.guestHomeNewMenuBannerUrl || '').trim() || undefined}
+            categories={categoryHomeTiles}
+            heroTitle={g('homeHeroTitle')}
+            newMenuTitle={g('homeNewMenuTitle')}
+            newMenuEmptyHint={g('homeNewMenuEmpty')}
+            qrOrderLabel={g('qrOrderLabel')}
+            onSelectCategory={openCategoryFromHome}
+          />
+          {cartQty > 0 ? (
+            <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-lg border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+              <div className="px-2 py-2">
+                <button
+                  type="button"
+                  disabled={busy || cart.length === 0}
+                  onClick={requestSubmit}
+                  className={`w-full rounded-2xl py-3 font-semibold disabled:opacity-50 ${brandBtn}`}
+                >
+                  {busy ? g('sendingKitchen') : g('sendKitchen')}
+                  {!busy && cartQty > 0 ? ` · ${cartQty}` : ''}
+                  {!busy && cartTotal >= 1 ? ` · ฿${Math.round(cartTotal).toLocaleString()}` : ''}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {step === 'menu' ? (
@@ -2068,7 +2168,10 @@ export function QrTableGuestApp({ token }: { token: string }) {
           setOrderDoneOpen(false)
           setStatusOpen(true)
         }}
-        onMoreMenu={() => setOrderDoneOpen(false)}
+        onMoreMenu={() => {
+          setOrderDoneOpen(false)
+          if (categoryHomePilot) setStep('category_home')
+        }}
         onPayBill={onPayBillHandler}
       />
 
@@ -2083,6 +2186,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         onMoreMenu={() => {
           setStatusOpen(false)
           setOrderDoneOpen(false)
+          if (categoryHomePilot) setStep('category_home')
         }}
       />
 

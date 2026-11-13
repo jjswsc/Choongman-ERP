@@ -204,6 +204,15 @@ export function PosQrTableOrderContent() {
         )
         return
       }
+      if (raw === 'guest_home_banners_schema_missing') {
+        await appAlert(
+          tr(
+            'qrTableGuestHomeBannersSchemaMissing',
+            '손님 홈 배너 컬럼이 없습니다. Supabase에서 pos_qr_guest_home_banners_01_ddl.sql 을 먼저 실행해 주세요.'
+          )
+        )
+        return
+      }
       if (isSchemaMissingError(raw)) {
         await appAlert(tr('qrTableSchemaMissing', 'DB 테이블이 아직 없습니다. SQL을 먼저 실행해 주세요.'))
         return
@@ -699,6 +708,39 @@ export function PosQrTableOrderContent() {
                   onChange={(e) => setSettings((s) => ({ ...s, printBrandLine: e.target.value }))}
                   placeholder={String(brand?.appName || '').trim() || 'Omni'}
                 />
+              </div>
+              <div className="space-y-2 rounded-md border border-dashed border-amber-300/80 bg-amber-50/40 p-3">
+                <div>
+                  <p className="text-xs font-semibold text-amber-900">
+                    {tr('qrTableGuestHomeBanners', '손님 QR 홈 배너 (office 파일럿)')}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {tr(
+                      'qrTableGuestHomeBannersHint',
+                      'office(본사) 매장 손님 QR에만 카테고리 홈이 보입니다. 대표메뉴·신메뉴는 이미지 URL을 넣으면 됩니다.'
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <Label>{tr('qrTableGuestHomeHeroBannerUrl', '대표메뉴 배너 URL')}</Label>
+                  <Input
+                    placeholder="https://…"
+                    value={settings.guestHomeHeroBannerUrl || ''}
+                    onChange={(e) =>
+                      setSettings((s) => ({ ...s, guestHomeHeroBannerUrl: e.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>{tr('qrTableGuestHomeNewMenuBannerUrl', '신메뉴 안내 배너 URL')}</Label>
+                  <Input
+                    placeholder="https://…"
+                    value={settings.guestHomeNewMenuBannerUrl || ''}
+                    onChange={(e) =>
+                      setSettings((s) => ({ ...s, guestHomeNewMenuBannerUrl: e.target.value }))
+                    }
+                  />
+                </div>
               </div>
             </div>
           </details>
