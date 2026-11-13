@@ -16,4 +16,5 @@ describe('POS_ORDER_*_SELECT', () => {
       }
     }
   })
+
 })

@@ -51,6 +51,7 @@ import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
   isMissingSaasTenantColumnError,
+  isSaasTenantColumnMissing,
   isSaasTenantQueryBlocked,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
@@ -58,6 +59,7 @@ import {
   stampSaasTenantId,
   type SaasTenantScope,
 } from '@/lib/saas-tenant-scope'
+import { isLegacyChoongmanErpSupabase } from '@/lib/erp-legacy-supabase'
 import { DAILY_PLAN_DEFAULT_TRAVEL_MINUTES, suggestVisitStores } from '@/lib/daily-plan-timeline'
 import {
   addDaysYmdUtc,
@@ -212,8 +214,12 @@ async function selectPlanEmployees(
       limit,
     })) || []) as EmployeeDbRow[]
 
+  const withTenantCol =
+    !isLegacyChoongmanErpSupabase() && !isSaasTenantColumnMissing('employees')
   try {
-    return await selectWithSaasTenantFallback('employees', tenantScope, baseFilter, (f) => run(f, true))
+    return await selectWithSaasTenantFallback('employees', tenantScope, baseFilter, (f) =>
+      run(f, withTenantCol)
+    )
   } catch (e) {
     if (!/tenant_id/i.test(e instanceof Error ? e.message : String(e))) throw e
     markSaasTenantColumnMissing('employees')

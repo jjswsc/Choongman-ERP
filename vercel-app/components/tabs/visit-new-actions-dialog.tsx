@@ -14,6 +14,7 @@ import { saveStoreActionItem, uploadStoreActionPhoto } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { STORE_ACTION_CATEGORIES, storeActionDefaultDueDays } from "@/lib/store-action-items"
 import { STORE_ACTION_CAT_TEMPLATE_I18N, addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
+import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 
 /** 방문 종료 직후 — 이번 방문에서 발견한 문제를 개선 과제로 바로 등록 */
 export function VisitNewActionsDialog(props: {
@@ -180,7 +181,12 @@ export function VisitNewActionsDialog(props: {
           <div className="flex flex-wrap items-center gap-2">
             {form.photoUrls.map((u) => (
               <div key={u} className="relative h-12 w-12">
-                <img src={u} alt="" className="h-full w-full rounded border object-cover" />
+                <img
+                  src={storeActionPhotoThumbUrl(u)}
+                  alt=""
+                  className="h-full w-full rounded border object-cover"
+                  loading="lazy"
+                />
                 <button
                   type="button"
                   className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5"

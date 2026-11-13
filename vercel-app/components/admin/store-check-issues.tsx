@@ -28,6 +28,7 @@ import {
 } from "@/lib/store-action-items"
 import { STORE_ACTION_CAT_TEMPLATE_I18N, addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 import { cn } from "@/lib/utils"
 
 type T = (k: string) => string
@@ -75,7 +76,12 @@ function Thumbs({ urls, label }: { urls: string[]; label: string }) {
       <span className="text-[10px] text-muted-foreground">{label}</span>
       {urls.slice(0, 5).map((u) => (
         <a key={u} href={u} target="_blank" rel="noreferrer" className="block h-10 w-10">
-          <img src={u} alt="" className="h-full w-full rounded border object-cover" />
+          <img
+            src={storeActionPhotoThumbUrl(u)}
+            alt=""
+            className="h-full w-full rounded border object-cover"
+            loading="lazy"
+          />
         </a>
       ))}
     </div>
@@ -783,7 +789,12 @@ export function StoreCheckIssueDialog(props: {
                 ) : null}
                 {d.photoUrls.map((u) => (
                   <div key={u} className="relative h-10 w-10">
-                    <img src={u} alt="" className="h-full w-full rounded border object-cover" />
+                    <img
+                      src={storeActionPhotoThumbUrl(u)}
+                      alt=""
+                      className="h-full w-full rounded border object-cover"
+                      loading="lazy"
+                    />
                     <button
                       type="button"
                       className="absolute -right-1 -top-1 rounded-full border bg-background p-0.5"

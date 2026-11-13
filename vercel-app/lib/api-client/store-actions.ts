@@ -196,14 +196,17 @@ export async function updateStoreActionItem(
 }
 
 export async function uploadStoreActionPhoto(store: string, file: File) {
+  const { prepareStoreActionPhotoForUpload } = await import("@/lib/store-action-photo")
+  const prepared = await prepareStoreActionPhotoForUpload(file)
+  const contentType = prepared.type || file.type || "image/jpeg"
   const pres = await apiFetch("/api/uploadStoreActionPhoto/presign", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       store,
-      fileName: file.name,
-      contentType: file.type || "image/jpeg",
-      fileSize: file.size,
+      fileName: prepared.name || file.name,
+      contentType,
+      fileSize: prepared.size,
     }),
   })
   const pjson = (await pres.json()) as {
@@ -216,7 +219,7 @@ export async function uploadStoreActionPhoto(store: string, file: File) {
     return { success: false, url: undefined as string | undefined, message: pjson.message || "업로드 준비 실패" }
   }
   const { putFileToSupabaseSignedUploadUrl } = await import("@/lib/storage-client-upload")
-  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, prepared, { upsert: false })
   if (!putRes.ok) {
     const t = await putRes.text().catch(() => "")
     return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }

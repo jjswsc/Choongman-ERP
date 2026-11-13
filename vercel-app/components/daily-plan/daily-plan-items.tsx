@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 import { cn } from "@/lib/utils"
 import {
   delegateDailyPlanItem,
@@ -472,7 +473,12 @@ export function DailyPlanItems(props: {
                   <div className="mt-1 flex gap-1 overflow-x-auto">
                     {photos.map((u) => (
                       <a key={u} href={u} target="_blank" rel="noreferrer">
-                        <img src={u} alt="" className="h-12 w-12 rounded object-cover" />
+                        <img
+                          src={storeActionPhotoThumbUrl(u)}
+                          alt=""
+                          className="h-12 w-12 rounded object-cover"
+                          loading="lazy"
+                        />
                       </a>
                     ))}
                   </div>

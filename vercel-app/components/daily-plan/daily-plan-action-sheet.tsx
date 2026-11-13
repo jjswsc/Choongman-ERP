@@ -16,6 +16,7 @@ import {
   type StoreActionItem,
 } from "@/lib/api-client"
 import { storeActionLabelers } from "@/lib/store-action-i18n"
+import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 
@@ -148,7 +149,12 @@ export function DailyPlanActionSheet(props: {
                 <div className="mt-1 flex gap-1 overflow-x-auto">
                   {item.photoUrls.map((u) => (
                     <a key={u} href={u} target="_blank" rel="noreferrer">
-                      <img src={u} alt="" className="h-16 w-16 rounded object-cover" />
+                      <img
+                        src={storeActionPhotoThumbUrl(u)}
+                        alt=""
+                        className="h-16 w-16 rounded object-cover"
+                        loading="lazy"
+                      />
                     </a>
                   ))}
                 </div>
@@ -161,7 +167,12 @@ export function DailyPlanActionSheet(props: {
                 <div className="flex flex-wrap gap-1">
                   {afterUrls.map((u) => (
                     <a key={u} href={u} target="_blank" rel="noreferrer">
-                      <img src={u} alt="" className="h-16 w-16 rounded object-cover" />
+                      <img
+                        src={storeActionPhotoThumbUrl(u)}
+                        alt=""
+                        className="h-16 w-16 rounded object-cover"
+                        loading="lazy"
+                      />
                     </a>
                   ))}
                   <input

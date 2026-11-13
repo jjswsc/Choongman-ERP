@@ -33,6 +33,34 @@ function extractAnyMissingColumn(error: unknown): string | null {
 
 export { extractAnyMissingColumn }
 
+/** 워커 수명 동안 테이블별 없는 컬럼 기억 — cold start 이후 첫 실패만 400, 이후 RTT 제거 */
+const omittedColumnsByTable = new Map<string, Set<string>>()
+
+function omittedSetForTable(table: string): Set<string> {
+  const key = String(table || '').trim() || 'default'
+  let set = omittedColumnsByTable.get(key)
+  if (!set) {
+    set = new Set()
+    omittedColumnsByTable.set(key, set)
+  }
+  return set
+}
+
+function rememberOmittedColumn(table: string, col: string): void {
+  const c = String(col || '').trim()
+  if (!c) return
+  omittedSetForTable(table).add(c)
+}
+
+/** 테스트·진단용 */
+export function resetPgrst204OmittedColumnsForTests(): void {
+  omittedColumnsByTable.clear()
+}
+
+export function getPgrst204OmittedColumnsForTests(table: string): string[] {
+  return [...omittedSetForTable(table)].sort()
+}
+
 /** filter/order가 없는 컬럼을 참조하면 select에서 빼도 같은 42703이 반복된다. */
 export function filterOrOrderReferencesColumn(
   missingCol: string,
@@ -52,12 +80,16 @@ export async function supabaseInsertWithPgrst204Fallback(
   logLabel: string
 ): Promise<unknown> {
   const working: Record<string, unknown> = { ...row }
+  for (const col of omittedSetForTable(table)) {
+    delete working[col]
+  }
   for (let i = 0; i < 40; i++) {
     try {
       return await supabaseInsert(table, working)
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)
       if (!missingCol || !(missingCol in working)) throw e
+      rememberOmittedColumn(table, missingCol)
       delete working[missingCol]
       console.warn(`${logLabel}: skip missing column '${missingCol}'`)
     }
@@ -72,6 +104,9 @@ export async function supabaseUpdateByFilterWithPgrst204Fallback(
   logLabel: string
 ): Promise<void> {
   const working: Record<string, unknown> = { ...patch }
+  for (const col of omittedSetForTable(table)) {
+    delete working[col]
+  }
   for (let i = 0; i < 40; i++) {
     try {
       await supabaseUpdateByFilter(table, filter, working)
@@ -79,6 +114,7 @@ export async function supabaseUpdateByFilterWithPgrst204Fallback(
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)
       if (!missingCol || !(missingCol in working)) throw e
+      rememberOmittedColumn(table, missingCol)
       delete working[missingCol]
       console.warn(`${logLabel}: skip missing column '${missingCol}'`)
     }
@@ -93,6 +129,9 @@ export async function supabaseUpsertMergeWithPgrst204Fallback(
   logLabel: string
 ): Promise<void> {
   const working: Record<string, unknown> = { ...row }
+  for (const col of omittedSetForTable(table)) {
+    delete working[col]
+  }
   for (let i = 0; i < 40; i++) {
     try {
       await supabaseUpsertMerge(table, onConflictColumn, working)
@@ -100,6 +139,7 @@ export async function supabaseUpsertMergeWithPgrst204Fallback(
     } catch (e) {
       const missingCol = extractAnyMissingColumn(e)
       if (!missingCol || !(missingCol in working)) throw e
+      rememberOmittedColumn(table, missingCol)
       delete working[missingCol]
       console.warn(`${logLabel}: skip missing column '${missingCol}'`)
     }
@@ -115,11 +155,12 @@ export async function supabaseSelectStrippingUnknownColumns(
   opts: { limit?: number; order?: string; offset?: number; select: string },
   logLabel: string
 ): Promise<unknown> {
+  const knownOmit = omittedSetForTable(table)
   const cols = opts.select
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  let use = [...cols]
+  let use = cols.filter((c) => !knownOmit.has(c))
   for (let i = 0; i < 40; i++) {
     try {
       return await supabaseSelect(table, { ...opts, select: use.join(',') })
@@ -128,6 +169,7 @@ export async function supabaseSelectStrippingUnknownColumns(
       if (!missingCol) throw e
       const next = use.filter((c) => c !== missingCol)
       if (next.length === use.length) throw e
+      rememberOmittedColumn(table, missingCol)
       use = next
       console.warn(`${logLabel}: select omit missing column '${missingCol}'`)
     }
@@ -144,11 +186,12 @@ export async function supabaseSelectFilterStrippingUnknownColumns(
   opts: { limit?: number; order?: string; select: string },
   logLabel: string
 ): Promise<unknown> {
+  const knownOmit = omittedSetForTable(table)
   const cols = opts.select
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  let use = [...cols]
+  let use = cols.filter((c) => !knownOmit.has(c))
   for (let i = 0; i < 40; i++) {
     try {
       return await supabaseSelectFilter(table, filter, { ...opts, select: use.join(',') })
@@ -158,6 +201,7 @@ export async function supabaseSelectFilterStrippingUnknownColumns(
       if (filterOrOrderReferencesColumn(missingCol, filter, opts.order || '')) throw e
       const next = use.filter((c) => c !== missingCol)
       if (next.length === use.length) throw e
+      rememberOmittedColumn(table, missingCol)
       use = next
       console.warn(`${logLabel}: select omit missing column '${missingCol}'`)
     }
@@ -179,11 +223,12 @@ export async function supabaseSelectFilterAllPagesStrippingUnknownColumns(
   },
   logLabel: string
 ): Promise<unknown[]> {
+  const knownOmit = omittedSetForTable(table)
   const cols = opts.select
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  let use = [...cols]
+  let use = cols.filter((c) => !knownOmit.has(c))
   for (let i = 0; i < 40; i++) {
     try {
       return (await supabaseSelectFilterAllPages(table, filter, {
@@ -198,6 +243,7 @@ export async function supabaseSelectFilterAllPagesStrippingUnknownColumns(
       if (filterOrOrderReferencesColumn(missingCol, filter, opts.order || '')) throw e
       const next = use.filter((c) => c !== missingCol)
       if (next.length === use.length) throw e
+      rememberOmittedColumn(table, missingCol)
       use = next
       console.warn(`${logLabel}: select omit missing column '${missingCol}'`)
     }

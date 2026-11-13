@@ -49,6 +49,7 @@ import {
   type StoreActionItem,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 import { StorePageShell } from "@/components/erp/store-page-shell"
 import {
   STORE_ACTION_CATEGORIES,
@@ -816,7 +817,12 @@ export function AdminStoreActions() {
                 <div className="flex flex-wrap gap-2">
                   {(edit.photoUrls || []).map((u) => (
                     <button key={u} type="button" onClick={() => setPhotoPreview(u)} className="relative h-14 w-14 overflow-hidden rounded border">
-                      <img src={u} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={storeActionPhotoThumbUrl(u)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
                     </button>
                   ))}
                   <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => fileRef.current?.click()}>
@@ -828,7 +834,12 @@ export function AdminStoreActions() {
                 <div className="flex flex-wrap gap-2">
                   {(edit.afterPhotoUrls || []).map((u) => (
                     <button key={u} type="button" onClick={() => setPhotoPreview(u)} className="relative h-14 w-14 overflow-hidden rounded border">
-                      <img src={u} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={storeActionPhotoThumbUrl(u)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
                     </button>
                   ))}
                   <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => afterFileRef.current?.click()}>
@@ -987,7 +998,12 @@ export function AdminStoreActions() {
           <div className="flex flex-wrap gap-2">
             {form.photoUrls.map((u) => (
               <div key={u} className="relative h-14 w-14">
-                <img src={u} alt="" className="h-full w-full rounded border object-cover" />
+                <img
+                  src={storeActionPhotoThumbUrl(u)}
+                  alt=""
+                  className="h-full w-full rounded border object-cover"
+                  loading="lazy"
+                />
                 <button
                   type="button"
                   className="absolute -right-1 -top-1 rounded-full bg-background border p-0.5"

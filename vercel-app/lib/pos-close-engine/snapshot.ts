@@ -47,25 +47,22 @@ export async function computePosCloseSnapshot(params: {
     'pos_orders'
   )
 
+  /** 선주문 컬럼 미배포 DB — select에 넣지 않음(마감 스냅샷 실패·400 방지) */
   const paidAtOrders = (await supabaseSelectFilter('pos_orders', paidFilter, {
     limit: 20000,
-    select: 'id,total,status,is_advance,scheduled_at',
+    select: 'id,total,status',
   })) as {
     id?: number
     total?: number
     status?: string
-    is_advance?: boolean | null
-    scheduled_at?: string | null
   }[] | null
   const nullPaidOrders = (await supabaseSelectFilter('pos_orders', nullPaidFilter, {
     limit: 20000,
-    select: 'id,total,status,is_advance,scheduled_at',
+    select: 'id,total,status',
   })) as {
     id?: number
     total?: number
     status?: string
-    is_advance?: boolean | null
-    scheduled_at?: string | null
   }[] | null
   const orders = mergeSettlementOrderRowsById(paidAtOrders, nullPaidOrders)
 

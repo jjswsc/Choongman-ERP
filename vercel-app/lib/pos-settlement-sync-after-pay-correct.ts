@@ -163,26 +163,22 @@ export async function computeLiveSettlementCashAmt(
   const paidAtOrders = (await supabaseSelectFilterStrippingUnknownColumns(
     'pos_orders',
     paidAtFilter,
-    { limit: 20000, select: 'id,status,payment_cash,is_advance,scheduled_at' },
+    { limit: 20000, select: 'id,status,payment_cash' },
     'syncPosSettlementCashPaidAt'
   )) as {
     id?: number
     status?: string
     payment_cash?: number
-    is_advance?: boolean | null
-    scheduled_at?: string | null
   }[] | null
   const nullPaidOrders = (await supabaseSelectFilterStrippingUnknownColumns(
     'pos_orders',
     nullPaidCreatedFallbackFilter,
-    { limit: 20000, select: 'id,status,payment_cash,is_advance,scheduled_at' },
+    { limit: 20000, select: 'id,status,payment_cash' },
     'syncPosSettlementCashPaidAtNull'
   )) as {
     id?: number
     status?: string
     payment_cash?: number
-    is_advance?: boolean | null
-    scheduled_at?: string | null
   }[] | null
   const orders = mergeSettlementOrderRowsById(paidAtOrders, nullPaidOrders)
 

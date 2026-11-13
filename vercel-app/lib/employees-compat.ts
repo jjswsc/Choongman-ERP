@@ -135,6 +135,14 @@ function isMissingEmployeesTenantIdColumn(err: unknown): boolean {
   )
 }
 
+function omitTenantIdFromSelect(select: string): string {
+  return select
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s && s !== 'tenant_id')
+    .join(',')
+}
+
 function loginCheckSelectAttempts(): { select: string }[] {
   const legacy = isLegacyChoongmanErpSupabase()
   const withCompany = [
@@ -158,7 +166,10 @@ function loginCheckSelectAttempts(): { select: string }[] {
     EMPLOYEES_LOGIN_CHECK_NO_COMPANY_NO_EXTRA_LEGACY,
   ]
   const ordered = legacy ? [...noCompany, ...withCompany] : [...withCompany, ...noCompany]
-  return ordered.map((select) => ({ select }))
+  /** 충만 레거시: tenant_id 선시도 → 매 로그인 GET 400 방지 */
+  return ordered.map((select) => ({
+    select: legacy ? omitTenantIdFromSelect(select) : select,
+  }))
 }
 
 export async function supabaseSelectFilterEmployeesByNameForLogin(name: string): Promise<unknown> {
