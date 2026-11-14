@@ -16,6 +16,19 @@ describe('canonicalPosMenuUpstreamUrl', () => {
   })
 })
 
+describe('toQrGuestMenuThumbHref', () => {
+  it('uses supabase render with guest thumb width', async () => {
+    const { toQrGuestMenuThumbHref, QR_GUEST_MENU_THUMB_WIDTH } = await import(
+      '@/lib/pos-menu-image-url'
+    )
+    const out = toQrGuestMenuThumbHref(
+      'https://abc.supabase.co/storage/v1/object/public/pos-menu-images/123.jpg'
+    )
+    expect(out).toContain('/storage/v1/render/image/public/pos-menu-images/123.jpg')
+    expect(out).toContain(`width=${QR_GUEST_MENU_THUMB_WIDTH}`)
+  })
+})
+
 describe('toSupabaseStorageRenderHref', () => {
   it('rewrites public object URLs to image transform', () => {
     const out = toSupabaseStorageRenderHref(

@@ -61,6 +61,11 @@ import {
   formatQrGuestTableLabel,
   isQrGuestCategoryHomePilotStore,
 } from '@/lib/qr-table-guest-category-home'
+import { QrGuestMenuThumb } from '@/components/qr-table/qr-guest-menu-thumb'
+import {
+  QR_GUEST_CATEGORY_THUMB_WIDTH,
+  toQrGuestMenuThumbHref,
+} from '@/lib/pos-menu-image-url'
 import { orderPosMainCategoryTabs, uniqueSubcategoriesForMainMenu } from '@/lib/pos-promo-constants'
 import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
@@ -1394,11 +1399,13 @@ export function QrTableGuestApp({ token }: { token: string }) {
     if (hasEmpty) list.push(uncategorizedLabel)
     return list.map((key) => {
       const items = homeMenus.filter((m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === key)
-      const imageUrl = items.find((m) => m.imageUrl)?.imageUrl || ''
+      const rawImage = items.find((m) => m.imageUrl)?.imageUrl || ''
       return {
         key,
         label: resolvePosMenuGuestLabel(key),
-        imageUrl,
+        imageUrl: rawImage
+          ? toQrGuestMenuThumbHref(rawImage, { width: QR_GUEST_CATEGORY_THUMB_WIDTH })
+          : '',
         count: items.length,
       }
     })
@@ -1414,14 +1421,18 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return allMenusForHome.filter((m) => ids.has(m.menuId))
   }, [allMenusForHome, settings?.guestHomeNewMenuIds])
 
-  const heroBannerResolved =
-    String(settings?.guestHomeHeroBannerUrl || '').trim() ||
-    featuredHomeMenus.find((m) => m.imageUrl)?.imageUrl ||
-    ''
-  const newMenuBannerResolved =
-    String(settings?.guestHomeNewMenuBannerUrl || '').trim() ||
-    newHomeMenus.find((m) => m.imageUrl)?.imageUrl ||
-    ''
+  const heroBannerResolved = (() => {
+    const custom = String(settings?.guestHomeHeroBannerUrl || '').trim()
+    if (custom) return toQrGuestMenuThumbHref(custom, { width: 640, quality: 70 }) || custom
+    const fromMenu = featuredHomeMenus.find((m) => m.imageUrl)?.imageUrl || ''
+    return fromMenu ? toQrGuestMenuThumbHref(fromMenu, { width: 640, quality: 70 }) : ''
+  })()
+  const newMenuBannerResolved = (() => {
+    const custom = String(settings?.guestHomeNewMenuBannerUrl || '').trim()
+    if (custom) return toQrGuestMenuThumbHref(custom, { width: 640, quality: 70 }) || custom
+    const fromMenu = newHomeMenus.find((m) => m.imageUrl)?.imageUrl || ''
+    return fromMenu ? toQrGuestMenuThumbHref(fromMenu, { width: 640, quality: 70 }) : ''
+  })()
 
   function openHomeCollection(kind: 'featured' | 'new') {
     setHomeCollection(kind)
@@ -1872,10 +1883,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
                       className={`flex gap-3 rounded-2xl border border-stone-100 bg-white p-2.5 shadow-sm ${m.soldOut ? 'opacity-55' : ''}`}
                     >
                       {m.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <QrGuestMenuThumb
                           src={m.imageUrl}
-                          alt=""
                           className="h-[4.75rem] w-[4.75rem] shrink-0 rounded-2xl object-cover bg-stone-100"
                         />
                       ) : (
@@ -2036,10 +2045,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
                     className="flex gap-2.5 rounded-2xl border border-stone-100 bg-white p-2.5 shadow-sm"
                   >
                     {m?.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <QrGuestMenuThumb
                         src={m.imageUrl}
-                        alt=""
                         className="h-16 w-16 shrink-0 rounded-xl object-cover bg-stone-100"
                       />
                     ) : (

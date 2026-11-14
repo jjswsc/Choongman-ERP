@@ -107,6 +107,13 @@ const POS_MENU_IMAGE_PROXY_RENDER_VERSION = 3
 export const POS_MENU_TILE_RENDER_WIDTH = 400
 export const POS_MENU_TILE_RENDER_QUALITY = 70
 
+/** 손님 QR 리스트 썸네일(~76px) + 레티나 — 원본 대신 transform */
+export const QR_GUEST_MENU_THUMB_WIDTH = 200
+export const QR_GUEST_MENU_THUMB_QUALITY = 65
+
+/** 손님 QR 카테고리 원형·배너용 */
+export const QR_GUEST_CATEGORY_THUMB_WIDTH = 240
+
 /**
  * Supabase 공개 객체 → Image Transformation URL.
  * 브라우저가 이 URL을 직접 받으면 이미지 바이트가 Vercel Origin을 거치지 않는다
@@ -186,6 +193,25 @@ export function toPosMenuDisplayImageHref(
     if (preferProxy && /^https?:\/\//i.test(u)) return toGeneralImageProxyHref(u)
   }
   return u
+}
+
+/**
+ * 손님 QR 메뉴·카테고리 썸네일 src.
+ * Supabase 공개 이미지는 Image Transformation으로 줄여 모바일에서 빨리 뜨게 한다.
+ */
+export function toQrGuestMenuThumbHref(
+  raw: string,
+  opts?: { width?: number; quality?: number }
+): string {
+  const n = normalizePosMenuImageUrl(raw)
+  if (!n) return ''
+  if (n.startsWith('data:') || n.startsWith('blob:')) return n
+  return (
+    toSupabaseStorageRenderHref(n, {
+      width: opts?.width ?? QR_GUEST_MENU_THUMB_WIDTH,
+      quality: opts?.quality ?? QR_GUEST_MENU_THUMB_QUALITY,
+    }) || n
+  )
 }
 
 /** IndexedDB·프리패치에 넣을 수 있는 출처만 허용 */

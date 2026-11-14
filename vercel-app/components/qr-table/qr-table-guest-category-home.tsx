@@ -86,7 +86,13 @@ export function QrTableGuestCategoryHome(props: {
         >
           {heroBannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={heroBannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <img
+              src={heroBannerUrl}
+              alt=""
+              loading="eager"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-amber-200/80 via-stone-200 to-stone-300" />
           )}
@@ -107,7 +113,13 @@ export function QrTableGuestCategoryHome(props: {
         >
           {newMenuBannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={newMenuBannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <img
+              src={newMenuBannerUrl}
+              alt=""
+              loading="eager"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-rose-50 via-stone-50 to-amber-50" />
           )}
@@ -149,6 +161,8 @@ export function QrTableGuestCategoryHome(props: {
               <img
                 src={c.imageUrl}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="h-[4.25rem] w-[4.25rem] rounded-full object-cover bg-stone-100 ring-2 ring-stone-100"
               />
             ) : (

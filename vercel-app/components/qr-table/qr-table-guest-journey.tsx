@@ -78,7 +78,7 @@ export function QrTableGuestOrderDoneScreen(props: {
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="text-stone-500">{g('tableNo')}</span>
               <span className="rounded-lg bg-[var(--qr-brand,#b45309)] px-2.5 py-0.5 text-sm font-bold text-white">
-                {tableName || '—'}
+                {String(tableName || '').replace(/\s*번\s*$/u, '').trim() || tableName || '—'}
               </span>
             </div>
             <div className="flex items-center justify-between gap-2 text-sm">
@@ -251,7 +251,9 @@ function OrderRoundCard(props: {
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center gap-2 border-b border-stone-100 px-3 py-2.5 text-xs">
-        <span className="rounded-md bg-[var(--qr-brand,#b45309)] px-2 py-0.5 font-bold text-white">{tableName || '—'}</span>
+        <span className="rounded-md bg-[var(--qr-brand,#b45309)] px-2 py-0.5 font-bold text-white">
+          {String(tableName || '').replace(/\s*번\s*$/u, '').trim() || tableName || '—'}
+        </span>
         {orderId ? <span className="font-semibold tabular-nums text-stone-700">#{orderId}</span> : null}
         <span className="tabular-nums text-stone-500">{round.timeLabel || g('orderHistoryNoTime')}</span>
         <span className="ml-auto text-stone-400">
