@@ -7043,6 +7043,9 @@ export default function PosTerminalPage() {
       const remainingMs = minIntervalMs - elapsed
       if (remainingMs > 0) {
         const waitSec = Math.ceil(remainingMs / 1000)
+        // Do not stack a blocking alert on top of the paid-confirm dialog — nested Radix
+        // dialogs can freeze touch (ตกลง / X unresponsive) on POS terminals.
+        if (kbankOutcomeState?.kind === 'success') return false
         // Generate: soft anti-double-tap only — do not scare cashiers with "rate limit" wording.
         if (bucket === 'generate') {
           await appAlert(
@@ -7067,7 +7070,7 @@ export default function PosTerminalPage() {
       targetRef.current = now
       return true
     },
-    [kbankActionLabel, t]
+    [kbankActionLabel, kbankOutcomeState?.kind, t]
   )
 
   const openKbankOutcomeModal = useCallback(

@@ -131,8 +131,11 @@ export function AppMessageProvider({ children }: { children: React.ReactNode }) 
         }}
       >
         <DialogContent
-          className="z-[10050] max-w-lg"
-          overlayClassName="z-[10050]"
+          // Sibling Radix Dialog (e.g. KBank ชำระสำเร็จ) leaves body pointer-events:none;
+          // without an explicit auto here the alert/confirm buttons become untouchable.
+          className="pointer-events-auto z-[10050] max-w-lg"
+          overlayClassName="pointer-events-auto z-[10050]"
+          style={{ pointerEvents: "auto" }}
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >

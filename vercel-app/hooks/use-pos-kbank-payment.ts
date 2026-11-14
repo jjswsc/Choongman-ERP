@@ -467,6 +467,9 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       const remainingMs = minIntervalMs - elapsed
       if (remainingMs > 0) {
         const waitSec = Math.ceil(remainingMs / 1000)
+        // Do not stack a blocking alert on top of the paid-confirm dialog — nested Radix
+        // dialogs can freeze touch (ตกลง / X unresponsive) on POS terminals.
+        if (kbankOutcomeState?.kind === 'success') return false
         if (bucket === 'generate') {
           await appAlert(
             t('posKbankGenerateWaitTap') ||
@@ -489,7 +492,7 @@ export function usePosKbankPayment(params: UsePosKbankPaymentParams): UsePosKban
       targetRef.current = now
       return true
     },
-    [t]
+    [kbankOutcomeState?.kind, t]
   )
 
   const openKbankOutcomeModal = useCallback(
