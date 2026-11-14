@@ -91,6 +91,15 @@ type BsMetrics = {
   chk: number
 }
 
+type BsCompareCol = {
+  key: string
+  label: string
+  sub?: string
+  metrics: BsMetrics | null
+}
+
+const BS_COMPARE_TOTAL_KEY = "__total__"
+
 function metricsFromBalance(d: BalanceSheetData | undefined): BsMetrics | null {
   if (!isBalanceSheetData(d)) return null
   return {
@@ -105,6 +114,109 @@ function metricsFromBalance(d: BalanceSheetData | undefined): BsMetrics | null {
     eq: d.equity.total,
     chk: d.balanceCheckDiff,
   }
+}
+
+function formatBsPctOfAssets(amount: number, assetsBase: number): string {
+  if (!(assetsBase > 0) || !Number.isFinite(amount)) return "—"
+  return `${((amount / assetsBase) * 100).toFixed(1)}%`
+}
+
+function sumBsMetrics(list: Array<BsMetrics | null | undefined>): BsMetrics | null {
+  const agg: BsMetrics = {
+    cash: 0,
+    inv: 0,
+    rec: 0,
+    loanRec: 0,
+    assets: 0,
+    pay: 0,
+    borrow: 0,
+    liab: 0,
+    eq: 0,
+    chk: 0,
+  }
+  let any = false
+  for (const m of list) {
+    if (!m) continue
+    any = true
+    agg.cash += m.cash
+    agg.inv += m.inv
+    agg.rec += m.rec
+    agg.loanRec += m.loanRec
+    agg.assets += m.assets
+    agg.pay += m.pay
+    agg.borrow += m.borrow
+    agg.liab += m.liab
+    agg.eq += m.eq
+    agg.chk += m.chk
+  }
+  return any ? agg : null
+}
+
+function appendBsCompareTotalCol(cols: BsCompareCol[], totalLabel: string): BsCompareCol[] {
+  if (cols.length < 2) return cols
+  return [
+    ...cols,
+    {
+      key: BS_COMPARE_TOTAL_KEY,
+      label: totalLabel,
+      metrics: sumBsMetrics(cols.map((c) => c.metrics)),
+    },
+  ]
+}
+
+/** 기간별 금액 + 자산대비(구성비). 합계 열은 period 금액 합산. */
+function BsCompareAmountPctCells(props: {
+  cols: BsCompareCol[]
+  amountForCol: (col: BsCompareCol) => number | null
+  amountClassName?: string | ((amount: number | null, col: BsCompareCol) => string)
+  pctClassName?: string
+}) {
+  const {
+    cols,
+    amountForCol,
+    amountClassName,
+    pctClassName =
+      "pl-2 pr-4 py-3 text-right tabular-nums text-muted-foreground whitespace-nowrap text-xs",
+  } = props
+  const periodCols = cols.filter((c) => c.key !== BS_COMPARE_TOTAL_KEY)
+  const hasTotal = cols.some((c) => c.key === BS_COMPARE_TOTAL_KEY)
+  const periodEntries = periodCols.map((col) => ({
+    col,
+    amount: amountForCol(col),
+  }))
+  const entries = hasTotal
+    ? [
+        ...periodEntries,
+        {
+          col: cols.find((c) => c.key === BS_COMPARE_TOTAL_KEY)!,
+          amount: periodEntries.every((e) => e.amount == null)
+            ? null
+            : periodEntries.reduce((s, e) => s + (e.amount ?? 0), 0),
+        },
+      ]
+    : periodEntries
+
+  return (
+    <>
+      {entries.map(({ col, amount }) => {
+        const cls =
+          typeof amountClassName === "function"
+            ? amountClassName(amount, col)
+            : amountClassName ?? accountingBsCompareTdAmountCn
+        const assetsBase = col.metrics?.assets ?? 0
+        return (
+          <React.Fragment key={col.key}>
+            <td className={cls}>{amount == null ? "—" : formatBaht(amount)}</td>
+            <td className={pctClassName}>
+              {amount == null || !col.metrics
+                ? "—"
+                : formatBsPctOfAssets(amount, assetsBase)}
+            </td>
+          </React.Fragment>
+        )
+      })}
+    </>
+  )
 }
 
 export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
@@ -396,21 +508,22 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
 
   const showBalanceCompareTable = isRangeCompare && !loading && compareBalanceRows.length > 0
 
-  const balanceCompareCols = React.useMemo(() => {
-    if (compareGranularity === "month") {
-      return compareBalanceRows.map(({ ym, data: d }) => ({
-        key: ym,
-        label: ym,
-        metrics: metricsFromBalance(d),
-      }))
-    }
-    return balanceYearSnaps.map((s) => ({
-      key: s.year,
-      label: s.year,
-      sub: s.ym,
-      metrics: metricsFromBalance(s.data),
-    }))
-  }, [compareGranularity, compareBalanceRows, balanceYearSnaps])
+  const balanceCompareCols = React.useMemo((): BsCompareCol[] => {
+    const periodCols: BsCompareCol[] =
+      compareGranularity === "month"
+        ? compareBalanceRows.map(({ ym, data: d }) => ({
+            key: ym,
+            label: ym,
+            metrics: metricsFromBalance(d),
+          }))
+        : balanceYearSnaps.map((s) => ({
+            key: s.year,
+            label: s.year,
+            sub: s.ym,
+            metrics: metricsFromBalance(s.data),
+          }))
+    return appendBsCompareTotalCol(periodCols, t("totalSalesCompareTotal"))
+  }, [compareGranularity, compareBalanceRows, balanceYearSnaps, t])
 
   const balanceCompareMetricRows = React.useMemo(
     () => [
@@ -588,14 +701,19 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             <tr className={accountingBsCompareTheadCn}>
                               <th className={accountingBsCompareThStickyCn}>{t("pL_colItem")}</th>
                               {balanceCompareCols.map((c) => (
-                                <th key={c.key} className={accountingBsCompareThColCn}>
-                                  <div>{c.label}</div>
-                                  {"sub" in c && c.sub ? (
-                                    <div className="mt-0.5 text-[10px] font-normal normal-case tracking-normal text-muted-foreground font-sans">
-                                      ({String(c.sub)})
-                                    </div>
-                                  ) : null}
-                                </th>
+                                <React.Fragment key={c.key}>
+                                  <th className={accountingBsCompareThColCn}>
+                                    <div>{c.label}</div>
+                                    {c.sub ? (
+                                      <div className="mt-0.5 text-[10px] font-normal normal-case tracking-normal text-muted-foreground font-sans">
+                                        ({c.sub})
+                                      </div>
+                                    ) : null}
+                                  </th>
+                                  <th className="pl-2 pr-4 py-3.5 text-right text-xs font-bold text-muted-foreground whitespace-nowrap align-bottom">
+                                    {t("bs_pctOfAssets")}
+                                  </th>
+                                </React.Fragment>
                               ))}
                             </tr>
                           </thead>
@@ -603,6 +721,7 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                             {balanceCompareMetricRows.map((row) => {
                               const isTotal =
                                 row.key === "assets" || row.key === "liab" || row.key === "eq"
+                              const isChk = row.key === "chk"
                               return (
                                 <tr
                                   key={row.key}
@@ -611,22 +730,20 @@ export function BalanceSheetTab(props: BalanceSheetTabProps = {}) {
                                   }`}
                                 >
                                   <td className={accountingBsCompareTdStickyCn}>{row.label}</td>
-                                  {balanceCompareCols.map((c) => {
-                                    const m = c.metrics
-                                    const v = m ? row.pick(m) : null
-                                    const isChk = row.key === "chk"
-                                    const ok = v != null && Math.abs(v) < 1
-                                    return (
-                                      <td
-                                        key={c.key}
-                                        className={`${accountingBsCompareTdAmountCn} ${
-                                          isChk && v != null && !ok ? "text-amber-800 font-semibold" : ""
-                                        } ${isChk && v != null && ok ? "text-emerald-700 font-semibold" : ""}`}
-                                      >
-                                        {v == null || m == null ? "—" : formatBaht(v)}
-                                      </td>
-                                    )
-                                  })}
+                                  <BsCompareAmountPctCells
+                                    cols={balanceCompareCols}
+                                    amountForCol={(c) => {
+                                      const m = c.metrics
+                                      if (!m) return null
+                                      return row.pick(m)
+                                    }}
+                                    amountClassName={(v) => {
+                                      const ok = v != null && Math.abs(v) < 1
+                                      return `${accountingBsCompareTdAmountCn}${
+                                        isChk && v != null && !ok ? " text-amber-800 font-semibold" : ""
+                                      }${isChk && v != null && ok ? " text-emerald-700 font-semibold" : ""}`
+                                    }}
+                                  />
                                 </tr>
                               )
                             })}

@@ -5697,6 +5697,7 @@ export const I18N_BASE_KO = {
   recon_allClear: '이번 기간·범위에서 대사 이슈가 없습니다.',
   recon_openBank: '통장',
   bs_total: '합계',
+  bs_pctOfAssets: '자산대비',
   bs_liabilities: '부채',
   bs_payables: '미지급금',
   bs_equity: '자본',

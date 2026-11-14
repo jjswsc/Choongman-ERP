@@ -5693,6 +5693,7 @@ Only matters the employee must handle personally on a working day:
   recon_allClear: 'No reconciliation issues for this scope.',
   recon_openBank: 'Bank',
   bs_total: 'Total',
+  bs_pctOfAssets: '% of Assets',
   bs_liabilities: 'Liabilities',
   bs_payables: 'Payables',
   bs_equity: 'Equity',
