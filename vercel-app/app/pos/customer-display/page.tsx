@@ -122,7 +122,7 @@ export default function PosCustomerDisplayPage() {
           ? String(r)
           : String(Math.round(r * 100) / 100).replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1")
       const rateText = r > 0 ? ` ${rateDisplay}%` : ""
-      const modeText = mode === "included" ? ` ${t("included") || "포함"}` : mode === "separate" ? ` ${t("separate") || "별도"}` : ""
+      const modeText = mode === "included" ? ` ${t("posFeeIncluded")}` : mode === "separate" ? ` ${t("posFeeSeparate")}` : ""
       return `${base}${rateText}${modeText}`.trim()
     },
     [t]
@@ -169,7 +169,7 @@ export default function PosCustomerDisplayPage() {
               receiptVatDisplayAmt: bd.receiptVatDisplayAmt,
             }) > 0 ? (
               <div className="mt-1 flex items-center justify-between">
-                <span>{formatFeeLabel(t("vatFee") || "부가세", bd.vatRate, bd.vatMode)}</span>
+                <span>{formatFeeLabel(t("posVatLabel"), bd.vatRate, bd.vatMode)}</span>
                 <span>
                   {Number(
                     resolveReceiptVatPrintAmount({
@@ -182,19 +182,19 @@ export default function PosCustomerDisplayPage() {
             ) : null}
             {Number(bd.serviceFeeAmt || 0) > 0 ? (
               <div className="mt-1 flex items-center justify-between">
-                <span>{formatFeeLabel(t("serviceFee") || "서비스비", bd.serviceRate, bd.serviceMode)}</span>
+                <span>{formatFeeLabel(t("posServiceFeeLabel"), bd.serviceRate, bd.serviceMode)}</span>
                 <span>+{Number(bd.serviceFeeAmt || 0).toLocaleString()}</span>
               </div>
             ) : null}
             {Number(bd.cardFeeAmt || 0) > 0 ? (
               <div className="mt-1 flex items-center justify-between">
-                <span>{formatFeeLabel(t("cardFee") || "카드 수수료", bd.cardRate, bd.cardMode)}</span>
+                <span>{formatFeeLabel(t("posCardFeeLabel"), bd.cardRate, bd.cardMode)}</span>
                 <span>+{Number(bd.cardFeeAmt || 0).toLocaleString()}</span>
               </div>
             ) : null}
             {Number(bd.otherFeeAmt || 0) > 0 ? (
               <div className="mt-1 flex items-center justify-between">
-                <span>{formatFeeLabel(t("otherFee") || "기타 수수료", bd.otherRate, bd.otherMode)}</span>
+                <span>{formatFeeLabel(t("posOtherFeeLabel"), bd.otherRate, bd.otherMode)}</span>
                 <span>+{Number(bd.otherFeeAmt || 0).toLocaleString()}</span>
               </div>
             ) : null}

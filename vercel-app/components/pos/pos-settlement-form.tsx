@@ -1463,9 +1463,11 @@ ${footerStamp}
       }
       const diff = Number(res.result.diffTotal || 0)
       await appAlert(
-        `${t('posSettlement') || '결산'} Validate: ${
-          res.result.status === 'validated' ? 'OK' : 'Draft'
-        }\nDiff: ${formatBahtNum(diff)}`
+        i18nTr(
+          t,
+          res.result.status === 'validated' ? 'posSettlementValidateOk' : 'posSettlementValidateDraft',
+          { diff: formatBahtNum(diff) }
+        )
       )
       loadData()
     } finally {
@@ -1856,7 +1858,7 @@ ${footerStamp}
                             settleDate,
                           })
                           if (!res.success) {
-                            await appAlert(res.message || t('msg_save_fail_detail') || '실패')
+                            await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
                             return
                           }
                           setCashReconcileBanner(null)

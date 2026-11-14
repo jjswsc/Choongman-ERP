@@ -114,7 +114,7 @@ export const PosDualMonitorSettingsContent = React.forwardRef<
     async (options?: PosDualMonitorSettingsSaveOptions): Promise<boolean> => {
       const sc = String(storeCode || "").trim()
       if (!sc) {
-        await appAlert(tr("store", "매장") + " " + tr("required", "필수"))
+        await appAlert(tr("store", "매장") + " " + tr("posRequired", "필수"))
         return false
       }
       setSaving(true)
@@ -204,7 +204,7 @@ export const PosDualMonitorSettingsContent = React.forwardRef<
   }, [t, tr])
 
   if (!String(storeCode || "").trim()) {
-    return <p className="text-sm text-muted-foreground">{tr("store", "매장")} {tr("required", "필수")}</p>
+    return <p className="text-sm text-muted-foreground">{tr("store", "매장")} {tr("posRequired", "필수")}</p>
   }
 
   return (

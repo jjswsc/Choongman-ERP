@@ -1,4 +1,6 @@
 import type { PosOrderStatusUpdateResult } from '@/lib/api-client'
+import { tr } from '@/lib/i18n'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 
 type PosStatusFeedbackLabels = {
   stock?: string
@@ -33,6 +35,32 @@ export function buildPosStatusFailureMessage(
   return detail
     ? `${base}\n${opts?.postProcessSuffix ? opts.postProcessSuffix(detail) : `(${detail} 후처리)`}`
     : base
+}
+
+/**
+ * Localizes res.message for the current language and fills side-effect labels/suffix from POS i18n keys.
+ * Pass opts to override the defaults.
+ */
+export function buildLocalizedPosStatusFailureMessage(
+  res: PosOrderStatusUpdateResult,
+  t: (k: string) => string,
+  fallback: string,
+  lang: string,
+  opts?: {
+    labels?: PosStatusFeedbackLabels
+    postProcessSuffix?: (steps: string) => string
+  }
+): string {
+  const message = localizeApiMessage(res.message, t, fallback, lang)
+  return buildPosStatusFailureMessage({ ...res, message }, fallback, {
+    labels: opts?.labels ?? {
+      stock: t('posStatusSideEffectStock'),
+      journal: t('posStatusSideEffectJournal'),
+      vat: t('posStatusSideEffectVat'),
+    },
+    postProcessSuffix:
+      opts?.postProcessSuffix ?? ((steps) => tr(t, 'posStatusPostProcessSuffix', { steps })),
+  })
 }
 
 export function buildPosQueuedSaveMessage(

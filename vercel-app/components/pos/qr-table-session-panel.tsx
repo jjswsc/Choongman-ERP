@@ -32,6 +32,7 @@ import { useVisiblePolling } from '@/lib/use-visible-polling'
 import type { QrBuffetTier, QrOrderStoreSettings, QrTableSession, QrTableToken } from '@/lib/qr-table-types'
 import { buffetTierDisplayName, defaultQrOrderStoreSettings } from '@/lib/qr-table-types'
 import { appAlert } from '@/lib/app-message'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { useLang } from '@/lib/lang-context'
 import { useT, tOr } from '@/lib/i18n'
 import { playQrStaffCallMelody } from '@/lib/pos-qr-staff-call-sound'
@@ -126,7 +127,7 @@ export function QrTableSessionPanel(props: {
         extrasPaymentChoice: 'postpay',
       })
       if (!res.success) {
-        await appAlert(res.message || 'open_failed')
+        await appAlert(localizeApiMessage(res.message, t, tr('posQrTableOpenFailed', 'Could not open the table session.'), lang))
         return
       }
       setSession(res.session || null)
@@ -145,7 +146,7 @@ export function QrTableSessionPanel(props: {
     try {
       const res = await qrTableStaffAdjustGuests(session.id, storeCode, next)
       if (!res.success) {
-        await appAlert(res.message || 'adjust_failed')
+        await appAlert(localizeApiMessage(res.message, t, tr('posQrTableAdjustFailed', 'Could not change the guest count.'), lang))
         return
       }
       setSession(res.session || null)
@@ -162,7 +163,7 @@ export function QrTableSessionPanel(props: {
     try {
       const res = await qrTableStaffConfirmEntry(session.id)
       if (!res.success) {
-        await appAlert(res.message || 'confirm_failed')
+        await appAlert(localizeApiMessage(res.message, t, tr('posQrTableConfirmFailed', 'Could not confirm entry.'), lang))
         return
       }
       setSession(res.session || null)
@@ -179,7 +180,7 @@ export function QrTableSessionPanel(props: {
     try {
       const res = await qrTableStaffAckCall(session.id, storeCode)
       if (!res.success) {
-        await appAlert(res.message || 'ack_failed')
+        await appAlert(localizeApiMessage(res.message, t, tr('posQrTableAckFailed', 'Could not acknowledge the call.'), lang))
         return
       }
       setSession(res.session || null)

@@ -14,7 +14,7 @@ import { useAuth } from '@/lib/auth-context'
 import { ADMIN_UI_LANG_OPTIONS, useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useStoreList, getPosTodaySales, getLoginData, loginCheck, getPosPrinterSettings } from '@/lib/api-client'
-import { translateApiMessage } from '@/lib/translate-api-message'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import type { Store } from '@/lib/pos-types'
 import {
   canAccessPosSettlement,
@@ -478,7 +478,7 @@ function POSMainPageInner() {
           setSwitchUserOpen(false)
           setSwitchPw('')
         } else {
-          setSwitchError(translateApiMessage(res.message, t) || res.message || t('msg_login_failed'))
+          setSwitchError(localizeApiMessage(res.message, t, t('msg_login_failed'), lang))
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)

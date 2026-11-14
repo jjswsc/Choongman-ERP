@@ -11,7 +11,7 @@ import { drawerOpenRequiresPin } from '@/lib/pos-drawer-pin'
 import { PosDrawerPinDialog } from '@/components/pos/pos-drawer-pin-dialog'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { translateApiMessage } from '@/lib/translate-api-message'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 
 type PinResolver = (pin: string | null) => void
 
@@ -34,7 +34,8 @@ type PosDrawerPinContextValue = {
 const PosDrawerPinContext = React.createContext<PosDrawerPinContextValue | null>(null)
 
 export function PosDrawerPinProvider({ children }: { children: React.ReactNode }) {
-  const t = useT(useLang().lang)
+  const { lang } = useLang()
+  const t = useT(lang)
   const pinConfiguredByStoreRef = React.useRef<Map<string, boolean>>(new Map())
   const [pinDialogOpen, setPinDialogOpen] = React.useState(false)
   const [pinLoading, setPinLoading] = React.useState(false)
@@ -132,19 +133,17 @@ export function PosDrawerPinProvider({ children }: { children: React.ReactNode }
       try {
         const verify = await verifyPosDrawerPin({ storeCode: store, pin })
         if (!verify.success) {
-          setPinError(
-            translateApiMessage(verify.message, t) || t('posDrawerPinWrong') || 'PIN이 올바르지 않습니다.'
-          )
+          setPinError(localizeApiMessage(verify.message, t, t('posDrawerPinWrong'), lang))
           setPinLoading(false)
           return
         }
         closePinDialog(pin)
       } catch {
-        setPinError(t('posDrawerPinWrong') || 'PIN이 올바르지 않습니다.')
+        setPinError(t('posDrawerPinWrong'))
         setPinLoading(false)
       }
     },
-    [closePinDialog, t]
+    [closePinDialog, lang, t]
   )
 
   return (

@@ -296,7 +296,7 @@ export function PosTerminalDialogs({
               </div>
               <div className="space-y-1">
                 <PosTaxInvoiceFieldLabel optional optionalText={t('posOptional')}>
-                  {t('member_no') || '회원번호'}
+                  {t('posMemberNo')}
                 </PosTaxInvoiceFieldLabel>
                 <Input className="h-9" value={ti.memberNo} onChange={(e) => ti.onMemberNoChange(e.target.value)} />
               </div>

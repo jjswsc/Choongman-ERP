@@ -31,6 +31,8 @@ export async function applyPosOrderStatusWithRetry(params: {
   failMessageFallback: string
   i18n?: {
     retryConfirm?: string
+    /** Localize `res.message` from updatePosOrderStatus (e.g. localizeApiMessage) */
+    localizeMessage?: (message: string | undefined, fallback: string) => string
     sideEffectLabels?: {
       stock?: string
       journal?: string
@@ -43,10 +45,17 @@ export async function applyPosOrderStatusWithRetry(params: {
   if (first.success) return true
 
   const canRetry = Boolean(first.retryAfterQueue || first.statusAlreadyApplied)
-  const msg = buildPosStatusFailureMessage(first, params.failMessageFallback, {
-    labels: params.i18n?.sideEffectLabels,
-    postProcessSuffix: params.i18n?.postProcessSuffix,
-  })
+  const localizeMessage = params.i18n?.localizeMessage
+  const buildFailure = (r: PosOrderStatusUpdateResult) =>
+    buildPosStatusFailureMessage(
+      localizeMessage ? { ...r, message: localizeMessage(r.message, params.failMessageFallback) } : r,
+      params.failMessageFallback,
+      {
+        labels: params.i18n?.sideEffectLabels,
+        postProcessSuffix: params.i18n?.postProcessSuffix,
+      }
+    )
+  const msg = buildFailure(first)
   if (!canRetry) {
     await params.onAlert(msg)
     return false
@@ -59,12 +68,7 @@ export async function applyPosOrderStatusWithRetry(params: {
     retrySideEffects: true,
   })
   if (!retried.success) {
-    await params.onAlert(
-      buildPosStatusFailureMessage(retried, params.failMessageFallback, {
-        labels: params.i18n?.sideEffectLabels,
-        postProcessSuffix: params.i18n?.postProcessSuffix,
-      })
-    )
+    await params.onAlert(buildFailure(retried))
     return false
   }
   return true

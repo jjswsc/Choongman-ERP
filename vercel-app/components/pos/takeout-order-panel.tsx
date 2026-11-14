@@ -388,12 +388,20 @@ export function TakeoutOrderPanel({
         onAlert: appAlert,
         onConfirm: appConfirm,
         onPrompt: appPrompt,
-        failMessageFallback: t('processFail') || '처리 실패',
+        failMessageFallback: t('processFail'),
         i18n: {
-          reasonPrompt: t('posCancelReasonPrompt') || '취소 사유를 입력하세요 (2자 이상, 메모에 기록됩니다)',
-          reasonTooShort: t('posReceiptPayCorrectReasonShort') || '사유를 2자 이상 입력해 주세요.',
-          depositRefundAsk:
-            t('posDepositRefundAsk') || '선수금을 환불할까요?\n확인 = 환불, 취소 = 미환불(몰수)',
+          reasonPrompt: t('posCancelReasonPrompt'),
+          reasonTooShort: t('posReceiptPayCorrectReasonShort'),
+          depositRefundAsk: t('posDepositRefundAsk'),
+          retryConfirm: t('posStatusRetryConfirm'),
+          orderNotFound: t('syncRecOrderNotFound'),
+          localizeMessage: (message, fallback) => localizeApiMessage(message, t, fallback, lang),
+          sideEffectLabels: {
+            stock: t('posStatusSideEffectStock'),
+            journal: t('posStatusSideEffectJournal'),
+            vat: t('posStatusSideEffectVat'),
+          },
+          postProcessSuffix: (steps) => i18nTr(t, 'posStatusPostProcessSuffix', { steps }),
         },
       })
       if (!outcome.ok) return

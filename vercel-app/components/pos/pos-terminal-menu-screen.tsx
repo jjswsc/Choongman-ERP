@@ -1123,7 +1123,7 @@ export function PosTerminalMenuScreen({
     const name = menuEditForm.name.trim()
     const code = menuEditForm.code.trim()
     if (!name || !code) {
-      await appAlert((t('msg_fill_required') || '필수 항목을 입력해 주세요.'))
+      await appAlert((t('posMenuFillRequired')))
       return
     }
     setMenuEditSaving(true)
@@ -1728,7 +1728,7 @@ export function PosTerminalMenuScreen({
                 <thead className="sticky top-0 bg-muted">
                   <tr>
                     <th className="w-8 px-1 py-1" />
-                    <th className="px-2 py-1 text-left">{t('menu') || '메뉴'}</th>
+                    <th className="px-2 py-1 text-left">{t('posMenu')}</th>
                     <th className="px-2 py-1 text-right">{t('price') || '단가'}</th>
                     <th className="px-2 py-1 text-center">{t('add') || '추가'}</th>
                   </tr>
@@ -1804,10 +1804,10 @@ export function PosTerminalMenuScreen({
             </div>
             <div className="mt-2 flex shrink-0 items-center justify-between">
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage <= 0} onClick={() => setListPage((p) => Math.max(0, p - 1))}>
-                {t('prev') || '이전'}
+                {t('posPrev')}
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage >= totalPages - 1} onClick={() => setListPage((p) => Math.min(totalPages - 1, p + 1))}>
-                {t('next') || '다음'}
+                {t('posNext')}
               </Button>
             </div>
           </section>
@@ -1848,7 +1848,7 @@ export function PosTerminalMenuScreen({
             {isAdminMode ? (
               <Button className="h-8 gap-1.5 text-xs" onClick={saveConfig} disabled={configLoading || configSaving}>
                 <Save className="h-3.5 w-3.5" />
-                {configSaving ? (t('saving') || '저장중') : (t('save') || '저장')}
+                {configSaving ? t('posSaving') : (t('save') || '저장')}
               </Button>
             ) : (
               <span className="rounded-md bg-background px-2 py-1 text-[11px] text-muted-foreground border">
@@ -2458,7 +2458,7 @@ export function PosTerminalMenuScreen({
                 {t('cancel') || '취소'}
               </Button>
               <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={saveMenuEdit} disabled={menuEditSaving}>
-                {menuEditSaving ? (t('saving') || '저장중') : (t('save') || '저장')}
+                {menuEditSaving ? t('posSaving') : (t('save') || '저장')}
               </Button>
             </div>
           </div>

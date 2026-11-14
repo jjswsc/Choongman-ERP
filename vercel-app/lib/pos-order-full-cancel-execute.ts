@@ -29,6 +29,10 @@ export async function executePosFullOrderCancel(params: {
     reasonTooShort?: string
     retryConfirm?: string
     depositRefundAsk?: string
+    /** Shown when the order cannot be resolved to a server id */
+    orderNotFound?: string
+    /** Localize `res.message` from updatePosOrderStatus (e.g. localizeApiMessage) */
+    localizeMessage?: (message: string | undefined, fallback: string) => string
     sideEffectLabels?: {
       stock?: string
       journal?: string
@@ -80,7 +84,9 @@ export async function executePosFullOrderCancel(params: {
 
   const serverId = resolved.serverId
   if (!serverId) {
-    return { ok: false, message: '주문을 찾을 수 없습니다.' }
+    const notFound = i18n?.orderNotFound || '주문을 찾을 수 없습니다.'
+    await onAlert(notFound)
+    return { ok: false, message: notFound }
   }
 
   const first = await updatePosOrderStatus({
@@ -94,10 +100,17 @@ export async function executePosFullOrderCancel(params: {
   }
 
   const canRetry = Boolean(first.retryAfterQueue || first.statusAlreadyApplied)
-  const msg = buildPosStatusFailureMessage(first, failMessageFallback, {
-    labels: i18n?.sideEffectLabels,
-    postProcessSuffix: i18n?.postProcessSuffix,
-  })
+  const localizeMessage = i18n?.localizeMessage
+  const buildFailure = (r: PosOrderStatusUpdateResult) =>
+    buildPosStatusFailureMessage(
+      localizeMessage ? { ...r, message: localizeMessage(r.message, failMessageFallback) } : r,
+      failMessageFallback,
+      {
+        labels: i18n?.sideEffectLabels,
+        postProcessSuffix: i18n?.postProcessSuffix,
+      }
+    )
+  const msg = buildFailure(first)
   if (!canRetry) {
     await onAlert(msg)
     return { ok: false, message: msg }
@@ -115,10 +128,7 @@ export async function executePosFullOrderCancel(params: {
     ...(depositDisposition ? { depositDisposition } : {}),
   })
   if (!retried.success) {
-    const retryMsg = buildPosStatusFailureMessage(retried, failMessageFallback, {
-      labels: i18n?.sideEffectLabels,
-      postProcessSuffix: i18n?.postProcessSuffix,
-    })
+    const retryMsg = buildFailure(retried)
     await onAlert(retryMsg)
     return { ok: false, message: retryMsg }
   }

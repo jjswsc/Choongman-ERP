@@ -6896,7 +6896,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         </Select>
                         {orderType === 'dine-in' && (
                           <p className="text-[11px] leading-snug text-muted-foreground">
-                            {'테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab/Line Man/Shopee 중에서 선택하세요.'}
+                            {t('posDeliveryTableAppPayHint') ||
+                              '테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab/Line Man/Shopee 중에서 선택하세요.'}
                           </p>
                         )}
                       </div>

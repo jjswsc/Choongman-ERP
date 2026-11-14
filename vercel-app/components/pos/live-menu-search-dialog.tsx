@@ -516,13 +516,16 @@ export function LiveMenuSearchDialog({
         </div>
         {demoSeeded && (
           <p className="text-xs text-muted-foreground">
-            {t('posDemoBanner') || 'Demo mode'} · 메뉴 선택에서 {DEMO_TRAINING_MENU_NAME}를 선택하세요. 홀 1~6번에 같은 메뉴가 수량 1~6으로 준비되어 있어, 목록 위쪽(더 이른 주문)부터 확인하고 서빙 버튼까지 학습할 수 있습니다.
+            {(
+              t('posDemoLiveMenuHint') ||
+              'Demo · In the menu picker choose {menu}. Hall tables 1–6 have the same menu with qty 1–6 so you can practice from older orders down to Serve.'
+            ).split('{menu}').join(DEMO_TRAINING_MENU_NAME)}
           </p>
         )}
 
         <Select value={selectedMenuId} onValueChange={setSelectedMenuId}>
           <SelectTrigger className="h-9">
-            <SelectValue placeholder={t('items') || 'Menu'} />
+            <SelectValue placeholder={t('posMenu')} />
           </SelectTrigger>
           <SelectContent>
             {filteredMenus.map((m) => (
@@ -535,7 +538,7 @@ export function LiveMenuSearchDialog({
 
         <div className="max-h-[45vh] overflow-auto rounded-lg border">
           {selectedMenu == null ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">{`${t('items') || 'Menu'} ${t('att_select_first') || 'select first'}`}</div>
+            <div className="p-8 text-center text-sm text-muted-foreground">{`${t('posMenu')} ${t('att_select_first') || 'select first'}`}</div>
           ) : matchedTargets.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">{t('itemsNoResults') || 'No matching orders.'}</div>
           ) : (

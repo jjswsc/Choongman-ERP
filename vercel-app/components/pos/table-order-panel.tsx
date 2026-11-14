@@ -50,7 +50,7 @@ import { useT, tOr, tr as i18nTr } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 import { executePosFullOrderCancel } from '@/lib/pos-order-full-cancel-execute'
-import { buildPosStatusFailureMessage } from '@/lib/pos-status-feedback'
+import { buildLocalizedPosStatusFailureMessage } from '@/lib/pos-status-feedback'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { QrTableSessionPanel, type QrTableOrderBalance } from '@/components/pos/qr-table-session-panel'
 import {
@@ -599,12 +599,20 @@ export function TableOrderPanel({
         onAlert: appAlert,
         onConfirm: appConfirm,
         onPrompt: appPrompt,
-        failMessageFallback: t('processFail') || '처리 실패',
+        failMessageFallback: t('processFail'),
         i18n: {
-          reasonPrompt: t('posCancelReasonPrompt') || '취소 사유를 입력하세요 (2자 이상, 메모에 기록됩니다)',
-          reasonTooShort: t('posReceiptPayCorrectReasonShort') || '사유를 2자 이상 입력해 주세요.',
-          depositRefundAsk:
-            t('posDepositRefundAsk') || '선수금을 환불할까요?\n확인 = 환불, 취소 = 미환불(몰수)',
+          reasonPrompt: t('posCancelReasonPrompt'),
+          reasonTooShort: t('posReceiptPayCorrectReasonShort'),
+          depositRefundAsk: t('posDepositRefundAsk'),
+          retryConfirm: t('posStatusRetryConfirm'),
+          orderNotFound: t('syncRecOrderNotFound'),
+          localizeMessage: (message, fallback) => localizeApiMessage(message, t, fallback, lang),
+          sideEffectLabels: {
+            stock: t('posStatusSideEffectStock'),
+            journal: t('posStatusSideEffectJournal'),
+            vat: t('posStatusSideEffectVat'),
+          },
+          postProcessSuffix: (steps) => i18nTr(t, 'posStatusPostProcessSuffix', { steps }),
         },
       })
       if (!outcome.ok) return
@@ -703,7 +711,7 @@ export function TableOrderPanel({
       const targetStatus = resolveCounterKbankQrCloseStatus(orderTypeKey)
       const statusRes = await updatePosOrderStatus({ id, status: targetStatus })
       if (!statusRes.success) {
-        await appAlert(buildPosStatusFailureMessage(statusRes, t('processFail') || '처리 실패'))
+        await appAlert(buildLocalizedPosStatusFailureMessage(statusRes, t, t('processFail'), lang))
         return
       }
       clearPendingEdcClose(id)
@@ -736,19 +744,19 @@ export function TableOrderPanel({
       const first = await updatePosOrderStatus({ id, status: targetStatus })
       if (!first.success) {
         const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
-        const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+        const msg = buildLocalizedPosStatusFailureMessage(first, t, t('processFail'), lang)
         if (!canRetry) {
           await appAlert(msg)
           return
         }
-        if (!await appConfirm(`${msg}\n\n후속 처리를 다시 시도할까요?`)) return
+        if (!await appConfirm(`${msg}\n\n${t('posStatusRetryConfirm')}`)) return
         const retried = await updatePosOrderStatus({
           id,
           status: targetStatus,
           retrySideEffects: true,
         })
         if (!retried.success) {
-          await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+          await appAlert(buildLocalizedPosStatusFailureMessage(retried, t, t('processFail'), lang))
           return
         }
       }
@@ -834,19 +842,19 @@ export function TableOrderPanel({
       const resolved: PosOrderStatusUpdateResult | null = await (async () => {
         if (first.success) return first
         const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
-        const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+        const msg = buildLocalizedPosStatusFailureMessage(first, t, t('processFail'), lang)
         if (!canRetry) {
           await appAlert(msg)
           return null
         }
-        if (!await appConfirm(`${msg}\n\n후속 처리를 다시 시도할까요?`)) return null
+        if (!await appConfirm(`${msg}\n\n${t('posStatusRetryConfirm')}`)) return null
         const retried = await updatePosOrderStatus({
           id,
           status: 'ready',
           retrySideEffects: true,
         })
         if (!retried.success) {
-          await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+          await appAlert(buildLocalizedPosStatusFailureMessage(retried, t, t('processFail'), lang))
           return null
         }
         return retried
@@ -1382,19 +1390,19 @@ export function TableOrderPanel({
                     const first = await updatePosOrderStatus({ id, status: 'completed' })
                     if (!first.success) {
                       const canRetry = first.statusAlreadyApplied || first.retryAfterQueue
-                      const msg = buildPosStatusFailureMessage(first, t('processFail') || '처리 실패')
+                      const msg = buildLocalizedPosStatusFailureMessage(first, t, t('processFail'), lang)
                       if (!canRetry) {
                         await appAlert(msg)
                         return
                       }
-                      if (!await appConfirm(`${msg}\n\n후속 처리를 다시 시도할까요?`)) return
+                      if (!await appConfirm(`${msg}\n\n${t('posStatusRetryConfirm')}`)) return
                       const retried = await updatePosOrderStatus({
                         id,
                         status: 'completed',
                         retrySideEffects: true,
                       })
                       if (!retried.success) {
-                        await appAlert(buildPosStatusFailureMessage(retried, t('processFail') || '처리 실패'))
+                        await appAlert(buildLocalizedPosStatusFailureMessage(retried, t, t('processFail'), lang))
                         return
                       }
                     }

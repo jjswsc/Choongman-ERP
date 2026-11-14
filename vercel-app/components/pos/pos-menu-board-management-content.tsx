@@ -181,7 +181,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
           </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5" onClick={openNew}>
             <Plus className="h-3.5 w-3.5" />
-            {t('new') || '신규'}
+            {t('posNew')}
           </Button>
         </div>
       </div>

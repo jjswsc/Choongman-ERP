@@ -12,6 +12,8 @@ import {
   postPosQueueTicketAction,
 } from '@/lib/api-client/pos-queue-tickets'
 import { tOr, tr } from '@/lib/i18n'
+import { useLang } from '@/lib/lang-context'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { shouldQueueTableQrPrintToMainPos } from '@/lib/print-qr-table-thermal-slip'
 import { printPosQueueTicketSlip, resolvePosQueuePublicUrl } from '@/lib/print-pos-queue-ticket-slip'
 import {
@@ -57,6 +59,7 @@ export function PosQueueWaitlistDialog(props: {
   onWaitingCountChange?: (count: number) => void
 }) {
   const { open, onOpenChange, storeCode, t, onWaitingCountChange } = props
+  const { lang } = useLang()
   const [tickets, setTickets] = React.useState<PosQueueTicket[]>([])
   const [nowMs, setNowMs] = React.useState(0)
   const [partySize, setPartySize] = React.useState(2)
@@ -162,7 +165,7 @@ export function PosQueueWaitlistDialog(props: {
       const res = await postPosQueueTicketAction(ticket.id, action)
       if (!res.ok) {
         if (res.conflict) setNotice(tOr(t, 'posQueueConflict', '다른 기기에서 먼저 변경했습니다. 목록을 새로고침했습니다.'))
-        else await appAlert(res.message)
+        else await appAlert(localizeApiMessage(res.message, t, tOr(t, 'posQueueActionFailed', '처리하지 못했습니다.'), lang))
         await load()
         return
       }

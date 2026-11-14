@@ -749,18 +749,18 @@ export default function PosTerminalPage() {
         onConfirm: appConfirm,
         failMessageFallback: t('processFail') || '처리 실패',
         i18n: {
-          retryConfirm: t('posStatusRetryConfirm') || '후속 처리를 다시 시도할까요?',
+          retryConfirm: t('posStatusRetryConfirm'),
+          localizeMessage: (message, fallback) => localizeApiMessage(message, t, fallback, lang),
           sideEffectLabels: {
-            stock: t('posStatusSideEffectStock') || '재고',
-            journal: t('posStatusSideEffectJournal') || '분개',
-            vat: t('posStatusSideEffectVat') || '부가세',
+            stock: t('posStatusSideEffectStock'),
+            journal: t('posStatusSideEffectJournal'),
+            vat: t('posStatusSideEffectVat'),
           },
-          postProcessSuffix: (steps) =>
-            tr(t, 'posStatusPostProcessSuffix', { steps }) || `(${steps} 후처리)`,
+          postProcessSuffix: (steps) => tr(t, 'posStatusPostProcessSuffix', { steps }),
         },
       })
     },
-    [isPosDemo, t]
+    [isPosDemo, lang, t]
   )
 
   /**
@@ -6991,6 +6991,26 @@ export default function PosTerminalPage() {
     return Date.now() < until
   }, [])
 
+  const kbankActionLabel = useCallback(
+    (label: string): string => {
+      switch (String(label || '').trim().toLowerCase()) {
+        case 'generate qr':
+          return t('posKbankLabelGenerateQr')
+        case 'inquiry':
+          return t('posKbankInquiry')
+        case 'void':
+          return t('posKbankVoid')
+        case 'cancel':
+          return t('posKbankCancel')
+        case 'settlement':
+          return t('posKbankSettlement')
+        default:
+          return label
+      }
+    },
+    [t]
+  )
+
   const alertIfKbankApiPaused = useCallback(
     async (label: string): Promise<boolean> => {
       if (!isKbankApiPaused()) return true
@@ -6999,12 +7019,11 @@ export default function PosTerminalPage() {
       await appAlert(
         String(t('posKbankRateLimitAlert') || '')
           .replace('{minutes}', String(waitMin))
-          .replace('{label}', label) ||
-          `KBank API rate limit exceeded. Wait about ${waitMin} minute(s), then try ${label} once (do not tap repeatedly).`
+          .replace('{label}', kbankActionLabel(label))
       )
       return false
     },
-    [isKbankApiPaused, t]
+    [isKbankApiPaused, kbankActionLabel, t]
   )
 
   const enforceKbankCooldown = useCallback(
@@ -7041,14 +7060,14 @@ export default function PosTerminalPage() {
           return false
         }
         await appAlert(
-          `KBank rate-limit protection: wait about ${waitSec}s before ${label}.`
+          tr(t, 'posKbankRateLimitProtection', { sec: waitSec, label: kbankActionLabel(label) })
         )
         return false
       }
       targetRef.current = now
       return true
     },
-    [t]
+    [kbankActionLabel, t]
   )
 
   const openKbankOutcomeModal = useCallback(
@@ -7945,7 +7964,7 @@ export default function PosTerminalPage() {
               rateLimited
                 ? String(t('posKbankRateLimitAlert') || errMsg)
                     .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
-                    .replace('{label}', 'Inquiry') || errMsg
+                    .replace('{label}', kbankActionLabel('Inquiry')) || errMsg
                 : errMsg
             )
           }
@@ -8041,7 +8060,7 @@ export default function PosTerminalPage() {
                 rateLimited
                   ? String(t('posKbankRateLimitAlert') || inqErr)
                       .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
-                      .replace('{label}', 'Inquiry') || inqErr
+                      .replace('{label}', kbankActionLabel('Inquiry')) || inqErr
                   : inqErr
               )
               setKbankOpsLastResult(`[VOID-INQUIRY] ${JSON.stringify(inq)}`)
@@ -8096,7 +8115,7 @@ export default function PosTerminalPage() {
               rateLimited
                 ? String(t('posKbankRateLimitAlert') || voidErr)
                     .replace('{minutes}', String(Math.ceil(KBANK_RATE_LIMIT_BACKOFF_MS / 60_000)))
-                    .replace('{label}', 'Void') || voidErr
+                    .replace('{label}', kbankActionLabel('Void')) || voidErr
                 : voidErr
             )
           }
@@ -8154,6 +8173,7 @@ export default function PosTerminalPage() {
       clearUnpaidOrderAfterKbankQrCancel,
       clearKbankQrSession,
       alertIfKbankApiPaused,
+      kbankActionLabel,
       noteKbankRateLimitResponse,
       lang,
     ]
@@ -8749,7 +8769,7 @@ export default function PosTerminalPage() {
       })
       if (!res.success) {
         await appAlert(
-          translateApiMessage(String(res.message || ''), t) || t('processFail') || '실패'
+          localizeApiMessage(String(res.message || ''), t, t('processFail'), lang)
         )
         return
       }

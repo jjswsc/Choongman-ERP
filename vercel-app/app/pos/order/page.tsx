@@ -137,12 +137,14 @@ import {
   collectPosOptionPickerStepValues,
   resolvePosOptionPickerMatch,
 } from "@/lib/pos-option-picker-resolve"
-import { shouldOpenChickenOptionPicker } from "@/lib/pos-chicken-option-picker-plan"
+import {
+  resolveChickenOptionGroupLabel,
+  shouldOpenChickenOptionPicker,
+} from "@/lib/pos-chicken-option-picker-plan"
 import {
   filterOptionSelectionGroupsForAudience,
   filterPosOptionsForVisibleGroups,
   inferOptionSelectionGroupsFromOptions,
-  resolvePosOptionGroupRequired,
   resolveStepAudienceFromOrderType,
 } from "@/lib/pos-option-selection-groups"
 import type { PosDescriptionChannel } from "@/lib/pos-menu-display-description"
@@ -2713,7 +2715,8 @@ export default function PosOrderPage() {
                     </Select>
                     {orderType === "dine_in" && (
                       <p className="text-[11px] leading-snug text-muted-foreground">
-                        {"테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab Dine in/Line man Dine In/Shopee Dine in 중에서 선택하세요."}
+                        {t("posDeliveryTableAppPayHintOrder") ||
+                          "테이블 결제에서 배달앱을 선택하면 주문은 자동으로 Dine in으로 인식됩니다. 채널은 Grab Dine in/Line man Dine In/Shopee Dine in 중에서 선택하세요."}
                       </p>
                     )}
                   </div>
@@ -3073,7 +3076,7 @@ export default function PosOrderPage() {
             if (useMultiStep) {
               const groupKey = activeStepGroups[optionPickerStep]
               const groupCfg = groupConfigMap.get(groupKey)
-              const groupRequired = resolvePosOptionGroupRequired(groupKey, groupCfg)
+              const groupRequired = groupCfg?.required !== false
               const values = collectPosOptionPickerStepValues({
                 groupKey,
                 groups: activeStepGroups,
@@ -3105,18 +3108,6 @@ export default function PosOrderPage() {
                   setOptionPickerStep((s) => s + 1)
                 }
               }
-              const groupLabels: Record<string, string> = {
-                size: "사이즈",
-                part: "부위",
-                topping: "토핑",
-                bone: "Bone / Boneless",
-                type: "타입",
-                set_main: "세트 메인",
-                side: "사이드",
-                drink: "음료",
-                soup: "스프",
-                rice: "밥",
-              }
               const chickenPriceListRows =
                 isChickenBasePrice && shouldUseChickenMultistepPriceList(isChickenBasePrice, groupKey)
                   ? collectChickenMultistepPriceListRows({
@@ -3133,7 +3124,7 @@ export default function PosOrderPage() {
                 groupKey === "part" &&
                 activeStepGroups.some((g) => g === "sidedish" || g === "side")
               const groupLabelText =
-                (String(groupCfg?.label ?? "").trim() || groupLabels[groupKey] || groupKey) +
+                resolveChickenOptionGroupLabel(groupKey, groupCfg, t) +
                 (groupRequired ? "" : ` (${t("optional") || "선택"})`)
               return (
                 <div className="flex flex-col gap-3 py-2">
@@ -3228,7 +3219,7 @@ export default function PosOrderPage() {
                         }
                       }}
                     >
-                      {t("skip") || "건너뛰기"}
+                      {t("posOptionSkip")}
                     </Button>
                   )}
                   {useBarBqTwoPhase && barBqPickerPhase === "ancillary" ? (

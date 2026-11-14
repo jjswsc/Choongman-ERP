@@ -295,8 +295,18 @@ export function PosChickenOptionPickerPanel({
           </div>
         )}
         {!groupRequired && (
-          <Button variant="outline" size="sm" className="text-xs" onClick={() => act(handleSkip)}>
-            {t("skip") || "건너뛰기"}
+          <Button
+            type="button"
+            variant="outline"
+            size={tone === "guest" ? "default" : "sm"}
+            className={
+              tone === "guest"
+                ? "mt-1 w-full rounded-xl border-2 border-stone-300 bg-white py-3 text-sm font-semibold text-stone-800 hover:border-amber-500 hover:bg-amber-50"
+                : "text-xs"
+            }
+            onClick={() => act(handleSkip)}
+          >
+            {t("posOptionSkip")}
           </Button>
         )}
         {plan.useTwoPhase && twoPhasePhase === "ancillary" ? (

@@ -17,7 +17,7 @@ import { useT } from '@/lib/i18n'
 import { appAlert } from '@/lib/app-message'
 import { savePosDrawerPin, getPosPrinterSettings } from '@/lib/api-client'
 import { isValidPosDrawerPin } from '@/lib/pos-drawer-pin'
-import { translateApiMessage } from '@/lib/translate-api-message'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 
 export type PosDrawerPinSettingsDialogProps = {
   open: boolean
@@ -117,7 +117,7 @@ export function PosDrawerPinSettingsDialog({
         ...(configured ? { currentPin } : {}),
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || t('msg_save_failed') || '저장에 실패했습니다.')
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail'), lang))
         return
       }
       await appAlert(t('posDrawerPinSaved') || '금전 서랍 PIN이 저장되었습니다.')
@@ -142,7 +142,7 @@ export function PosDrawerPinSettingsDialog({
         currentPin,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || t('msg_save_failed') || '저장에 실패했습니다.')
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail'), lang))
         return
       }
       await appAlert(t('posDrawerPinCleared') || '금전 서랍 PIN이 해제되었습니다.')

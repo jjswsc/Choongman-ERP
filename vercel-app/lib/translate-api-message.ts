@@ -162,6 +162,19 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "이미 주문이 있는 테이블입니다. 빈 테이블로 이동하거나 합석 기능을 사용해 주세요.": "posTableMoveTargetOccupied",
   "완료·취소된 주문은 이동할 수 없습니다.": "posTableMoveClosedOrder",
 
+  // POS 주문 상태/수정 API
+  "주문 ID가 필요합니다.": "posApiOrderIdRequired",
+  "유효하지 않은 상태입니다.": "posApiInvalidStatus",
+  "해당 매장에 대한 권한이 없습니다.": "posApiStorePermissionDenied",
+  "상태는 이미 반영됐지만 후속 처리에 실패했습니다. 다시 시도해 주세요.": "posApiStatusAppliedSideEffectsFailed",
+  "취소/환불된 주문은 완료 상태로 되돌릴 수 없습니다.": "posApiCannotCompleteCancelled",
+  "주문 상태는 변경됐지만 후속 처리 일부가 실패했습니다. 재시도해 주세요.": "posApiStatusChangedSideEffectsPartial",
+  "주문 항목이 없습니다.": "posApiOrderItemsEmpty",
+  "이미 취소·환불된 주문입니다. 목록을 새로고침해 주세요.": "posApiAlreadyCancelledRefresh",
+  "취소 주문은 변경할 수 없습니다.": "posApiCancelledOrderImmutable",
+  "주문 항목을 찾을 수 없습니다.": "posApiOrderItemNotFound",
+  "세트 하위 항목 키가 유효하지 않습니다.": "posApiInvalidSetChildKey",
+
   // POS 단말 역할 제한
   "단말 대수 설정은 본사(OFFICE) 직원만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",
   "단말 대수 설정은 POS 관리자만 변경할 수 있습니다.": "posDeviceRoleLimitsAdminDenied",

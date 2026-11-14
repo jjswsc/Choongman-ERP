@@ -22,7 +22,18 @@ import {
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { translateApiMessage } from "@/lib/translate-api-message"
+import { localizeApiMessage } from "@/lib/translate-api-message"
+
+type ApiMessageCtx = { t: (k: string) => string; lang: string }
+
+function copyFailMessage(
+  message: string | undefined,
+  tr: (key: string, fallback: string) => string,
+  ctx?: ApiMessageCtx
+): string {
+  const fallback = tr("msg_save_fail_detail", "저장에 실패했습니다.")
+  return localizeApiMessage(message, ctx?.t ?? ((k) => tr(k, k)), fallback, ctx?.lang ?? "ko")
+}
 
 function isSyntheticPaymentMethodId(id: string | undefined): boolean {
   return Boolean(id?.startsWith("syn:"))
@@ -60,7 +71,8 @@ const CUSTOMER_DISPLAY_COPY_KEYS: (keyof PosPrinterSettings)[] = [
 export async function runPosScreenConfigCopyMenu(
   src: string,
   tgt: string,
-  tr: (key: string, fallback: string) => string
+  tr: (key: string, fallback: string) => string,
+  apiCtx?: ApiMessageCtx
 ): Promise<boolean> {
   const s = String(src || "").trim()
   const t = String(tgt || "").trim()
@@ -87,7 +99,7 @@ export async function runPosScreenConfigCopyMenu(
       kioskGroupFontSize: cfg.kioskGroupFontSize,
     })
     if (!res?.success) {
-      await appAlert(translateApiMessage(res?.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+      await appAlert(copyFailMessage(res?.message, tr, apiCtx))
       return false
     }
   }
@@ -98,7 +110,8 @@ export async function runPosScreenConfigCopyMenu(
 export async function runPosScreenConfigCopyCustomerDisplay(
   src: string,
   tgt: string,
-  tr: (key: string, fallback: string) => string
+  tr: (key: string, fallback: string) => string,
+  apiCtx?: ApiMessageCtx
 ): Promise<boolean> {
   const s = String(src || "").trim()
   const t = String(tgt || "").trim()
@@ -119,7 +132,7 @@ export async function runPosScreenConfigCopyCustomerDisplay(
   }
   const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
   if (!res.success) {
-    await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(copyFailMessage(res.message, tr, apiCtx))
     return false
   }
   await appAlert(tr("posScreenConfigDisplayCopyDone", "고객 화면(듀얼 모니터) 설정을 복사해 저장했습니다."))
@@ -129,7 +142,8 @@ export async function runPosScreenConfigCopyCustomerDisplay(
 export async function runPosScreenConfigCopyCooking(
   src: string,
   tgt: string,
-  tr: (key: string, fallback: string) => string
+  tr: (key: string, fallback: string) => string,
+  apiCtx?: ApiMessageCtx
 ): Promise<boolean> {
   const s = String(src || "").trim()
   const t = String(tgt || "").trim()
@@ -150,7 +164,7 @@ export async function runPosScreenConfigCopyCooking(
   }
   const res = await savePosPrinterSettings(posPrinterSettingsToSaveParams(merged))
   if (!res.success) {
-    await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(copyFailMessage(res.message, tr, apiCtx))
     return false
   }
   await appAlert(tr("posScreenConfigCookingCopyDone", "조리 시간·색상 규칙을 복사해 저장했습니다."))
@@ -160,7 +174,8 @@ export async function runPosScreenConfigCopyCooking(
 export async function runPosScreenConfigCopyPayment(
   src: string,
   tgt: string,
-  tr: (key: string, fallback: string) => string
+  tr: (key: string, fallback: string) => string,
+  apiCtx?: ApiMessageCtx
 ): Promise<boolean> {
   const s = String(src || "").trim()
   const t = String(tgt || "").trim()
@@ -180,7 +195,7 @@ export async function runPosScreenConfigCopyPayment(
   for (const it of toDelete) {
     const del = await deletePosPaymentMethodItem({ id: it.id })
     if (!del.success) {
-      await appAlert(translateApiMessage(del.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+      await appAlert(copyFailMessage(del.message, tr, apiCtx))
       return false
     }
   }
@@ -193,7 +208,7 @@ export async function runPosScreenConfigCopyPayment(
       hidden: it.hidden,
     })
     if (!res.success) {
-      await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+      await appAlert(copyFailMessage(res.message, tr, apiCtx))
       return false
     }
   }
@@ -219,7 +234,8 @@ export async function runPosScreenConfigCopyPayment(
 export async function runPosScreenConfigCopyDelivery(
   src: string,
   tgt: string,
-  tr: (key: string, fallback: string) => string
+  tr: (key: string, fallback: string) => string,
+  apiCtx?: ApiMessageCtx
 ): Promise<boolean> {
   const s = String(src || "").trim()
   const t = String(tgt || "").trim()
@@ -247,7 +263,7 @@ export async function runPosScreenConfigCopyDelivery(
     }))
   const res = await savePosDeliveryApps({ storeCode: t, items: payload })
   if (!res.success) {
-    await appAlert(translateApiMessage(res.message, (k) => tr(k, k)) || tr("msg_save_fail_detail", "저장에 실패했습니다."))
+    await appAlert(copyFailMessage(res.message, tr, apiCtx))
     return false
   }
   await appAlert(tr("posScreenConfigDeliveryCopyDone", "배달앱 인식 설정을 복사했습니다."))
@@ -284,21 +300,21 @@ export function PosScreenConfigCopyInline({
     try {
       let ok = false
       if (variant === "menu") {
-        ok = await runPosScreenConfigCopyMenu(source, targetStoreCode, tr)
+        ok = await runPosScreenConfigCopyMenu(source, targetStoreCode, tr, { t, lang })
       } else if (variant === "display") {
-        ok = await runPosScreenConfigCopyCustomerDisplay(source, targetStoreCode, tr)
+        ok = await runPosScreenConfigCopyCustomerDisplay(source, targetStoreCode, tr, { t, lang })
       } else if (variant === "cooking") {
-        ok = await runPosScreenConfigCopyCooking(source, targetStoreCode, tr)
+        ok = await runPosScreenConfigCopyCooking(source, targetStoreCode, tr, { t, lang })
       } else if (variant === "payment") {
-        ok = await runPosScreenConfigCopyPayment(source, targetStoreCode, tr)
+        ok = await runPosScreenConfigCopyPayment(source, targetStoreCode, tr, { t, lang })
       } else {
-        ok = await runPosScreenConfigCopyDelivery(source, targetStoreCode, tr)
+        ok = await runPosScreenConfigCopyDelivery(source, targetStoreCode, tr, { t, lang })
       }
       if (ok) onCopySuccess?.()
     } finally {
       setBusy(false)
     }
-  }, [source, targetStoreCode, tr, variant, onCopySuccess])
+  }, [source, targetStoreCode, tr, t, lang, variant, onCopySuccess])
 
   if (!targetStoreCode || others.length === 0) return null
 

@@ -5,6 +5,8 @@ import { Bitcoin, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { appAlert } from '@/lib/app-message'
+import { useLang } from '@/lib/lang-context'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import {
   getPosCryptoPaymentSettings,
   savePosCryptoPaymentSettings,
@@ -27,6 +29,7 @@ export function PosCryptoSettingsCard({
   storeCode: string
   t: (key: string) => string
 }) {
+  const { lang } = useLang()
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [settings, setSettings] = React.useState<PosCryptoPaymentSettings>(defaultPosCryptoPaymentSettings())
@@ -70,7 +73,7 @@ export function PosCryptoSettingsCard({
         rateSource: settings.rateSource,
       })
       if (!res.success) {
-        await appAlert(tr(res.message || 'msg_save_fail_detail', res.message || '저장에 실패했습니다.'))
+        await appAlert(localizeApiMessage(res.message, t, tr('msg_save_fail_detail', '저장에 실패했습니다.'), lang))
         return
       }
       await appAlert(tr('itemsAlertSaved', '저장되었습니다.'))

@@ -235,7 +235,7 @@ export function PosPaymentSettingsContent() {
                     <tr>
                       <th className="text-left px-2 py-2 w-10">#</th>
                       <th className="text-left px-2 py-2 w-20">{t('posPaymentMethodCategory') || '분류'}</th>
-                      <th className="text-left px-2 py-2">{t('name') || '이름'}</th>
+                      <th className="text-left px-2 py-2">{t('posName')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -290,7 +290,7 @@ export function PosPaymentSettingsContent() {
 
             <div className="flex-1 space-y-4 min-w-0">
               <div>
-                <label className="text-sm font-medium">{t('name') || '이름'}</label>
+                <label className="text-sm font-medium">{t('posName')}</label>
                 <Input
                   className="mt-1"
                   value={editName}

@@ -260,8 +260,15 @@ export function QrTableGuestOptionSheet({
                     sellHall: o.sellHall !== false,
                   }))
                 )
-                // 선택 추가(스프 등)만 있으면 건너뛰기 → 본메뉴 담기 허용
-                if (mustPick.length > 0 && optionIds.length === 0 && !defaultDisplay) {
+                // 선택 추가(스프 등)만 있거나, 앞 단계를 고른 뒤 add/soup만 건너뛴 경우 → 본메뉴 담기 허용
+                const skippedOptionalAfterPriorStep =
+                  Object.keys(optionPickerSelections).length > 0 && optionIds.length === 0 && !defaultDisplay
+                if (
+                  mustPick.length > 0 &&
+                  optionIds.length === 0 &&
+                  !defaultDisplay &&
+                  !skippedOptionalAfterPriorStep
+                ) {
                   return
                 }
                 onPick({ optionIds, optionName })

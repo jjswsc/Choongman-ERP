@@ -16,7 +16,7 @@ import { bangkokTodayYmd } from '@/lib/bangkok-date'
 import { appAlert } from '@/lib/app-message'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { translateApiMessage } from '@/lib/translate-api-message'
+import { localizeApiMessage } from '@/lib/translate-api-message'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
 import { isPosMenuSoldOut, type PosMenuSoldOutScope } from '@/lib/pos-menu-sold-out'
 import { canAccessPosOrder } from '@/lib/permissions'
@@ -55,7 +55,8 @@ function partLabel(stepValue: string, t: (k: string) => string): string {
 export function PosMenuSoldOutContent() {
   const { auth, initialized } = useAuth()
   const router = useRouter()
-  const t = useT(useLang().lang)
+  const { lang } = useLang()
+  const t = useT(lang)
   const storeCode = String(auth?.store || '').trim()
 
   const [mainTab, setMainTab] = React.useState<MainTab>('menus')
@@ -183,7 +184,7 @@ export function PosMenuSoldOutContent() {
         soldOutScope: nextSoldOut ? next : undefined,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail_detail'))
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
         return
       }
       const nextDate =
@@ -226,7 +227,7 @@ export function PosMenuSoldOutContent() {
         soldOutScope: nextSoldOut ? next : undefined,
       })
       if (!res.success) {
-        await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail_detail'))
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
         return
       }
       const nextDate = nextSoldOut

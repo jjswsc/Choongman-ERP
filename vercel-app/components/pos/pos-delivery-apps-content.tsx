@@ -412,7 +412,9 @@ export function PosDeliveryAppsContent() {
                   const partnerID = String(row.partnerMerchantID || '').trim()
                   return (
                     <SelectItem key={merchantID} value={merchantID}>
-                      {partnerID ? `${merchantID} (파트너 ${partnerID})` : merchantID}
+                      {partnerID
+                        ? `${merchantID} ${tr('posDeliveryGrabPartnerSuffix', '(파트너 {id})').replace('{id}', partnerID)}`
+                        : merchantID}
                     </SelectItem>
                   )
                 })
@@ -478,8 +480,12 @@ export function PosDeliveryAppsContent() {
                 : 'border-red-300 bg-red-50 text-red-900'
             )}
           >
-            [{grabLastActionLog.at}] {grabLastActionLog.action === 'status' ? '상태 확인' : '메뉴 갱신'} ·{' '}
-            {grabLastActionLog.ok ? '성공' : '실패'} · {grabLastActionLog.message}
+            [{grabLastActionLog.at}]{' '}
+            {grabLastActionLog.action === 'status'
+              ? tr('posDeliveryGrabCheckStoreStatus', '상태 확인')
+              : tr('posDeliveryGrabMenuRefreshShort', '메뉴 갱신')}{' '}
+            · {grabLastActionLog.ok ? tr('posActionOk', '성공') : tr('posActionFail', '실패')} ·{' '}
+            {grabLastActionLog.message}
           </div>
         ) : null}
       </div>
