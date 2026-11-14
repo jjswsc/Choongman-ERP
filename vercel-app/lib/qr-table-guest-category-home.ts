@@ -13,8 +13,20 @@ export function isQrGuestCategoryHomePilotStore(storeCode: string | null | undef
   return PILOT_STORE_CODES.has(s)
 }
 
-/** 대표메뉴 히어로 — 목업 대비 약 절반 높이 */
-export const QR_GUEST_HOME_HERO_HEIGHT_CLASS = 'h-[7.5rem]'
+/** 대표·신메뉴 한 줄 반반 배너 높이 */
+export const QR_GUEST_HOME_BANNER_HEIGHT_CLASS = 'h-[5.25rem]'
 
-/** 신메뉴 안내 칸 */
-export const QR_GUEST_HOME_NEW_MENU_HEIGHT_CLASS = 'h-[6.5rem]'
+/** @deprecated 반반 배치 이후 단일 높이 상수 사용 */
+export const QR_GUEST_HOME_HERO_HEIGHT_CLASS = QR_GUEST_HOME_BANNER_HEIGHT_CLASS
+/** @deprecated 반반 배치 이후 단일 높이 상수 사용 */
+export const QR_GUEST_HOME_NEW_MENU_HEIGHT_CLASS = QR_GUEST_HOME_BANNER_HEIGHT_CLASS
+
+/**
+ * 손님 화면용 테이블 표시 — POS 레이아웃의 "14번" 등 한국어 접미사를 빼고 숫자/이름만.
+ */
+export function formatQrGuestTableLabel(raw: string | null | undefined): string {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  const stripped = s.replace(/\s*번\s*$/u, '').trim()
+  return stripped || s
+}

@@ -57,7 +57,10 @@ import { QrTableGuestOptionSheet, type QrGuestOptionPick } from '@/components/qr
 import { QrTableGuestCategoryNav } from '@/components/qr-table/qr-table-guest-category-nav'
 import { QrTableGuestCategoryHome } from '@/components/qr-table/qr-table-guest-category-home'
 import { QrTableGuestScrollRow } from '@/components/qr-table/qr-table-guest-scroll-row'
-import { isQrGuestCategoryHomePilotStore } from '@/lib/qr-table-guest-category-home'
+import {
+  formatQrGuestTableLabel,
+  isQrGuestCategoryHomePilotStore,
+} from '@/lib/qr-table-guest-category-home'
 import { orderPosMainCategoryTabs, uniqueSubcategoriesForMainMenu } from '@/lib/pos-promo-constants'
 import { emptyPosCategoryTabOrder, sanitizePosCategoryTabOrder, type PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
@@ -510,7 +513,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         }
         setSettings(data.settings || null)
         setTiers(data.tiers || [])
-        setTableName(data.token?.tableName || '')
+        setTableName(formatQrGuestTableLabel(data.token?.tableName || ''))
         setStoreCode(data.token?.storeCode || '')
         if (data.settings?.entryPaymentMode === 'prepay') setEntryChoice('prepay')
         if (data.settings?.extrasPaymentMode === 'prepay') setExtrasChoice('prepay')
