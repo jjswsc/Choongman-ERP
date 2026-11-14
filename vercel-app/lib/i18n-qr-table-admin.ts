@@ -150,6 +150,14 @@ export const I18N_QR_TABLE_ADMIN_KO: Record<string, string> = {
   qrTableGuestHomeCategoryUploadHint: 'JPG/PNG/WebP · 4MB 이하',
   qrTableGuestHomeCategoryUploadFail: '이미지 업로드에 실패했습니다.',
   qrTableGuestHomeCategoryClear: '이미지 지우기',
+  qrTableGuestHomeMenusApplyAllConfirm:
+    '전체 {n}개 매장에 대표·신메뉴를 동일하게 적용할까요?\n· 대표 {f}개 · 신메뉴 {m}개\n각 매장에 있던 기존 대표·신메뉴 선택은 덮어씁니다.',
+  qrTableGuestHomeMenusScopeAllHint:
+    '지금 체크한 대표·신메뉴 목록을 모든 매장에 그대로 덮어씁니다. 매장마다 메뉴가 다르면 없는 메뉴 id는 손님 화면에 안 나옵니다.',
+  qrTableGuestHomeCategoryApplyAllConfirm:
+    '전체 {n}개 매장에 카테고리 이미지를 동일하게 적용할까요?\n· 이미지 지정 {c}개 대분류\n각 매장에 있던 기존 카테고리 이미지는 덮어씁니다.',
+  qrTableGuestHomeCategoryScopeAllHint:
+    '지금 지정한 대분류 이미지를 모든 매장에 덮어씁니다. 대분류 이름이 같은 매장에서만 보입니다.',
   qrTableGuestHomeBannersSchemaMissing:
     '손님 홈 배너·메뉴·카테고리 이미지 컬럼이 없습니다. Supabase에서 pos_qr_guest_home_banners_01_ddl.sql · pos_qr_guest_home_menu_ids_01_ddl.sql · pos_qr_guest_home_category_images_01_ddl.sql 을 먼저 실행해 주세요.',
   qrTableScanTh: 'สแกนเพื่อสั่งอาหาร',
@@ -321,6 +329,14 @@ export const I18N_QR_TABLE_ADMIN_EN: Record<string, string> = {
   qrTableGuestHomeCategoryUploadHint: 'JPG/PNG/WebP · max 4MB',
   qrTableGuestHomeCategoryUploadFail: 'Image upload failed.',
   qrTableGuestHomeCategoryClear: 'Clear image',
+  qrTableGuestHomeMenusApplyAllConfirm:
+    'Apply the same signature & new menus to all {n} stores?\n· Signature {f} · New {m}\nExisting picks in each store will be overwritten.',
+  qrTableGuestHomeMenusScopeAllHint:
+    'Overwrites signature/new menu lists on every store. Menus missing in a store simply won’t appear there.',
+  qrTableGuestHomeCategoryApplyAllConfirm:
+    'Apply the same category images to all {n} stores?\n· {c} categories with images\nExisting category images in each store will be overwritten.',
+  qrTableGuestHomeCategoryScopeAllHint:
+    'Overwrites category images on every store. Only categories with the same main name will show them.',
   qrTableGuestHomeBannersSchemaMissing:
     'Guest home columns are missing. Run pos_qr_guest_home_banners_01_ddl.sql, pos_qr_guest_home_menu_ids_01_ddl.sql, and pos_qr_guest_home_category_images_01_ddl.sql in Supabase first.',
   qrTableScanTh: 'สแกนเพื่อสั่งอาหาร',
@@ -492,6 +508,14 @@ export const I18N_QR_TABLE_ADMIN_TH: Record<string, string> = {
   qrTableGuestHomeCategoryUploadHint: 'JPG/PNG/WebP · ไม่เกิน 4MB',
   qrTableGuestHomeCategoryUploadFail: 'อัปโหลดรูปไม่สำเร็จครับ',
   qrTableGuestHomeCategoryClear: 'ลบรูป',
+  qrTableGuestHomeMenusApplyAllConfirm:
+    'จะใช้เมนูแนะนำ/เมนูใหม่ชุดเดียวกันกับทั้ง {n} สาขาไหมครับ?\n· แนะนำ {f} · ใหม่ {m}\nรายการเดิมของแต่ละสาขาจะถูกเขียนทับครับ',
+  qrTableGuestHomeMenusScopeAllHint:
+    'จะเขียนทับรายการเมนูแนะนำ/เมนูใหม่ทุกสาขา ถ้าสาขาไหนไม่มีเมนูนั้น จะไม่แสดงในหน้าลูกค้าครับ',
+  qrTableGuestHomeCategoryApplyAllConfirm:
+    'จะใช้รูปหมวดหมู่ชุดเดียวกันกับทั้ง {n} สาขาไหมครับ?\n· หมวดที่มีรูป {c}\nรูปเดิมของแต่ละสาขาจะถูกเขียนทับครับ',
+  qrTableGuestHomeCategoryScopeAllHint:
+    'จะเขียนทับรูปหมวดหมู่ทุกสาขา แสดงเฉพาะหมวดที่ชื่อหมวดหลักตรงกันครับ',
   qrTableGuestHomeBannersSchemaMissing:
     'ยังไม่มีคอลัมน์หน้าแรก กรุณารัน pos_qr_guest_home_banners_01_ddl.sql · pos_qr_guest_home_menu_ids_01_ddl.sql · pos_qr_guest_home_category_images_01_ddl.sql ใน Supabase ก่อนครับ',
   qrTableScanTh: 'สแกนเพื่อสั่งอาหาร',

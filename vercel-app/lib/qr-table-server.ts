@@ -494,25 +494,33 @@ export async function upsertQrOrderStoreSettings(
   return loadQrOrderStoreSettings(storeCode, tenantId)
 }
 
-/** QR 숨김 메뉴를 여러 매장에 병합 적용 — 다른 설정은 그대로, 바뀌는 매장만 저장 */
-export async function applyQrHiddenMenusToStores(
-  params: { storeCodes: string[]; hideMenuIds: number[]; showMenuIds: number[] },
+type QrMultiStoreApplyResult = {
+  updated: string[]
+  unchanged: string[]
+  failed: Array<{ storeCode: string; message: string }>
+}
+
+async function applyQrSettingsToStores(
+  storeCodes: string[],
+  patchOne: (cur: QrOrderStoreSettings, storeCode: string) => {
+    next: QrOrderStoreSettings
+    changed: boolean
+  },
   tenantId?: string | null
-): Promise<{ updated: string[]; unchanged: string[]; failed: Array<{ storeCode: string; message: string }> }> {
-  const codes = [...new Set(params.storeCodes.map((c) => String(c || '').trim()).filter(Boolean))].slice(0, 300)
+): Promise<QrMultiStoreApplyResult> {
+  const codes = [...new Set(storeCodes.map((c) => String(c || '').trim()).filter(Boolean))].slice(0, 300)
   const updated: string[] = []
   const unchanged: string[] = []
   const failed: Array<{ storeCode: string; message: string }> = []
   const runOne = async (storeCode: string) => {
     try {
       const cur = await loadQrOrderStoreSettings(storeCode, tenantId)
-      const before = normalizeQrHiddenMenuIds(cur.hiddenMenuIds)
-      const next = mergeQrHiddenMenuIds(before, params.hideMenuIds, params.showMenuIds)
-      if (before.join(',') === next.join(',')) {
+      const { next, changed } = patchOne(cur, storeCode)
+      if (!changed) {
         unchanged.push(storeCode)
         return
       }
-      await upsertQrOrderStoreSettings({ ...cur, storeCode, hiddenMenuIds: next }, tenantId)
+      await upsertQrOrderStoreSettings(next, tenantId)
       updated.push(storeCode)
     } catch (e) {
       failed.push({ storeCode, message: e instanceof Error ? e.message : String(e || 'error') })
@@ -523,6 +531,84 @@ export async function applyQrHiddenMenusToStores(
     await Promise.all(codes.slice(i, i + CONCURRENCY).map(runOne))
   }
   return { updated, unchanged, failed }
+}
+
+/** QR 숨김 메뉴를 여러 매장에 병합 적용 — 다른 설정은 그대로, 바뀌는 매장만 저장 */
+export async function applyQrHiddenMenusToStores(
+  params: { storeCodes: string[]; hideMenuIds: number[]; showMenuIds: number[] },
+  tenantId?: string | null
+): Promise<QrMultiStoreApplyResult> {
+  return applyQrSettingsToStores(
+    params.storeCodes,
+    (cur, storeCode) => {
+      const before = normalizeQrHiddenMenuIds(cur.hiddenMenuIds)
+      const nextIds = mergeQrHiddenMenuIds(before, params.hideMenuIds, params.showMenuIds)
+      return {
+        changed: before.join(',') !== nextIds.join(','),
+        next: { ...cur, storeCode, hiddenMenuIds: nextIds },
+      }
+    },
+    tenantId
+  )
+}
+
+/** 손님 QR 홈 대표·신메뉴 목록을 여러 매장에 동일 적용(덮어쓰기) */
+export async function applyQrGuestHomeMenusToStores(
+  params: {
+    storeCodes: string[]
+    guestHomeFeaturedMenuIds: number[]
+    guestHomeNewMenuIds: number[]
+  },
+  tenantId?: string | null
+): Promise<QrMultiStoreApplyResult> {
+  const featured = normalizeQrHiddenMenuIds(params.guestHomeFeaturedMenuIds)
+  const neu = normalizeQrHiddenMenuIds(params.guestHomeNewMenuIds)
+  const featuredKey = featured.join(',')
+  const newKey = neu.join(',')
+  return applyQrSettingsToStores(
+    params.storeCodes,
+    (cur, storeCode) => {
+      const beforeF = normalizeQrHiddenMenuIds(cur.guestHomeFeaturedMenuIds).join(',')
+      const beforeN = normalizeQrHiddenMenuIds(cur.guestHomeNewMenuIds).join(',')
+      return {
+        changed: beforeF !== featuredKey || beforeN !== newKey,
+        next: {
+          ...cur,
+          storeCode,
+          guestHomeFeaturedMenuIds: featured,
+          guestHomeNewMenuIds: neu,
+        },
+      }
+    },
+    tenantId
+  )
+}
+
+function categoryImageUrlsKey(raw: unknown): string {
+  const map = normalizeQrGuestHomeCategoryImageUrls(raw)
+  return Object.keys(map)
+    .sort()
+    .map((k) => `${k}=${map[k]}`)
+    .join('\n')
+}
+
+/** 손님 QR 홈 카테고리 이미지를 여러 매장에 동일 적용(덮어쓰기) */
+export async function applyQrGuestHomeCategoryImagesToStores(
+  params: { storeCodes: string[]; guestHomeCategoryImageUrls: Record<string, string> },
+  tenantId?: string | null
+): Promise<QrMultiStoreApplyResult> {
+  const urls = normalizeQrGuestHomeCategoryImageUrls(params.guestHomeCategoryImageUrls)
+  const key = categoryImageUrlsKey(urls)
+  return applyQrSettingsToStores(
+    params.storeCodes,
+    (cur, storeCode) => {
+      return {
+        changed: categoryImageUrlsKey(cur.guestHomeCategoryImageUrls) !== key,
+        next: { ...cur, storeCode, guestHomeCategoryImageUrls: urls },
+      }
+    },
+    tenantId
+  )
 }
 
 export async function loadBuffetTiersForStore(

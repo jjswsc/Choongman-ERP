@@ -303,6 +303,45 @@ export async function qrTableAdminApplyHiddenMenusToStores(body: {
   }>(res)
 }
 
+export async function qrTableAdminApplyGuestHomeMenusToStores(body: {
+  storeCode: string
+  storeCodes: string[]
+  guestHomeFeaturedMenuIds: number[]
+  guestHomeNewMenuIds: number[]
+}) {
+  const res = await apiFetch('/api/qr-table/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'applyGuestHomeMenusToStores', ...body }),
+  })
+  return parseJson<{
+    success: boolean
+    updated?: string[]
+    unchanged?: string[]
+    failed?: Array<{ storeCode: string; message: string }>
+    message?: string
+  }>(res)
+}
+
+export async function qrTableAdminApplyGuestHomeCategoryImagesToStores(body: {
+  storeCode: string
+  storeCodes: string[]
+  guestHomeCategoryImageUrls: Record<string, string>
+}) {
+  const res = await apiFetch('/api/qr-table/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'applyGuestHomeCategoryImagesToStores', ...body }),
+  })
+  return parseJson<{
+    success: boolean
+    updated?: string[]
+    unchanged?: string[]
+    failed?: Array<{ storeCode: string; message: string }>
+    message?: string
+  }>(res)
+}
+
 export async function qrTableStaffOpenSession(body: {
   storeCode: string
   tableName: string

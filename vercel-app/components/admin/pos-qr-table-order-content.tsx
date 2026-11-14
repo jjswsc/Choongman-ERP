@@ -15,6 +15,8 @@ import {
 import { useStoreList } from '@/lib/api-client'
 import {
   qrTableAdminAction,
+  qrTableAdminApplyGuestHomeCategoryImagesToStores,
+  qrTableAdminApplyGuestHomeMenusToStores,
   qrTableAdminApplyHiddenMenusToStores,
   qrTableAdminGet,
   qrTableAdminSaveSettings,
@@ -126,6 +128,10 @@ export function PosQrTableOrderContent() {
   const [hiddenSaving, setHiddenSaving] = React.useState(false)
   const [homeMenuSearch, setHomeMenuSearch] = React.useState('')
   const [homeMenuTab, setHomeMenuTab] = React.useState<'featured' | 'new'>('featured')
+  const [homeMenuScope, setHomeMenuScope] = React.useState<'store' | 'all'>('store')
+  const [homeMenuSaving, setHomeMenuSaving] = React.useState(false)
+  const [categoryImageScope, setCategoryImageScope] = React.useState<'store' | 'all'>('store')
+  const [categoryImageSaving, setCategoryImageSaving] = React.useState(false)
   const [categoryImageUploading, setCategoryImageUploading] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [editing, setEditing] = React.useState(false)
@@ -287,6 +293,8 @@ export function PosQrTableOrderContent() {
 
   React.useEffect(() => {
     setHiddenScope('store')
+    setHomeMenuScope('store')
+    setCategoryImageScope('store')
   }, [storeCode])
 
   const alertApiError = React.useCallback(
@@ -369,6 +377,103 @@ export function PosQrTableOrderContent() {
     return true
   }
 
+  async function showMultiStoreApplyResult(res: {
+    updated?: string[]
+    unchanged?: string[]
+    failed?: Array<{ storeCode: string; message: string }>
+    message?: string
+  }) {
+    if (!res.updated && !res.unchanged) {
+      await alertApiError(
+        res.message === 'office_only'
+          ? tr('qrTableHiddenMenusOfficeOnly', '전체 매장 적용은 오피스 직원 이상만 할 수 있습니다.')
+          : res.message || 'save_failed'
+      )
+      return
+    }
+    const failed = res.failed || []
+    let msg = tr(
+      'qrTableHiddenMenusApplyAllDone',
+      '이 매장 저장 완료. 다른 매장: 변경 {u}곳 · 이미 같음 {k}곳'
+    )
+      .replace('{u}', String((res.updated || []).length))
+      .replace('{k}', String((res.unchanged || []).length))
+    if (failed.length) {
+      msg += `\n${tr('qrTableHiddenMenusApplyAllFailed', '실패 {f}곳').replace('{f}', String(failed.length))}: ${failed
+        .map((f) => f.storeCode)
+        .join(', ')}`
+    }
+    await appAlert(msg)
+  }
+
+  async function saveHomeMenus() {
+    const otherStores = (posStoreOptions || []).map((s) => s.code).filter((c) => c && c !== storeCode)
+    if (!(canApplyAllStores && homeMenuScope === 'all' && otherStores.length > 0)) {
+      await saveSettings()
+      return
+    }
+    const featured = settings.guestHomeFeaturedMenuIds || []
+    const neu = settings.guestHomeNewMenuIds || []
+    const ok = await appConfirm(
+      tr(
+        'qrTableGuestHomeMenusApplyAllConfirm',
+        '전체 {n}개 매장에 대표·신메뉴를 동일하게 적용할까요?\n· 대표 {f}개 · 신메뉴 {m}개\n각 매장에 있던 기존 대표·신메뉴 선택은 덮어씁니다.'
+      )
+        .replace('{n}', String(otherStores.length + 1))
+        .replace('{f}', String(featured.length))
+        .replace('{m}', String(neu.length))
+    )
+    if (!ok) return
+    setHomeMenuSaving(true)
+    try {
+      if (!(await saveSettings({ silent: true }))) return
+      const res = await qrTableAdminApplyGuestHomeMenusToStores({
+        storeCode,
+        storeCodes: otherStores,
+        guestHomeFeaturedMenuIds: featured,
+        guestHomeNewMenuIds: neu,
+      })
+      await showMultiStoreApplyResult(res)
+    } catch (e) {
+      await alertApiError(e instanceof Error ? e.message : 'save_failed')
+    } finally {
+      setHomeMenuSaving(false)
+    }
+  }
+
+  async function saveCategoryImages() {
+    const otherStores = (posStoreOptions || []).map((s) => s.code).filter((c) => c && c !== storeCode)
+    if (!(canApplyAllStores && categoryImageScope === 'all' && otherStores.length > 0)) {
+      await saveSettings()
+      return
+    }
+    const urls = settings.guestHomeCategoryImageUrls || {}
+    const count = Object.keys(urls).length
+    const ok = await appConfirm(
+      tr(
+        'qrTableGuestHomeCategoryApplyAllConfirm',
+        '전체 {n}개 매장에 카테고리 이미지를 동일하게 적용할까요?\n· 이미지 지정 {c}개 대분류\n각 매장에 있던 기존 카테고리 이미지는 덮어씁니다.'
+      )
+        .replace('{n}', String(otherStores.length + 1))
+        .replace('{c}', String(count))
+    )
+    if (!ok) return
+    setCategoryImageSaving(true)
+    try {
+      if (!(await saveSettings({ silent: true }))) return
+      const res = await qrTableAdminApplyGuestHomeCategoryImagesToStores({
+        storeCode,
+        storeCodes: otherStores,
+        guestHomeCategoryImageUrls: urls,
+      })
+      await showMultiStoreApplyResult(res)
+    } catch (e) {
+      await alertApiError(e instanceof Error ? e.message : 'save_failed')
+    } finally {
+      setCategoryImageSaving(false)
+    }
+  }
+
   async function saveHiddenMenus() {
     const otherStores = (posStoreOptions || []).map((s) => s.code).filter((c) => c && c !== storeCode)
     if (!(canApplyAllStores && hiddenScope === 'all' && otherStores.length > 0)) {
@@ -396,27 +501,7 @@ export function PosQrTableOrderContent() {
         hideMenuIds: hideIds,
         showMenuIds: showIds,
       })
-      if (!res.updated && !res.unchanged) {
-        await alertApiError(
-          res.message === 'office_only'
-            ? tr('qrTableHiddenMenusOfficeOnly', '전체 매장 적용은 오피스 직원 이상만 할 수 있습니다.')
-            : res.message || 'save_failed'
-        )
-        return
-      }
-      const failed = res.failed || []
-      let msg = tr(
-        'qrTableHiddenMenusApplyAllDone',
-        '이 매장 저장 완료. 다른 매장: 변경 {u}곳 · 이미 같음 {k}곳'
-      )
-        .replace('{u}', String((res.updated || []).length))
-        .replace('{k}', String((res.unchanged || []).length))
-      if (failed.length) {
-        msg += `\n${tr('qrTableHiddenMenusApplyAllFailed', '실패 {f}곳').replace('{f}', String(failed.length))}: ${failed
-          .map((f) => f.storeCode)
-          .join(', ')}`
-      }
-      await appAlert(msg)
+      await showMultiStoreApplyResult(res)
     } catch (e) {
       await alertApiError(e instanceof Error ? e.message : 'save_failed')
     } finally {
@@ -945,7 +1030,52 @@ export function PosQrTableOrderContent() {
               </div>
             )}
           </div>
-          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+          {canApplyAllStores ? (
+            <div className="space-y-1 rounded-md border border-dashed px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {tr('qrTableHiddenMenusScope', '적용 범위')}
+                </span>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="qr-home-menu-scope"
+                    checked={homeMenuScope === 'store'}
+                    onChange={() => setHomeMenuScope('store')}
+                  />
+                  {tr('qrTableHiddenMenusScopeStore', '이 매장만')}
+                </label>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="qr-home-menu-scope"
+                    checked={homeMenuScope === 'all'}
+                    onChange={() => setHomeMenuScope('all')}
+                  />
+                  {tr('qrTableHiddenMenusScopeAll', '전체 매장 ({n}곳)').replace(
+                    '{n}',
+                    String((posStoreOptions || []).length)
+                  )}
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {tr('qrTableHiddenMenusScopeOfficeOnly', '오피스 직원 이상만 보입니다')}
+                </span>
+              </div>
+              {homeMenuScope === 'all' ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {tr(
+                    'qrTableGuestHomeMenusScopeAllHint',
+                    '지금 체크한 대표·신메뉴 목록을 모든 매장에 그대로 덮어씁니다. 매장마다 메뉴가 다르면 없는 메뉴 id는 손님 화면에 안 나옵니다.'
+                  )}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <Button onClick={() => void saveHomeMenus()} disabled={homeMenuSaving}>
+            {canApplyAllStores && homeMenuScope === 'all'
+              ? tr('qrTableHiddenMenusSaveAll', '전체 매장에 저장')
+              : tr('save', '저장')}
+          </Button>
         </section>
 
         {/* 카테고리 원형 이미지 (손님 QR 홈) */}
@@ -1016,7 +1146,52 @@ export function PosQrTableOrderContent() {
               })}
             </div>
           )}
-          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+          {canApplyAllStores ? (
+            <div className="space-y-1 rounded-md border border-dashed px-3 py-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {tr('qrTableHiddenMenusScope', '적용 범위')}
+                </span>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="qr-home-cat-scope"
+                    checked={categoryImageScope === 'store'}
+                    onChange={() => setCategoryImageScope('store')}
+                  />
+                  {tr('qrTableHiddenMenusScopeStore', '이 매장만')}
+                </label>
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="qr-home-cat-scope"
+                    checked={categoryImageScope === 'all'}
+                    onChange={() => setCategoryImageScope('all')}
+                  />
+                  {tr('qrTableHiddenMenusScopeAll', '전체 매장 ({n}곳)').replace(
+                    '{n}',
+                    String((posStoreOptions || []).length)
+                  )}
+                </label>
+                <span className="text-[11px] text-muted-foreground">
+                  {tr('qrTableHiddenMenusScopeOfficeOnly', '오피스 직원 이상만 보입니다')}
+                </span>
+              </div>
+              {categoryImageScope === 'all' ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {tr(
+                    'qrTableGuestHomeCategoryScopeAllHint',
+                    '지금 지정한 대분류 이미지를 모든 매장에 덮어씁니다. 대분류 이름이 같은 매장에서만 보입니다.'
+                  )}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <Button onClick={() => void saveCategoryImages()} disabled={categoryImageSaving}>
+            {canApplyAllStores && categoryImageScope === 'all'
+              ? tr('qrTableHiddenMenusSaveAll', '전체 매장에 저장')
+              : tr('save', '저장')}
+          </Button>
         </section>
 
         {/* QR 숨김 메뉴 (이 매장 손님 QR만) */}

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
+  applyQrGuestHomeCategoryImagesToStores,
+  applyQrGuestHomeMenusToStores,
   applyQrHiddenMenusToStores,
   deleteBuffetTier,
   ensureQrTokensForTables,
@@ -166,6 +168,51 @@ export async function POST(req: NextRequest) {
           storeCodes,
           hideMenuIds: normalizeQrHiddenMenuIds(body.hideMenuIds),
           showMenuIds: normalizeQrHiddenMenuIds(body.showMenuIds),
+        },
+        write.auth.tenantId
+      )
+      return applyPosApiCors(NextResponse.json({ success: result.failed.length === 0, ...result }, { headers }))
+    }
+
+    if (action === 'applyGuestHomeMenusToStores') {
+      if (!isOfficeRole(String(write.auth.role || ''))) {
+        return applyPosApiCors(
+          NextResponse.json({ success: false, message: 'office_only' }, { status: 403, headers })
+        )
+      }
+      const storeCodes = Array.isArray(body.storeCodes)
+        ? (body.storeCodes as unknown[]).map((x) => String(x || '').trim()).filter(Boolean)
+        : []
+      if (!storeCodes.length) {
+        return applyPosApiCors(NextResponse.json({ success: false, message: 'store_required' }, { status: 400, headers }))
+      }
+      const result = await applyQrGuestHomeMenusToStores(
+        {
+          storeCodes,
+          guestHomeFeaturedMenuIds: normalizeQrHiddenMenuIds(body.guestHomeFeaturedMenuIds),
+          guestHomeNewMenuIds: normalizeQrHiddenMenuIds(body.guestHomeNewMenuIds),
+        },
+        write.auth.tenantId
+      )
+      return applyPosApiCors(NextResponse.json({ success: result.failed.length === 0, ...result }, { headers }))
+    }
+
+    if (action === 'applyGuestHomeCategoryImagesToStores') {
+      if (!isOfficeRole(String(write.auth.role || ''))) {
+        return applyPosApiCors(
+          NextResponse.json({ success: false, message: 'office_only' }, { status: 403, headers })
+        )
+      }
+      const storeCodes = Array.isArray(body.storeCodes)
+        ? (body.storeCodes as unknown[]).map((x) => String(x || '').trim()).filter(Boolean)
+        : []
+      if (!storeCodes.length) {
+        return applyPosApiCors(NextResponse.json({ success: false, message: 'store_required' }, { status: 400, headers }))
+      }
+      const result = await applyQrGuestHomeCategoryImagesToStores(
+        {
+          storeCodes,
+          guestHomeCategoryImageUrls: normalizeQrGuestHomeCategoryImageUrls(body.guestHomeCategoryImageUrls),
         },
         write.auth.tenantId
       )
