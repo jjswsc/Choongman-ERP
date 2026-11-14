@@ -32,10 +32,18 @@ import {
   addLocalConfirmedNoticeId,
   applyLocalNoticeReads,
   readLocalConfirmedNoticeIds,
+  removeLocalConfirmedNoticeId,
 } from "@/lib/notice-read-local"
+import {
+  addLocalConfirmedHrPolicyId,
+  applyLocalHrPolicyReads,
+  readLocalConfirmedHrPolicyIds,
+  removeLocalConfirmedHrPolicyId,
+} from "@/lib/hr-policy-read-local"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { Megaphone, Bell, Search, FileText, RefreshCw, BookOpen } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
+import { appAlert } from "@/lib/app-message"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
 const NOTICE_SERVER_FETCH_CAP = MY_NOTICES_DB_FETCH_LIMIT
@@ -69,7 +77,7 @@ export function HomeTab() {
   const [hrTruncated, setHrTruncated] = useState(false)
   const [hrLoading, setHrLoading] = useState(false)
   const [hrExpandedId, setHrExpandedId] = useState<number | null>(null)
-  const [hrStatusFilter, setHrStatusFilter] = useState<'All' | 'Unread' | 'Read'>('All')
+  const [hrStatusFilter, setHrStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread') // 공지와 동일: 미확인 기본
   const [hrConfirmingId, setHrConfirmingId] = useState<number | null>(null)
 
   const noticeTexts = useMemo(
@@ -89,16 +97,30 @@ export function HomeTab() {
 
   const refreshUnreadCount = useCallback(() => {
     if (!auth?.store || !auth?.user) return
+    const store = auth.store
+    const name = auth.user
     void getMyNotices({
-      store: auth.store,
-      name: auth.user,
+      store,
+      name,
       page: 1,
-      pageSize: 1,
+      pageSize: 50,
       status: "unread",
       dateFrom,
       dateTo,
     })
-      .then((res) => setUnreadTotal(res.total))
+      .then((res) => {
+        const localIds = new Set(readLocalConfirmedNoticeIds(store, name))
+        const serverUnread = Array.isArray(res.items) ? res.items : []
+        // 서버 total이 페이지보다 크면 로컬 보정만 하고, 작으면 목록 기준으로 맞춤
+        let total = Math.max(0, Number(res.total) || 0)
+        if (total <= serverUnread.length) {
+          total = serverUnread.filter((n) => !localIds.has(Number(n.id))).length
+        } else {
+          const localHit = serverUnread.filter((n) => localIds.has(Number(n.id))).length
+          total = Math.max(0, total - localHit)
+        }
+        setUnreadTotal(total)
+      })
       .catch(() => setUnreadTotal(null))
   }, [auth?.store, auth?.user, dateFrom, dateTo])
 
@@ -123,7 +145,13 @@ export function HomeTab() {
             items = items.filter((n) => !isNoticeReadStatus(n.status))
           }
           setNotices(items)
-          setNoticeTotal(res.total)
+          // 미확인: 서버 total에서 로컬 확인분을 빼 페이지네이션이 비지 않게
+          let total = res.total
+          if (statusParam === "unread" && localIds.length > 0) {
+            const localOnPage = res.items.filter((n) => localIds.includes(Number(n.id))).length
+            total = Math.max(items.length, Math.max(0, res.total - localOnPage))
+          }
+          setNoticeTotal(total)
           setNoticeTruncated(Boolean(res.truncated))
           setNoticePage(res.page)
         })
@@ -149,8 +177,18 @@ export function HomeTab() {
         status: hrStatusParam,
       })
         .then((res) => {
-          setHrPolicies(res.items)
-          setHrTotal(res.total)
+          const localIds = readLocalConfirmedHrPolicyIds(auth.store, auth.user)
+          let items = applyLocalHrPolicyReads(res.items, localIds)
+          if (hrStatusParam === "unread") {
+            items = items.filter((h) => !isNoticeReadStatus(h.status) || h.needsReconfirm)
+          }
+          setHrPolicies(items)
+          let total = res.total
+          if (hrStatusParam === "unread" && localIds.length > 0) {
+            const localOnPage = res.items.filter((h) => localIds.includes(Number(h.id))).length
+            total = Math.max(items.length, Math.max(0, res.total - localOnPage))
+          }
+          setHrTotal(total)
           setHrTruncated(Boolean(res.truncated))
           setHrPage(res.page)
         })
@@ -185,22 +223,53 @@ export function HomeTab() {
         setHrExpandedId(null)
         return
       }
+      const store = auth.store
+      const name = auth.user
+      const snapshot = hrPolicies.find((h) => h.id === policyId)
       setHrConfirmingId(policyId)
+      addLocalConfirmedHrPolicyId(store, name, policyId)
+      setHrPolicies((prev) => {
+        if (hrStatusFilter === "Unread") return prev.filter((h) => h.id !== policyId)
+        return prev.map((h) =>
+          h.id === policyId ? { ...h, status: "확인", needsReconfirm: false } : h
+        )
+      })
+      if (hrStatusFilter === "Unread") {
+        setHrTotal((n) => Math.max(0, n - 1))
+      }
+      setHrExpandedId(null)
       try {
-        const res = await confirmHrPolicyRead({ policyId, store: auth.store, name: auth.user, action })
-        if (res.success) {
-          setHrPolicies((prev) =>
-            prev.map((h) => (h.id === policyId ? { ...h, status: '확인' } : h))
-          )
-          setHrExpandedId(null)
+        const res = await confirmHrPolicyRead({ policyId, store, name, action })
+        if (!res?.success) {
+          removeLocalConfirmedHrPolicyId(store, name, policyId)
+          if (snapshot) {
+            setHrPolicies((prev) => {
+              if (prev.some((h) => h.id === policyId)) {
+                return prev.map((h) => (h.id === policyId ? snapshot : h))
+              }
+              return hrStatusFilter === "Unread" ? [snapshot, ...prev] : prev
+            })
+            if (hrStatusFilter === "Unread") setHrTotal((n) => n + 1)
+          }
+          await appAlert(res?.message || t("processFail") || "처리 실패")
         }
       } catch {
-        /* */
+        removeLocalConfirmedHrPolicyId(store, name, policyId)
+        if (snapshot) {
+          setHrPolicies((prev) => {
+            if (prev.some((h) => h.id === policyId)) {
+              return prev.map((h) => (h.id === policyId ? snapshot : h))
+            }
+            return hrStatusFilter === "Unread" ? [snapshot, ...prev] : prev
+          })
+          if (hrStatusFilter === "Unread") setHrTotal((n) => n + 1)
+        }
+        await appAlert(t("processFail") || "처리 실패")
       } finally {
         setHrConfirmingId(null)
       }
     },
-    [auth?.store, auth?.user]
+    [auth?.store, auth?.user, hrPolicies, hrStatusFilter, t]
   )
 
   const handleNoticeAction = useCallback(
@@ -210,26 +279,55 @@ export function HomeTab() {
         setExpandedId(null)
         return
       }
+      const store = auth.store
+      const name = auth.user
+      const snapshot = notices.find((n) => n.id === noticeId)
       setConfirmingId(noticeId)
-      addLocalConfirmedNoticeId(auth.store, auth.user, noticeId)
+      addLocalConfirmedNoticeId(store, name, noticeId)
       setNotices((prev) => {
         if (statusFilter === "Unread") return prev.filter((n) => n.id !== noticeId)
         return prev.map((n) => (n.id === noticeId ? { ...n, status: "확인" } : n))
       })
       if (statusFilter === "Unread") {
-        setNoticeTotal((t) => Math.max(0, t - 1))
+        setNoticeTotal((n) => Math.max(0, n - 1))
       }
+      setUnreadTotal((n) => (n == null ? n : Math.max(0, n - 1)))
       setExpandedId(null)
       try {
-        await confirmNoticeRead({ noticeId, store: auth.store, name: auth.user, action })
+        const res = await confirmNoticeRead({ noticeId, store, name, action })
+        if (!res?.success) {
+          removeLocalConfirmedNoticeId(store, name, noticeId)
+          if (snapshot) {
+            setNotices((prev) => {
+              if (prev.some((n) => n.id === noticeId)) {
+                return prev.map((n) => (n.id === noticeId ? snapshot : n))
+              }
+              return statusFilter === "Unread" ? [snapshot, ...prev] : prev
+            })
+            if (statusFilter === "Unread") setNoticeTotal((n) => n + 1)
+            setUnreadTotal((n) => (n == null ? n : n + 1))
+          }
+          await appAlert(res?.message || t("processFail") || "처리 실패")
+        }
       } catch {
-        /* 로컬 확인은 남기고, 서버 실패는 다음 조회 때 persist 재시도하지 않음 */
+        removeLocalConfirmedNoticeId(store, name, noticeId)
+        if (snapshot) {
+          setNotices((prev) => {
+            if (prev.some((n) => n.id === noticeId)) {
+              return prev.map((n) => (n.id === noticeId ? snapshot : n))
+            }
+            return statusFilter === "Unread" ? [snapshot, ...prev] : prev
+          })
+          if (statusFilter === "Unread") setNoticeTotal((n) => n + 1)
+          setUnreadTotal((n) => (n == null ? n : n + 1))
+        }
+        await appAlert(t("processFail") || "처리 실패")
       } finally {
         setConfirmingId(null)
         refreshUnreadCount()
       }
     },
-    [auth?.store, auth?.user, refreshUnreadCount, statusFilter]
+    [auth?.store, auth?.user, notices, refreshUnreadCount, statusFilter, t]
   )
 
   return (

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyLocalNoticeReads, parseLocalConfirmedNoticeIds } from './notice-read-local'
+import { isNoticeReadStatus } from './notice-read-status'
 
 describe('parseLocalConfirmedNoticeIds', () => {
   it('keeps valid ids and drops junk', () => {
@@ -16,5 +17,6 @@ describe('applyLocalNoticeReads', () => {
     const next = applyLocalNoticeReads(items, [10])
     expect(next[0].status).toBe('확인')
     expect(next[1].status).toBe('New')
+    expect(next.filter((n) => !isNoticeReadStatus(n.status))).toEqual([{ id: 11, status: 'New' }])
   })
 })

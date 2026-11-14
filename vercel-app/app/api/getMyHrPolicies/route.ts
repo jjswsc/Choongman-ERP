@@ -3,7 +3,11 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { isHrPolicyReadCurrent } from '@/lib/hr-policy-read-status'
 import { isMissingHrPolicyListColumnError, selectHrPoliciesList } from '@/lib/hr-policies-select'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
-import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
+import {
+  employeeIsTargetedForRow,
+  findEmployeeContextFromRoster,
+  noticeReadRowMatchesEmployee,
+} from '@/lib/broadcast-notice-target'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import {
@@ -57,20 +61,27 @@ async function getMyHrPoliciesHandler(
     { status: string; v: number }
   >()
   try {
-    const readsBase = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
+    // 공지와 동일: 이름은 같고 매장 표기만 다른 확인 기록도 인정
+    const readsBase = `name=eq.${encodeURIComponent(name)}`
     const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'hr_policy_reads')
-    type ReadDbRow = { policy_id: number; status?: string; acknowledged_version?: number }
+    type ReadDbRow = {
+      policy_id: number
+      store?: string
+      name?: string
+      status?: string
+      acknowledged_version?: number
+    }
     let sub: ReadDbRow[] | null = null
     try {
       sub = (await supabaseSelectFilter('hr_policy_reads', readsFilter, {
-        select: 'policy_id,status,acknowledged_version',
+        select: 'policy_id,store,name,status,acknowledged_version',
         limit: 2000,
       })) as ReadDbRow[] | null
     } catch (e) {
       if (isMissingSaasTenantColumnError(e)) {
         markSaasTenantColumnMissing('hr_policy_reads')
         sub = (await supabaseSelectFilter('hr_policy_reads', readsBase, {
-          select: 'policy_id,status,acknowledged_version',
+          select: 'policy_id,store,name,status,acknowledged_version',
           limit: 2000,
         })) as ReadDbRow[] | null
       } else {
@@ -78,10 +89,17 @@ async function getMyHrPoliciesHandler(
       }
     }
     for (const r of sub || []) {
-      readData.set(r.policy_id, {
-        status: r.status || '확인',
-        v: Math.max(0, Math.floor(Number(r.acknowledged_version ?? 0)) || 0),
-      })
+      if (!noticeReadRowMatchesEmployee(String(r.store || ''), String(r.name || ''), store, name)) continue
+      const pid = Number(r.policy_id)
+      if (!Number.isFinite(pid) || pid <= 0) continue
+      const v = Math.max(0, Math.floor(Number(r.acknowledged_version ?? 0)) || 0)
+      const prev = readData.get(pid)
+      if (!prev || v >= prev.v) {
+        readData.set(pid, {
+          status: r.status || '확인',
+          v,
+        })
+      }
     }
   } catch {
     /* ignore */

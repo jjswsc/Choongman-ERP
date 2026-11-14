@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
+import { persistHrPolicyRead } from '@/lib/hr-policy-read-persist'
 import {
   appendSaasTenantFilter,
   assertSaasTenantWritable,
   isMissingSaasTenantColumnError,
   markSaasTenantColumnMissing,
   resolveSaasTenantScope,
-  stampSaasTenantId,
 } from '@/lib/saas-tenant-scope'
 
 export const dynamic = 'force-dynamic'
@@ -70,29 +70,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: '규정을 찾을 수 없습니다.' }, { status: 404, headers })
       }
       const cv = Math.max(1, Math.floor(Number(pol.content_version ?? 1)) || 1)
-      const readRow = stampSaasTenantId(
-        {
-          policy_id: policyId,
-          store,
-          name,
-          read_at: new Date().toISOString(),
-          status: '확인',
-          acknowledged_version: cv,
-        },
+      await persistHrPolicyRead({
+        policyId,
+        store,
+        name,
+        contentVersion: cv,
         tenantScope,
-        'hr_policy_reads'
-      )
-      try {
-        await supabaseUpsert('hr_policy_reads', [readRow], 'policy_id,store,name')
-      } catch (e) {
-        if (isMissingSaasTenantColumnError(e) && 'tenant_id' in readRow) {
-          markSaasTenantColumnMissing('hr_policy_reads')
-          const { tenant_id: _t, ...withoutTenant } = readRow
-          await supabaseUpsert('hr_policy_reads', [withoutTenant], 'policy_id,store,name')
-        } else {
-          throw e
-        }
-      }
+      })
     }
 
     return NextResponse.json(

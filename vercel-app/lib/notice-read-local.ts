@@ -45,3 +45,14 @@ export function addLocalConfirmedNoticeId(store: string, name: string, noticeId:
     /* quota */
   }
 }
+
+export function removeLocalConfirmedNoticeId(store: string, name: string, noticeId: number): void {
+  const id = Number(noticeId)
+  if (!Number.isFinite(id) || id <= 0) return
+  const next = readLocalConfirmedNoticeIds(store, name).filter((x) => x !== id)
+  try {
+    localStorage.setItem(noticeConfirmedStorageKey(store, name), JSON.stringify(next))
+  } catch {
+    /* quota */
+  }
+}
