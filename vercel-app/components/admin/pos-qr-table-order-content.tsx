@@ -31,6 +31,8 @@ import { hrefToHelpSummaryKey } from '@/lib/admin-help-registry'
 import { useAppBrandConfig } from '@/components/app-brand-provider'
 import { useAuth } from '@/lib/auth-context'
 import { isOfficeRole } from '@/lib/permissions'
+import { uploadPosMenuImage } from '@/lib/api-client/sauces'
+import { CrmImageUploadField } from '@/components/crm/crm-image-upload-field'
 
 function isSchemaMissingError(msg: string): boolean {
   const m = String(msg || '').toLowerCase()
@@ -79,7 +81,7 @@ function autoTierCode(form: typeof EMPTY_TIER_FORM, existingCodes: string[]): st
   return `${base}${Date.now().toString(36).slice(-3).toUpperCase()}`
 }
 
-type QrAdminMenu = { id: string; name: string; code: string; category: string }
+type QrAdminMenu = { id: string; name: string; code: string; category: string; categoryMain: string }
 
 function menuCategoryLabel(m: { category?: string; categoryMain?: string }): string {
   const sub = String(m.category || '').trim()
@@ -124,6 +126,7 @@ export function PosQrTableOrderContent() {
   const [hiddenSaving, setHiddenSaving] = React.useState(false)
   const [homeMenuSearch, setHomeMenuSearch] = React.useState('')
   const [homeMenuTab, setHomeMenuTab] = React.useState<'featured' | 'new'>('featured')
+  const [categoryImageUploading, setCategoryImageUploading] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [editing, setEditing] = React.useState(false)
   const [tierForm, setTierForm] = React.useState(EMPTY_TIER_FORM)
@@ -239,6 +242,45 @@ export function PosQrTableOrderContent() {
     })
   }
 
+  const mainCategoryNames = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const m of menus) {
+      const main = String(m.categoryMain || '').trim()
+      if (main) set.add(main)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko'))
+  }, [menus])
+
+  function setCategoryImageUrl(categoryMain: string, url: string) {
+    const key = String(categoryMain || '').trim()
+    if (!key) return
+    setSettings((s) => {
+      const cur = { ...(s.guestHomeCategoryImageUrls || {}) }
+      const next = String(url || '').trim()
+      if (next) cur[key] = next
+      else delete cur[key]
+      return { ...s, guestHomeCategoryImageUrls: cur }
+    })
+  }
+
+  async function uploadCategoryImage(categoryMain: string, file: File) {
+    const key = String(categoryMain || '').trim()
+    if (!key) return
+    setCategoryImageUploading(key)
+    try {
+      const res = await uploadPosMenuImage({ file })
+      if (!res.success || !res.url) {
+        await appAlert(res.message || tr('qrTableGuestHomeCategoryUploadFail', '이미지 업로드에 실패했습니다.'))
+        return
+      }
+      setCategoryImageUrl(key, res.url)
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : tr('qrTableGuestHomeCategoryUploadFail', '이미지 업로드에 실패했습니다.'))
+    } finally {
+      setCategoryImageUploading(null)
+    }
+  }
+
   React.useEffect(() => {
     if (!storeCode && posStoreOptions?.length) setStoreCode(posStoreOptions[0].code)
   }, [posStoreOptions, storeCode])
@@ -262,7 +304,7 @@ export function PosQrTableOrderContent() {
         await appAlert(
           tr(
             'qrTableGuestHomeBannersSchemaMissing',
-            '손님 홈 배너·메뉴 컬럼이 없습니다. Supabase에서 pos_qr_guest_home_banners_01_ddl.sql 과 pos_qr_guest_home_menu_ids_01_ddl.sql 을 먼저 실행해 주세요.'
+            '손님 홈 배너·메뉴·카테고리 이미지 컬럼이 없습니다. Supabase에서 pos_qr_guest_home_banners_01_ddl.sql · pos_qr_guest_home_menu_ids_01_ddl.sql · pos_qr_guest_home_category_images_01_ddl.sql 을 먼저 실행해 주세요.'
           )
         )
         return
@@ -299,6 +341,7 @@ export function PosQrTableOrderContent() {
           name: String(m.name || ''),
           code: String(m.code || ''),
           category: menuCategoryLabel(m) || tr('qrTableHiddenMenusNoCategory', '기타'),
+          categoryMain: String(m.categoryMain || m.category || '').trim() || tr('qrTableHiddenMenusNoCategory', '기타'),
         }))
       )
     } catch (e) {
@@ -902,6 +945,77 @@ export function PosQrTableOrderContent() {
               </div>
             )}
           </div>
+          <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
+        </section>
+
+        {/* 카테고리 원형 이미지 (손님 QR 홈) */}
+        <section className="space-y-3 rounded-lg border border-amber-200/80 bg-card p-4">
+          <div>
+            <h2 className="text-sm font-semibold">
+              {tr('qrTableGuestHomeCategoryImages', '카테고리 이미지 (손님 QR 홈)')}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {tr(
+                'qrTableGuestHomeCategoryImagesHint',
+                '대분류별 원형 사진을 업로드합니다. 비우면 그 카테고리 메뉴 사진으로 자동 표시됩니다. office 홈에서만 쓰입니다.'
+              )}
+            </p>
+          </div>
+          {mainCategoryNames.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {tr('qrTableIncludedMenusEmpty', '이 매장에 등록된 메뉴가 없습니다.')}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {mainCategoryNames.map((main) => {
+                const url = String(settings.guestHomeCategoryImageUrls?.[main] || '').trim()
+                return (
+                  <div key={`cat-img-${main}`} className="rounded-md border bg-background p-3 space-y-2">
+                    <p className="text-sm font-semibold truncate">{main}</p>
+                    <div className="flex items-start gap-3">
+                      {url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={url}
+                          alt=""
+                          className="h-16 w-16 shrink-0 rounded-full object-cover bg-muted"
+                        />
+                      ) : (
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
+                          —
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <CrmImageUploadField
+                          uploading={categoryImageUploading === main}
+                          disabled={Boolean(categoryImageUploading)}
+                          onFile={(file) => void uploadCategoryImage(main, file)}
+                          buttonLabel={tr('qrTableGuestHomeCategoryUpload', '사진 업로드')}
+                          hint={tr('qrTableGuestHomeCategoryUploadHint', 'JPG/PNG/WebP · 4MB 이하')}
+                        />
+                        <Input
+                          placeholder="https://…"
+                          value={url}
+                          onChange={(e) => setCategoryImageUrl(main, e.target.value)}
+                        />
+                        {url ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setCategoryImageUrl(main, '')}
+                          >
+                            {tr('qrTableGuestHomeCategoryClear', '이미지 지우기')}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
           <Button onClick={() => void saveSettings()}>{tr('save', '저장')}</Button>
         </section>
 

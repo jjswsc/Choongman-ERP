@@ -36,6 +36,8 @@ export type QrOrderStoreSettings = {
   guestHomeFeaturedMenuIds?: number[]
   /** 신메뉴 배너 클릭 시 보여줄 메뉴 id */
   guestHomeNewMenuIds?: number[]
+  /** 대분류(category_main) → 손님 QR 홈 원형 이미지 URL */
+  guestHomeCategoryImageUrls?: Record<string, string>
   /**
    * 이 매장 손님 QR에서만 숨길 메뉴 id (POS 직원 화면·다른 매장은 그대로).
    * undefined로 저장 요청하면 기존 값을 유지한다.
@@ -505,8 +507,30 @@ export function defaultQrOrderStoreSettings(storeCode: string): QrOrderStoreSett
     guestHomeNewMenuBannerUrl: '',
     guestHomeFeaturedMenuIds: [],
     guestHomeNewMenuIds: [],
+    guestHomeCategoryImageUrls: {},
     hiddenMenuIds: [],
   }
+}
+
+/** 대분류명 → 이미지 URL 맵 정규화 */
+export function normalizeQrGuestHomeCategoryImageUrls(raw: unknown): Record<string, string> {
+  let obj: unknown = raw
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      obj = JSON.parse(raw) as unknown
+    } catch {
+      return {}
+    }
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    const key = String(k || '').trim()
+    const url = String(v ?? '').trim()
+    if (!key || !url) continue
+    out[key] = url
+  }
+  return out
 }
 
 export function normalizeQrHiddenMenuIds(raw: unknown): number[] {

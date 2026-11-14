@@ -12,7 +12,12 @@ import {
 import { requirePosStoreWriteAuth, posApiCorsHeaders, applyPosApiCors } from '@/lib/pos-api-write-auth'
 import { requireAuth } from '@/lib/verify-auth'
 import { isOfficeRole } from '@/lib/permissions'
-import { normalizeQrHiddenMenuIds, type QrOrderMode, type QrPaymentMode } from '@/lib/qr-table-types'
+import {
+  normalizeQrGuestHomeCategoryImageUrls,
+  normalizeQrHiddenMenuIds,
+  type QrOrderMode,
+  type QrPaymentMode,
+} from '@/lib/qr-table-types'
 
 function schemaErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e || 'error')
@@ -82,6 +87,10 @@ export async function PUT(req: NextRequest) {
       guestHomeNewMenuIds: Array.isArray(body.guestHomeNewMenuIds)
         ? normalizeQrHiddenMenuIds(body.guestHomeNewMenuIds)
         : undefined,
+      guestHomeCategoryImageUrls:
+        body.guestHomeCategoryImageUrls != null
+          ? normalizeQrGuestHomeCategoryImageUrls(body.guestHomeCategoryImageUrls)
+          : undefined,
       hiddenMenuIds: Array.isArray(body.hiddenMenuIds) ? normalizeQrHiddenMenuIds(body.hiddenMenuIds) : undefined,
     }, write.auth.tenantId)
     return applyPosApiCors(NextResponse.json({ success: true, settings }, { headers }))

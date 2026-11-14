@@ -1397,9 +1397,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
     const list = orderPosMainCategoryTabs(set, categoryTabOrder.mains)
     if (hasEmpty) list.push(uncategorizedLabel)
+    const adminImages = settings?.guestHomeCategoryImageUrls || {}
     return list.map((key) => {
       const items = homeMenus.filter((m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === key)
-      const rawImage = items.find((m) => m.imageUrl)?.imageUrl || ''
+      const fromAdmin = String(adminImages[key] || '').trim()
+      const rawImage = fromAdmin || items.find((m) => m.imageUrl)?.imageUrl || ''
       return {
         key,
         label: resolvePosMenuGuestLabel(key),
@@ -1409,7 +1411,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         count: items.length,
       }
     })
-  }, [allMenusForHome, categoryTabOrder, uncategorizedLabel])
+  }, [allMenusForHome, categoryTabOrder, uncategorizedLabel, settings?.guestHomeCategoryImageUrls])
 
   const featuredHomeMenus = React.useMemo(() => {
     const ids = new Set(settings?.guestHomeFeaturedMenuIds || [])
