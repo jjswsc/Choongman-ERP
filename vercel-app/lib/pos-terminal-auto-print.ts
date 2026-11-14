@@ -72,17 +72,29 @@ export const POS_PRINT_DEBUG_STORAGE_KEY = 'pos_print_debug'
 /**
  * 홀 추가 영수증 메타 스캔(items_json) 간격.
  * 주방은 pos_print_jobs + Realtime poke가 담당. 홀 추가만 폴링 안전망(기존 8s는 CPU·전송 폭주).
+ * Realtime 정상·활발 시에는 스캔 자체를 생략하므로 간격을 넓혀도 체감 영향이 작다.
  */
-export const MAIN_POS_META_SCAN_INTERVAL_MS = 45_000
+export const MAIN_POS_META_SCAN_INTERVAL_MS = 60_000
 
-/** 주방 큐가 있으므로 kitchenOnOrder 만으로는 800건 스캔하지 않는다. */
+/**
+ * 주방 큐가 있으므로 kitchenOnOrder 만으로는 800건 스캔하지 않는다.
+ * Realtime INSERT/UPDATE가 정상이고 최근 이벤트가 있으면 홀 추가도 Realtime 경로가 처리하므로
+ * 800×items_json 폴링을 돌리지 않는다(CDN·Origin Transfer 절감). force 또는 Realtime 무음/실패 시에만 안전망.
+ */
 export function shouldRunDineInAddonMetaScan(opts: {
   skip: boolean
   receiptOnAddOrder: boolean
   receiptOnOrder: boolean
+  /** true면 Realtime 상태와 무관하게 스캔(수동·강제 catch-up) */
+  force?: boolean
+  realtimeChannelHealthy?: boolean
+  realtimeRecentlyActive?: boolean
 }): boolean {
   if (opts.skip) return false
-  return opts.receiptOnAddOrder || opts.receiptOnOrder
+  if (!(opts.receiptOnAddOrder || opts.receiptOnOrder)) return false
+  if (opts.force) return true
+  if (opts.realtimeChannelHealthy === true && opts.realtimeRecentlyActive === true) return false
+  return true
 }
 
 export const KITCHEN_ONLY_AUTOPRINT_DISPATCH_DELAY_MS = 80

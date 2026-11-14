@@ -6355,13 +6355,19 @@ export default function PosTerminalPage() {
             realtimeChannelHealthy: realtimeChannelHealthyRef.current,
             lastRealtimeOrderEventAtMs: lastRealtimeOrderEventAtRef.current,
           })
-          /** 홀 추가 영수증 ON일 때만 800행 스캔. 주방만 ON이면 pos_print_jobs(싱크호스트와 동일). */
+          /** 홀 추가 영수증 ON일 때만 800행 스캔. 주방만 ON이면 pos_print_jobs(싱크호스트와 동일).
+           * Realtime 정상·활발이면 스캔 생략(CDN·Origin 절감). */
           const wantMetaDineInAddonReceipt =
             autoPrintReceiptOnAddOrder || autoPrintReceiptOnOrder
           const wantDineInAddonMetaScan = shouldRunDineInAddonMetaScan({
             skip: false,
             receiptOnAddOrder: autoPrintReceiptOnAddOrder,
             receiptOnOrder: autoPrintReceiptOnOrder,
+            realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+            realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(
+              lastRealtimeOrderEventAtRef.current,
+              nowMs
+            ),
           })
           const wantMetaDineInAddonKitchen = autoPrintKitchenSlipOnOrder
           if (needHeavyMetaScan || wantDineInAddonMetaScan) {

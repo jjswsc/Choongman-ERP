@@ -12,7 +12,7 @@
  */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
 /** Realtime 정상 + 최근 이벤트 있음 → HTTP 폴링은 안전망만 (Edge Request 절감) */
-export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 300_000
+export const MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS = 360_000
 /**
  * Realtime 미연결·채널 실패 시 heavy(pollMinimal+items_json) 보조 폴링.
  * 5s 전체 목록 폴링은 Fluid CPU·전송 비용이 커서 15s 유지.
@@ -25,9 +25,9 @@ export const MAIN_POS_POLL_INTERVAL_DEGRADED_MS = 15_000
 export const MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS = 15_000
 /**
  * Realtime 채널은 정상인데 최근 이벤트가 없을 때(무음·필터 누락) 초경량 안전망.
- * 6s는 요금 폭주, 완전 중지는 조회 지연 → 45s.
+ * 6s는 요금 폭주, 완전 중지는 조회 지연 → 60s.
  */
-export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS = 45_000
+export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS = 60_000
 /**
  * Realtime이 활발할 때 head API를 치지 않음. 스케줄러만 이 간격으로 상태 재평가.
  */

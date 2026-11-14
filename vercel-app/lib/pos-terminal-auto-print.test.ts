@@ -117,6 +117,46 @@ describe("pos-terminal-auto-print", () => {
       })
     ).toBe(false)
   })
+
+  it("skips dine-in addon meta scan when Realtime is healthy and recently active", () => {
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: false,
+        receiptOnAddOrder: true,
+        receiptOnOrder: true,
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: true,
+      })
+    ).toBe(false)
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: false,
+        receiptOnAddOrder: true,
+        receiptOnOrder: false,
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: false,
+      })
+    ).toBe(true)
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: false,
+        receiptOnAddOrder: true,
+        receiptOnOrder: false,
+        realtimeChannelHealthy: false,
+        realtimeRecentlyActive: true,
+      })
+    ).toBe(true)
+    expect(
+      shouldRunDineInAddonMetaScan({
+        skip: false,
+        receiptOnAddOrder: true,
+        receiptOnOrder: false,
+        force: true,
+        realtimeChannelHealthy: true,
+        realtimeRecentlyActive: true,
+      })
+    ).toBe(true)
+  })
 })
 
 describe("pos-terminal-kbank-helpers", () => {

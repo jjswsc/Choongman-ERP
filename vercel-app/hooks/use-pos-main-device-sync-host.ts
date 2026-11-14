@@ -1869,6 +1869,12 @@ export function usePosMainDeviceSyncHost(): void {
             skip: shouldSyncHostSkipDineInAddonMetaScan(),
             receiptOnAddOrder: autoPrint.receiptOnAddOrder,
             receiptOnOrder: autoPrint.receiptOnOrder,
+            force: Boolean(opts?.forceAddonScan),
+            realtimeChannelHealthy: realtimeChannelHealthyRef.current,
+            realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(
+              lastRealtimeOrderEventAtRef.current,
+              nowMs
+            ),
           })
           if (needHeavyMetaScan || wantDineInAddonMetaScan) {
             try {

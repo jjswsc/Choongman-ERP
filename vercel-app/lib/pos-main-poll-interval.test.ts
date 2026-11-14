@@ -63,7 +63,7 @@ describe('pos-main-poll-interval', () => {
 
   it('skips head API when realtime active; sparse/degraded fetch otherwise', () => {
     expect(MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS).toBe(15_000)
-    expect(MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS).toBe(45_000)
+    expect(MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS).toBe(60_000)
     expect(
       resolveMainPosHeadPollSchedule({
         realtimeChannelHealthy: true,
