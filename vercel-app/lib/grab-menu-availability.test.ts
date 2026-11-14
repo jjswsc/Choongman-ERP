@@ -4,8 +4,10 @@ import {
   grabAvailabilityAction,
   grabItemAvailabilityStatus,
   hasGrabDailySellWindow,
+  isGrabInvalidMerchantError,
   parseGrabAvailabilityRecord,
   selectGrabAvailabilityWork,
+  shouldSkipGrabItemAvailabilityStore,
 } from '@/lib/grab-menu-availability'
 
 function policy(patch: Partial<PosDeliveryMenuPolicy> = {}): PosDeliveryMenuPolicy {
@@ -109,6 +111,32 @@ describe('grabAvailabilityAction', () => {
         retryFailed: false,
       })
     ).toBe('push')
+  })
+})
+
+describe('shouldSkipGrabItemAvailabilityStore', () => {
+  it('skips HQ warehouse and TEST dummy stores', () => {
+    expect(shouldSkipGrabItemAvailabilityStore('CM Office')).toBe(true)
+    expect(shouldSkipGrabItemAvailabilityStore('Office')).toBe(true)
+    expect(shouldSkipGrabItemAvailabilityStore('TEST')).toBe(true)
+    expect(shouldSkipGrabItemAvailabilityStore('CM TEST')).toBe(true)
+    expect(shouldSkipGrabItemAvailabilityStore('')).toBe(true)
+  })
+
+  it('keeps real Grab outlets', () => {
+    expect(shouldSkipGrabItemAvailabilityStore('CM Silom')).toBe(false)
+    expect(shouldSkipGrabItemAvailabilityStore('CM Phuket')).toBe(false)
+  })
+})
+
+describe('isGrabInvalidMerchantError', () => {
+  it('detects Grab InvalidMerchantID responses', () => {
+    expect(
+      isGrabInvalidMerchantError(
+        new Error('Grab API error: 400 {"target":"InvalidMerchantID","message":"failed to get store info"}')
+      )
+    ).toBe(true)
+    expect(isGrabInvalidMerchantError(new Error('Grab API error: 404 not found'))).toBe(false)
   })
 })
 

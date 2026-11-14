@@ -6,9 +6,11 @@ import {
   grabAvailabilityStateKey,
   grabItemAvailabilityStatus,
   hasGrabDailySellWindow,
+  isGrabInvalidMerchantError,
   isGrabItemMissingError,
   parseGrabAvailabilityRecord,
   selectGrabAvailabilityWork,
+  shouldSkipGrabItemAvailabilityStore,
   type GrabAvailabilityRecord,
   type GrabItemAvailability,
 } from '@/lib/grab-menu-availability'
@@ -210,87 +212,125 @@ async function pushGrabItemAvailabilityForStore(params: {
   }
 
   if (params.push.length > 0) {
-    const merchantIDs = await merchantIdsForStore(storeCode)
-    const meta = await loadMenuMeta(params.push.map((item) => item.menuId))
-    if (merchantIDs.length === 0) {
-      failed += params.push.length
-      errors.push('grab_merchant_unresolved')
-      console.error('[grab-item-availability] merchant_unresolved', {
+    if (shouldSkipGrabItemAvailabilityStore(storeCode)) {
+      const stamped = new Date().toISOString()
+      for (const item of params.push) {
+        nextRecords[String(item.menuId)] = { status: item.desired, ok: true, at: stamped }
+        dirty = true
+      }
+      console.info('[grab-item-availability] store_skipped', {
         storeCode,
         items: params.push.length,
       })
     } else {
-      for (let i = 0; i < params.push.length; i++) {
-        if (i > 0) await sleep(PUT_GAP_MS)
-        const item = params.push[i]
-        const key = String(item.menuId)
-        const menu = meta.get(item.menuId)
+      const merchantIDs = await merchantIdsForStore(storeCode)
+      const meta = await loadMenuMeta(params.push.map((item) => item.menuId))
+      if (merchantIDs.length === 0) {
         const stamped = new Date().toISOString()
-        if (menu && (!menu.active || !menu.sellDelivery)) {
-          nextRecords[key] = { status: item.desired, ok: true, at: stamped }
+        for (const item of params.push) {
+          // 매핑 전 매장: 15분마다 재시도하되 error 폭주 방지
+          nextRecords[String(item.menuId)] = { status: item.desired, ok: false, at: stamped }
           dirty = true
-          continue
         }
-        const itemId = buildGrabMenuItemId(
-          { id: item.menuId, code: menu?.code || '' },
-          0
-        )
-        let hardFail = ''
-        let missing = false
-        for (const merchantID of merchantIDs) {
-          try {
-            await grabUpdateMenuRecord({
-              merchantID,
-              field: 'ITEM',
-              id: itemId,
-              availableStatus: item.desired,
-              ...(item.desired === 'UNAVAILABLE' ? { maxStock: 0 } : {}),
-            })
-          } catch (error) {
-            if (isGrabItemMissingError(error)) {
-              missing = true
+        failed += params.push.length
+        errors.push('grab_merchant_unresolved')
+        console.warn('[grab-item-availability] merchant_unresolved', {
+          storeCode,
+          items: params.push.length,
+        })
+      } else {
+        for (let i = 0; i < params.push.length; i++) {
+          if (i > 0) await sleep(PUT_GAP_MS)
+          const item = params.push[i]
+          const key = String(item.menuId)
+          const menu = meta.get(item.menuId)
+          const stamped = new Date().toISOString()
+          if (menu && (!menu.active || !menu.sellDelivery)) {
+            nextRecords[key] = { status: item.desired, ok: true, at: stamped }
+            dirty = true
+            continue
+          }
+          const itemId = buildGrabMenuItemId(
+            { id: item.menuId, code: menu?.code || '' },
+            0
+          )
+          let hardFail = ''
+          let missing = false
+          let invalidMerchant = false
+          for (const merchantID of merchantIDs) {
+            try {
+              await grabUpdateMenuRecord({
+                merchantID,
+                field: 'ITEM',
+                id: itemId,
+                availableStatus: item.desired,
+                ...(item.desired === 'UNAVAILABLE' ? { maxStock: 0 } : {}),
+              })
+            } catch (error) {
+              if (isGrabItemMissingError(error)) {
+                missing = true
+                hardFail = errText(error)
+                break
+              }
+              if (isGrabInvalidMerchantError(error)) {
+                invalidMerchant = true
+                hardFail = errText(error)
+                break
+              }
               hardFail = errText(error)
               break
             }
-            hardFail = errText(error)
-            break
           }
-        }
-        if (!hardFail) {
-          updated += 1
-          nextRecords[key] = { status: item.desired, ok: true, at: new Date().toISOString() }
-          dirty = true
-          console.info('[grab-item-availability] item_updated', {
-            storeCode,
-            menuId: item.menuId,
-            itemId,
-            availableStatus: item.desired,
-          })
-          continue
-        }
-        if (missing) {
+          if (!hardFail) {
+            updated += 1
+            nextRecords[key] = { status: item.desired, ok: true, at: new Date().toISOString() }
+            dirty = true
+            console.info('[grab-item-availability] item_updated', {
+              storeCode,
+              menuId: item.menuId,
+              itemId,
+              availableStatus: item.desired,
+            })
+            continue
+          }
+          if (missing) {
+            failed += 1
+            nextRecords[key] = { status: item.desired, ok: true, at: new Date().toISOString() }
+            dirty = true
+            if (errors.length < 5) errors.push(`${itemId}: ${hardFail}`)
+            console.warn('[grab-item-availability] item_missing', {
+              storeCode,
+              menuId: item.menuId,
+              itemId,
+              error: hardFail,
+            })
+            continue
+          }
+          if (invalidMerchant) {
+            failed += 1
+            // 잘못된 merchantID는 맵 고치기 전까지 같은 실패 — 15분 재시도만
+            nextRecords[key] = { status: item.desired, ok: false, at: new Date().toISOString() }
+            dirty = true
+            if (errors.length < 5) errors.push(`${itemId}: ${hardFail}`)
+            console.warn('[grab-item-availability] item_invalid_merchant', {
+              storeCode,
+              menuId: item.menuId,
+              itemId,
+              error: hardFail,
+            })
+            continue
+          }
           failed += 1
-          nextRecords[key] = { status: item.desired, ok: true, at: new Date().toISOString() }
+          nextRecords[key] = { status: item.desired, ok: false, at: new Date().toISOString() }
           dirty = true
           if (errors.length < 5) errors.push(`${itemId}: ${hardFail}`)
-          console.warn('[grab-item-availability] item_missing', {
+          console.error('[grab-item-availability] item_update_failed', {
             storeCode,
             menuId: item.menuId,
             itemId,
             error: hardFail,
           })
-          continue
         }
-        failed += 1
-        nextRecords[key] = { status: item.desired, ok: false, at: new Date().toISOString() }
-        dirty = true
-        if (errors.length < 5) errors.push(`${itemId}: ${hardFail}`)
-        console.error('[grab-item-availability] item_update_failed', {
-          storeCode,
-          menuId: item.menuId,
-          itemId,
-          error: hardFail,
-        })
       }
     }
   }
@@ -319,6 +359,8 @@ export async function syncGrabDeliveryPolicySave(params: {
   let itemsFailed = 0
   const itemErrors: string[] = []
 
+  const skipStore = shouldSkipGrabItemAvailabilityStore(storeCode)
+
   if (storeCode && Array.isArray(params.next)) {
     const records = await readRecords(storeCode)
     const work = selectGrabAvailabilityWork({
@@ -340,24 +382,28 @@ export async function syncGrabDeliveryPolicySave(params: {
   let notificationSent = 0
   let notificationFailed = 0
   const notificationErrors: string[] = []
-  try {
-    if (itemsUpdated > 0) await sleep(GRAB_MENU_RECORD_LOCK_MS)
-    const notified = await triggerGrabMenuNotificationPerStoreCodes({
-      reason: 'delivery_policy_updated',
-      storeCodes: [storeCode],
-      partnerMerchantID: storeCode,
-      syncPromoTargetPriceCampaigns: true,
-    })
-    notificationSent = notified.sent
-    notificationFailed = notified.failed
-    notificationErrors.push(...(notified.errors || []))
-  } catch (error) {
-    notificationFailed += 1
-    notificationErrors.push(errText(error))
-    console.error('[grab-item-availability] notification_failed', {
-      storeCode,
-      error: errText(error),
-    })
+  if (skipStore) {
+    console.info('[grab-item-availability] notification_skipped', { storeCode })
+  } else {
+    try {
+      if (itemsUpdated > 0) await sleep(GRAB_MENU_RECORD_LOCK_MS)
+      const notified = await triggerGrabMenuNotificationPerStoreCodes({
+        reason: 'delivery_policy_updated',
+        storeCodes: [storeCode],
+        partnerMerchantID: storeCode,
+        syncPromoTargetPriceCampaigns: true,
+      })
+      notificationSent = notified.sent
+      notificationFailed = notified.failed
+      notificationErrors.push(...(notified.errors || []))
+    } catch (error) {
+      notificationFailed += 1
+      notificationErrors.push(errText(error))
+      console.error('[grab-item-availability] notification_failed', {
+        storeCode,
+        error: errText(error),
+      })
+    }
   }
 
   return {
@@ -426,6 +472,20 @@ export async function runGrabMenuAvailabilityCron(now = new Date()): Promise<{
   let budget = CRON_PUSH_CAP
 
   for (const storeCode of storeCodes) {
+    if (shouldSkipGrabItemAvailabilityStore(storeCode)) {
+      const records = await readRecords(storeCode)
+      const work = cronWorkForStore(byStore.get(storeCode) || [], records, now)
+      if (work.push.length === 0 && work.remember.length === 0) continue
+      // 제외 매장: PUT 없이 상태만 맞춰 다음 cron에서 다시 안 돈다
+      const pushed = await pushGrabItemAvailabilityForStore({
+        storeCode,
+        push: work.push,
+        remember: work.remember,
+        records,
+      })
+      itemsUpdated += pushed.updated
+      continue
+    }
     const records = await readRecords(storeCode)
     const work = cronWorkForStore(byStore.get(storeCode) || [], records, now)
     const batch = work.push.slice(0, Math.max(0, budget))

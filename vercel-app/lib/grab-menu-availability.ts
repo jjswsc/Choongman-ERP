@@ -1,7 +1,9 @@
+import { isOfficeStore } from '@/lib/permissions'
 import {
   isMenuAvailableByDeliveryPolicy,
   type PosDeliveryMenuPolicy,
 } from '@/lib/pos-delivery-policy'
+import { normStoreKey } from '@/lib/store-list-keys'
 
 /** Grab Update Menu Record `availableStatus` */
 export type GrabItemAvailability = 'AVAILABLE' | 'UNAVAILABLE'
@@ -126,7 +128,28 @@ export function grabAvailabilityStateKey(storeCode: string): string {
   return `grab_item_availability_pushed:${String(storeCode || '').trim()}`
 }
 
+/**
+ * GrabFood 아웃렛이 아닌 ERP 매장 — 품절/판매시간 PUT·메뉴 알림 대상에서 제외.
+ * TEST 더미, 본사(CM Office) 창고 등.
+ */
+export function shouldSkipGrabItemAvailabilityStore(storeCode: string): boolean {
+  const raw = String(storeCode || '').trim()
+  if (!raw) return true
+  if (isOfficeStore(raw)) return true
+  const k = normStoreKey(raw)
+  if (k === 'test' || k === 'cm test' || k === 'cmtest') return true
+  if (/^test([\s_-]|$)/.test(k)) return true
+  if (/^cm[\s_-]*test([\s_-]|$)/.test(k)) return true
+  return false
+}
+
 export function isGrabItemMissingError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error ?? '')
   return /Grab API error:\s*404\b/.test(msg)
+}
+
+/** Grab에 merchantID가 없거나 아웃렛 미연동 — 재시도해도 동일 실패 */
+export function isGrabInvalidMerchantError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error ?? '')
+  return /InvalidMerchantID|failed to get store info/i.test(msg)
 }
