@@ -101,11 +101,11 @@ export function canonicalPosMenuUpstreamUrl(raw: string): string {
 }
 
 /** CDN에 잘못 캐시된 구 응답(750px 등) 우회 — 배포 시 증가 */
-const POS_MENU_IMAGE_PROXY_RENDER_VERSION = 3
+const POS_MENU_IMAGE_PROXY_RENDER_VERSION = 4
 
-/** POS 타일 표시 크기(높이 88~92px, 가로 ~180px) + 레티나 2x */
-export const POS_MENU_TILE_RENDER_WIDTH = 400
-export const POS_MENU_TILE_RENDER_QUALITY = 70
+/** POS 타일 표시 크기(높이 88~92px, 가로 ~180px) + 레티나 여유 — Cached Egress 절감 */
+export const POS_MENU_TILE_RENDER_WIDTH = 280
+export const POS_MENU_TILE_RENDER_QUALITY = 55
 
 /** 손님 QR 리스트 썸네일(~76px) + 레티나 — 원본 대신 transform */
 export const QR_GUEST_MENU_THUMB_WIDTH = 200

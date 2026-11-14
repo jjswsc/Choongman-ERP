@@ -219,7 +219,11 @@ export async function uploadStoreActionPhoto(store: string, file: File) {
     return { success: false, url: undefined as string | undefined, message: pjson.message || "업로드 준비 실패" }
   }
   const { putFileToSupabaseSignedUploadUrl } = await import("@/lib/storage-client-upload")
-  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, prepared, { upsert: false })
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, prepared, {
+    upsert: false,
+    /** 현장 사진 경로 고정 → 긴 브라우저 TTL (Cached Egress 절감) */
+    cacheControl: "31536000",
+  })
   if (!putRes.ok) {
     const t = await putRes.text().catch(() => "")
     return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }

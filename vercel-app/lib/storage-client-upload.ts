@@ -29,6 +29,12 @@ export async function putFileToSupabaseSignedUploadUrl(
     }
     if (bearerToken) headers.Authorization = `Bearer ${bearerToken}`
     if (options?.upsert) headers['x-upsert'] = 'true'
+    const cacheControl = String(options?.cacheControl ?? '').trim()
+    if (cacheControl) {
+      // Supabase Storage: browser TTL (Smart CDN은 별도). 공식 클라이언트는 cacheControl 필드 사용.
+      headers['cache-control'] = cacheControl
+      headers['x-cache-control'] = cacheControl
+    }
     return headers
   }
 

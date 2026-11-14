@@ -88,7 +88,10 @@ export async function putMenuImageCache(normalizedUrl: string, body: ArrayBuffer
 
 function buildMenuImageFetchUrl(normalizedUrl: string): string {
   if (typeof window === 'undefined') return normalizedUrl
-  /** Supabase 직접 fetch는 CORS·Serwist와 충돌해 Network에서 fetch+ERR_FAILED/(canceled)가 난다. 동일 출처 프록시로만 받는다. */
+  /**
+   * Supabase 직접 fetch는 CORS·Serwist와 충돌해 Network에서 fetch+ERR_FAILED/(canceled)가 난다.
+   * https 프로덕션·하이브리드 모두 동일 출처 프록시로만 받아 IDB에 넣는다.
+   */
   if (shouldProxyPosMenuImageForHybrid(normalizedUrl)) {
     return `${window.location.origin}${toHybridProxiedMenuImageHref(normalizedUrl)}`
   }
@@ -126,11 +129,9 @@ export async function warmPosMenuImagesFromMenuList(
 ): Promise<void> {
   if (typeof window === 'undefined') return
   /**
-   * https + Serwist 환경에서 백그라운드 fetch 워밍이 SW·다수 동시 요청과 겹쳐
-   * Network 탭에 (canceled)/ERR_FAILED 만 쌓이고 UI 썸네일은 `<img src=/api/posMenuImageProxy>` 가 담당.
-   * 오프라인 썸네일 IDB는 https PWA에서 생략(온라인 시 프록시로 충분).
+   * https에서도 동일 출처 프록시로만 워밍(CORS/Serwist 회피).
+   * IDB에 쌓이면 PosMenuFillImage가 blob을 재사용해 Supabase Cached Egress를 줄인다.
    */
-  if (window.location.protocol === 'https:') return
   const origin = window.location.origin
   const concurrency = Math.max(1, opts?.concurrency ?? 6)
   const seen = new Set<string>()

@@ -35,8 +35,8 @@ describe('toSupabaseStorageRenderHref', () => {
       'https://abc.supabase.co/storage/v1/object/public/pos-menu-images/123.jpg'
     )
     expect(out).toContain('/storage/v1/render/image/public/pos-menu-images/123.jpg')
-    expect(out).toContain('width=400')
-    expect(out).toContain('quality=70')
+    expect(out).toContain('width=280')
+    expect(out).toContain('quality=55')
   })
 
   it('returns null for non-public object paths', () => {
@@ -59,9 +59,9 @@ describe('toHybridProxiedMenuImageHref', () => {
     const href = toHybridProxiedMenuImageHref(
       'https://x.supabase.co/storage/v1/object/public/b/p.jpg'
     )
-    expect(href).toContain('w=400')
-    expect(href).toContain('q=70')
-    expect(href).toContain('v=3')
+    expect(href).toContain('w=280')
+    expect(href).toContain('q=55')
+    expect(href).toContain('v=4')
   })
 })
 

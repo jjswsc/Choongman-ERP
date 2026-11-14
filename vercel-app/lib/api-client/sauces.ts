@@ -558,7 +558,11 @@ export async function uploadPosMenuImage(params: { file: File; menuId?: string |
     }
   }
   const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
-  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, {
+    upsert: false,
+    /** 메뉴 썸네일은 경로가 바뀌므로 긴 TTL — Cached Egress·재다운로드 감소 */
+    cacheControl: '31536000',
+  })
   if (!putRes.ok) {
     const t = await putRes.text().catch(() => '')
     return {

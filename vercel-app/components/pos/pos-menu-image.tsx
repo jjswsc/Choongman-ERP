@@ -7,6 +7,10 @@ import {
   toPosMenuDisplayImageHref,
   toSupabaseStorageRenderHref,
 } from "@/lib/pos-menu-image-url"
+import {
+  fetchAndCacheMenuImage,
+  getMenuImageBlobObjectUrl,
+} from "@/lib/offline/pos-menu-images-cache"
 
 export { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
 
@@ -44,7 +48,8 @@ function hrefForStage(href: string, stage: LoadStage): string {
 
 /**
  * 메뉴 썸네일: 공개 Storage는 Vercel을 거치지 않고 로드.
- * transform → 원본 URL → 동일 출처 프록시 순으로 1회씩만 재시도한다.
+ * IndexedDB 히트 시 blob 재사용(Cached Egress 절감).
+ * 미스 시 transform → 원본 URL → 동일 출처 프록시 순으로 1회씩만 재시도한다.
  */
 export function PosMenuFillImage({
   src,
@@ -56,15 +61,45 @@ export function PosMenuFillImage({
   const href = useMemo(() => normalizePosMenuImageUrl(src), [src])
   const [stage, setStage] = useState<LoadStage>("direct")
   const [loadFailed, setLoadFailed] = useState(false)
+  const [blobSrc, setBlobSrc] = useState<string | null>(null)
 
   useEffect(() => {
     setStage("direct")
     setLoadFailed(false)
+    setBlobSrc(null)
+    if (!href) return
+
+    let cancelled = false
+    let objectUrl: string | null = null
+    void (async () => {
+      const blob = await getMenuImageBlobObjectUrl(href)
+      if (cancelled) {
+        if (blob) URL.revokeObjectURL(blob)
+        return
+      }
+      if (blob) {
+        objectUrl = blob
+        setBlobSrc(blob)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
   }, [href])
 
-  const displayHref = useMemo(() => hrefForStage(href, stage), [href, stage])
+  const displayHref = useMemo(() => {
+    if (blobSrc) return blobSrc
+    return hrefForStage(href, stage)
+  }, [blobSrc, href, stage])
 
   const handleImageError = () => {
+    if (blobSrc) {
+      URL.revokeObjectURL(blobSrc)
+      setBlobSrc(null)
+      return
+    }
     const originalHref = hrefForStage(href, "original")
     const proxyHref = hrefForStage(href, "proxy")
     if (stage === "direct" && originalHref && originalHref !== displayHref) {
@@ -76,6 +111,12 @@ export function PosMenuFillImage({
       return
     }
     setLoadFailed(true)
+  }
+
+  const handleImageLoad = () => {
+    if (!href || blobSrc) return
+    // 동일 출처 프록시로 1회 IDB 적재 → 이후 새로고침은 Supabase Cached Egress 회피
+    void fetchAndCacheMenuImage(href)
   }
 
   if (variant === "preview") {
@@ -103,6 +144,7 @@ export function PosMenuFillImage({
         decoding="async"
         referrerPolicy="no-referrer"
         onError={handleImageError}
+        onLoad={handleImageLoad}
       />
     )
   }
@@ -121,10 +163,11 @@ export function PosMenuFillImage({
       src={displayHref}
       alt={alt}
       className={cnAbsoluteFill(className)}
-      loading="eager"
+      loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
       onError={handleImageError}
+      onLoad={handleImageLoad}
     />
   )
 }
