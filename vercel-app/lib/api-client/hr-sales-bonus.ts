@@ -102,3 +102,72 @@ export async function getSalesBonusPreview(params: {
   }
   return data.stores || []
 }
+
+export type SalesBonusStatsMonthSliceDto = {
+  month: string
+  salesTotal: number
+  bonusTotal: number
+  penaltyTotal: number
+  paidPeople: number
+  empCount: number
+}
+
+export type SalesBonusStatsStoreDto = {
+  storeCode: string
+  enabled: boolean
+  salesTotal: number
+  bonusTotal: number
+  penaltyTotal: number
+  paidPeopleSum: number
+  empCountMax: number
+  months: SalesBonusStatsMonthSliceDto[]
+}
+
+export type SalesBonusStatsDto = {
+  fromMonth: string
+  toMonth: string
+  months: string[]
+  stores: SalesBonusStatsStoreDto[]
+  totals: {
+    salesTotal: number
+    bonusTotal: number
+    penaltyTotal: number
+    storeCount: number
+    monthCount: number
+  }
+}
+
+export async function getSalesBonusStats(params: {
+  fromMonth: string
+  toMonth: string
+  store?: string
+  stores?: string[]
+}): Promise<SalesBonusStatsDto> {
+  const q = new URLSearchParams({
+    from: params.fromMonth,
+    to: params.toMonth,
+  })
+  if (params.store) q.set('store', params.store)
+  if (params.stores && params.stores.length > 0) q.set('stores', params.stores.join(','))
+  const res = await apiFetch(`/api/hr/sales-bonus/stats?${q}`)
+  const data = (await res.json()) as SalesBonusStatsDto & {
+    success?: boolean
+    msg?: string
+  }
+  if (!res.ok || data.success === false) {
+    throw new Error(data.msg || '매출 보너스 통계에 실패했습니다.')
+  }
+  return {
+    fromMonth: data.fromMonth,
+    toMonth: data.toMonth,
+    months: data.months || [],
+    stores: data.stores || [],
+    totals: data.totals || {
+      salesTotal: 0,
+      bonusTotal: 0,
+      penaltyTotal: 0,
+      storeCount: 0,
+      monthCount: 0,
+    },
+  }
+}

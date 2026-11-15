@@ -8,7 +8,10 @@ import {
   buildPosterSalesBonusTiers,
   CHOONGMAN_POSTER_SALES_BONUS_BASES,
 } from '@/lib/sales-bonus/poster-tiers'
-import { resolveSalesBonusCalendarPeriod } from '@/lib/sales-bonus/period'
+import {
+  listYearMonthsInclusive,
+  resolveSalesBonusCalendarPeriod,
+} from '@/lib/sales-bonus/period'
 
 const tiers = [
   { threshold: 500_000, amount: 1_000 },
@@ -162,5 +165,20 @@ describe('resolveSalesBonusCalendarPeriod', () => {
 
   it('supports payout day 1', () => {
     expect(resolveSalesBonusCalendarPeriod('2026-11', 1).payYmd).toBe('2026-12-01')
+  })
+})
+
+describe('listYearMonthsInclusive', () => {
+  it('lists inclusive months', () => {
+    expect(listYearMonthsInclusive('2026-10', '2026-12')).toEqual([
+      '2026-10',
+      '2026-11',
+      '2026-12',
+    ])
+  })
+
+  it('rejects inverted or oversized ranges', () => {
+    expect(listYearMonthsInclusive('2026-12', '2026-10')).toEqual([])
+    expect(listYearMonthsInclusive('2024-01', '2026-12', 12)).toEqual([])
   })
 })

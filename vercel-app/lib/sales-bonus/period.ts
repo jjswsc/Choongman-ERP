@@ -38,3 +38,24 @@ export function resolveSalesBonusCalendarPeriod(
   const payYmd = next ? ymdForDayOfMonth(next, payoutDay) : ''
   return { month, start, end, payYmd, payoutDay }
 }
+
+const YM_RE = /^\d{4}-\d{2}$/
+
+/** from~to 포함 달력월 목록. 잘못된 값·역전·한도 초과 시 빈 배열. */
+export function listYearMonthsInclusive(
+  fromYm: string,
+  toYm: string,
+  maxMonths = 24
+): string[] {
+  const from = String(fromYm || '').trim().slice(0, 7)
+  const to = String(toYm || '').trim().slice(0, 7)
+  if (!YM_RE.test(from) || !YM_RE.test(to) || from > to) return []
+  const out: string[] = []
+  let cur: string | null = from
+  while (cur && cur <= to) {
+    out.push(cur)
+    if (out.length > maxMonths) return []
+    cur = shiftYearMonth(cur, 1)
+  }
+  return out
+}

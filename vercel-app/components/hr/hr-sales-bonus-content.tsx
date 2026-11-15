@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Settings2,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -41,7 +42,9 @@ import { getAdminEmployeeList } from "@/lib/api-client/employees-core"
 import {
   getSalesBonusPreview,
   getSalesBonusSettings,
+  getSalesBonusStats,
   saveSalesBonusSettings,
+  type SalesBonusStatsDto,
   type SalesBonusStorePreviewDto,
   type SalesBonusTierDto,
   type StoreSalesBonusSettingsDto,
@@ -154,6 +157,18 @@ export function HrSalesBonusContent() {
   const [storeEmployees, setStoreEmployees] = useState<{ id: number; name: string; role: string }[]>(
     []
   )
+  const [statsFrom, setStatsFrom] = useState(() => {
+    const m = currentPayrollMonthLabel()
+    const [y, mo] = m.split("-").map(Number)
+    const d = new Date(Date.UTC(y, mo - 3, 1))
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`
+  })
+  const [statsTo, setStatsTo] = useState(currentPayrollMonthLabel)
+  const [statsStore, setStatsStore] = useState(ALL_STORES)
+  const [stats, setStats] = useState<SalesBonusStatsDto | null>(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+  const [statsQueried, setStatsQueried] = useState(false)
+  const [statsExpandStore, setStatsExpandStore] = useState("")
   const [statusMsg, setStatusMsg] = useState("")
   const [statusOk, setStatusOk] = useState(false)
 
@@ -453,6 +468,79 @@ export function HrSalesBonusContent() {
     URL.revokeObjectURL(url)
   }
 
+  const runStats = useCallback(async () => {
+    if (!statsFrom || !statsTo || storeOptions.length === 0) return
+    setLoadingStats(true)
+    setStatusMsg("")
+    setStatsQueried(false)
+    setStatsExpandStore("")
+    try {
+      const codes =
+        statsStore === ALL_STORES ? storeOptions : [statsStore].filter(Boolean)
+      if (codes.length === 0) {
+        setStats(null)
+        setStatsQueried(true)
+        return
+      }
+      const result = await getSalesBonusStats({
+        fromMonth: statsFrom,
+        toMonth: statsTo,
+        stores: codes,
+      })
+      setStats(result)
+      setStatsQueried(true)
+    } catch (e) {
+      setStats(null)
+      setStatsQueried(true)
+      setStatusOk(false)
+      setStatusMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoadingStats(false)
+    }
+  }, [statsFrom, statsTo, statsStore, storeOptions])
+
+  const exportStatsCsv = () => {
+    if (!stats || stats.stores.length === 0) return
+    const cols = [
+      t("hrSalesBonus_col_store"),
+      t("hrSalesBonus_sales_total"),
+      t("hrSalesBonus_col_final"),
+      t("hrSalesBonus_col_penalty"),
+      t("hrSalesBonus_stats_paid_sum"),
+      t("hrSalesBonus_stats_months"),
+    ]
+    const lines = [cols.join(",")]
+    for (const s of stats.stores) {
+      lines.push(
+        [
+          `"${labelOf(s.storeCode).replace(/"/g, '""')}"`,
+          s.salesTotal,
+          s.bonusTotal,
+          s.penaltyTotal,
+          s.paidPeopleSum,
+          s.months.length,
+        ].join(",")
+      )
+    }
+    lines.push(
+      [
+        t("hrSalesBonus_total"),
+        stats.totals.salesTotal,
+        stats.totals.bonusTotal,
+        stats.totals.penaltyTotal,
+        "",
+        stats.totals.monthCount,
+      ].join(",")
+    )
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `sales-bonus-stats-${stats.fromMonth}_${stats.toMonth}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const enabledSettingsCount = settingsList.filter((s) => s.enabled).length
 
   return (
@@ -502,10 +590,14 @@ export function HrSalesBonusContent() {
       ) : null}
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:inline-flex sm:w-auto">
+        <TabsList className="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto">
           <TabsTrigger value="query" className="gap-1.5">
             <Search className="h-3.5 w-3.5" />
             {t("hrSalesBonus_tab_query")}
+          </TabsTrigger>
+          <TabsTrigger value="stats" className="gap-1.5">
+            <BarChart3 className="h-3.5 w-3.5" />
+            {t("hrSalesBonus_tab_stats")}
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5">
             <Settings2 className="h-3.5 w-3.5" />
@@ -839,6 +931,264 @@ export function HrSalesBonusContent() {
               <CardContent className="flex flex-col items-center justify-center gap-2 py-14 text-center">
                 <Search className="h-8 w-8 text-muted-foreground/60" />
                 <p className="text-sm text-muted-foreground">{t("hrSalesBonus_preview_hint")}</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ─── 통계 ─── */}
+        <TabsContent value="stats" className="space-y-4 pt-3">
+          <Card className="shadow-sm">
+            <CardContent className="flex flex-wrap items-end gap-3 p-4">
+              <div className="space-y-1.5">
+                <Label>{t("hrSalesBonus_stats_from")}</Label>
+                <Input
+                  type="month"
+                  className="w-[170px]"
+                  value={statsFrom}
+                  onChange={(e) => {
+                    setStatsFrom(e.target.value)
+                    setStatsQueried(false)
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("hrSalesBonus_stats_to")}</Label>
+                <Input
+                  type="month"
+                  className="w-[170px]"
+                  value={statsTo}
+                  onChange={(e) => {
+                    setStatsTo(e.target.value)
+                    setStatsQueried(false)
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("hrSalesBonus_store")}</Label>
+                <Select
+                  value={statsStore}
+                  onValueChange={(v) => {
+                    setStatsStore(v)
+                    setStatsQueried(false)
+                  }}
+                  disabled={storesLoading}
+                >
+                  <SelectTrigger className="w-[240px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_STORES}>{t("hrSalesBonus_all_stores")}</SelectItem>
+                    {storeOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {labelOf(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                onClick={() => void runStats()}
+                disabled={loadingStats || storesLoading}
+              >
+                {loadingStats ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <BarChart3 className="mr-1.5 h-4 w-4" />
+                )}
+                {t("hrSalesBonus_run_stats")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={exportStatsCsv}
+                disabled={!stats || stats.stores.length === 0}
+              >
+                <Download className="mr-1.5 h-4 w-4" />
+                {t("hrSalesBonus_export_csv")}
+              </Button>
+              <p className="w-full text-xs text-muted-foreground">
+                {t("hrSalesBonus_stats_hint")}
+              </p>
+            </CardContent>
+          </Card>
+
+          {loadingStats ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              {t("loading")}
+            </div>
+          ) : statsQueried && stats ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                  icon={TrendingUp}
+                  label={t("hrSalesBonus_kpi_sales")}
+                  value={`฿${fmtBaht(stats.totals.salesTotal)}`}
+                  hint={t("hrSalesBonus_stats_range")
+                    .replace("{from}", stats.fromMonth)
+                    .replace("{to}", stats.toMonth)}
+                  tone="sky"
+                />
+                <KpiCard
+                  icon={Wallet}
+                  label={t("hrSalesBonus_kpi_bonus")}
+                  value={`฿${fmtBaht(stats.totals.bonusTotal)}`}
+                  hint={t("hrSalesBonus_kpi_stores").replace(
+                    "{n}",
+                    String(stats.totals.storeCount)
+                  )}
+                  tone="emerald"
+                />
+                <KpiCard
+                  icon={AlertCircle}
+                  label={t("hrSalesBonus_kpi_penalty")}
+                  value={`฿${fmtBaht(stats.totals.penaltyTotal)}`}
+                  tone="amber"
+                />
+                <KpiCard
+                  icon={BarChart3}
+                  label={t("hrSalesBonus_stats_months")}
+                  value={String(stats.totals.monthCount)}
+                  hint={`${stats.fromMonth} ~ ${stats.toMonth}`}
+                />
+              </div>
+
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Store className="h-4 w-4" />
+                    {t("hrSalesBonus_stats_by_store")}
+                  </CardTitle>
+                  <CardDescription>{t("hrSalesBonus_stats_by_store_hint")}</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-3">
+                  <AdminTableScroll>
+                    <table className="w-full min-w-[640px] text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+                          <th className="p-2 font-medium">{t("hrSalesBonus_col_store")}</th>
+                          <th className="p-2 font-medium">{t("hrSalesBonus_status")}</th>
+                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_sales_total")}</th>
+                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_final")}</th>
+                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_penalty")}</th>
+                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_stats_paid_sum")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.stores.map((r) => (
+                          <tr
+                            key={r.storeCode}
+                            className={cn(
+                              "border-b border-border/60 cursor-pointer hover:bg-muted/40",
+                              statsExpandStore === r.storeCode && "bg-sky-500/10"
+                            )}
+                            onClick={() =>
+                              setStatsExpandStore((prev) =>
+                                prev === r.storeCode ? "" : r.storeCode
+                              )
+                            }
+                          >
+                            <td className="p-2 font-medium">{labelOf(r.storeCode)}</td>
+                            <td className="p-2">
+                              {r.enabled ? (
+                                <Badge className="bg-emerald-600 hover:bg-emerald-600">
+                                  {t("hrSalesBonus_on")}
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary">{t("hrSalesBonus_off")}</Badge>
+                              )}
+                            </td>
+                            <td className="p-2 text-right tabular-nums">฿{fmtBaht(r.salesTotal)}</td>
+                            <td className="p-2 text-right tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">
+                              ฿{fmtBaht(r.bonusTotal)}
+                            </td>
+                            <td className="p-2 text-right tabular-nums text-amber-700 dark:text-amber-300">
+                              ฿{fmtBaht(r.penaltyTotal)}
+                            </td>
+                            <td className="p-2 text-right tabular-nums">{r.paidPeopleSum}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 bg-muted/60 font-semibold">
+                          <td className="p-2" colSpan={2}>
+                            {t("hrSalesBonus_total")}
+                          </td>
+                          <td className="p-2 text-right tabular-nums">
+                            ฿{fmtBaht(stats.totals.salesTotal)}
+                          </td>
+                          <td className="p-2 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+                            ฿{fmtBaht(stats.totals.bonusTotal)}
+                          </td>
+                          <td className="p-2 text-right tabular-nums text-amber-700 dark:text-amber-300">
+                            ฿{fmtBaht(stats.totals.penaltyTotal)}
+                          </td>
+                          <td className="p-2" />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </AdminTableScroll>
+
+                  {statsExpandStore ? (
+                    <div className="rounded-lg border bg-muted/20 p-3">
+                      <p className="mb-2 text-sm font-medium">
+                        {labelOf(statsExpandStore)} — {t("hrSalesBonus_stats_by_month")}
+                      </p>
+                      <AdminTableScroll>
+                        <table className="w-full min-w-[480px] text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground">
+                              <th className="p-2 font-medium">{t("hrSalesBonus_sales_month")}</th>
+                              <th className="p-2 font-medium text-right">
+                                {t("hrSalesBonus_sales_total")}
+                              </th>
+                              <th className="p-2 font-medium text-right">
+                                {t("hrSalesBonus_col_final")}
+                              </th>
+                              <th className="p-2 font-medium text-right">
+                                {t("hrSalesBonus_col_people")}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(
+                              stats.stores.find((s) => s.storeCode === statsExpandStore)?.months ||
+                              []
+                            ).map((m) => (
+                              <tr key={m.month} className="border-b border-border/50">
+                                <td className="p-2">{m.month}</td>
+                                <td className="p-2 text-right tabular-nums">
+                                  ฿{fmtBaht(m.salesTotal)}
+                                </td>
+                                <td className="p-2 text-right tabular-nums">
+                                  ฿{fmtBaht(m.bonusTotal)}
+                                </td>
+                                <td className="p-2 text-right tabular-nums">
+                                  {m.paidPeople}/{m.empCount}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </AdminTableScroll>
+                    </div>
+                  ) : null}
+
+                  {stats.stores.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      {t("hrSalesBonus_no_query_result")}
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card className="border-dashed shadow-none">
+              <CardContent className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+                <BarChart3 className="h-8 w-8 text-muted-foreground/60" />
+                <p className="text-sm text-muted-foreground">{t("hrSalesBonus_stats_empty")}</p>
               </CardContent>
             </Card>
           )}
