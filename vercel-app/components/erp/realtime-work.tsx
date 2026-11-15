@@ -494,8 +494,8 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
           </div>
         ) : (
           <AdminTableScroll
-            className="max-h-[min(65dvh,560px)] overscroll-contain rounded-xl border md:max-h-[calc(100dvh-380px)]"
-            lockViewport
+            className="rounded-xl border max-md:max-h-none md:min-h-[200px] md:max-h-[calc(100dvh-380px)] md:overscroll-contain"
+            lockViewport={false}
           >
             <table className="w-max min-w-full border-collapse text-left">
               {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 — 휴대폰에서도 동일 격자, 이름열 고정 + 상하·좌우 스와이프 */}

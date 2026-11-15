@@ -48,9 +48,12 @@ function scheduleRowIsLeave(r: WeeklyScheduleItem): boolean {
   return lt != null && String(lt).trim() !== ""
 }
 
-/** 스케줄 박스 기준 위로 — 세로로 스크롤 가능한 첫 부모(없으면 문서) */
+/**
+ * 가로 스크롤 박스(overflow-x:auto)는 CSS상 overflow-y가 auto로 계산될 수 있어
+ * 자기 자신을 세로 스크롤 대상으로 잡으면 scrollTop이 먹지 않는다 → 부모부터 찾는다.
+ */
 function findVerticalScrollParent(from: HTMLElement): HTMLElement {
-  let el: HTMLElement | null = from
+  let el: HTMLElement | null = from.parentElement
   for (let i = 0; i < 24 && el; i++) {
     const { overflowY } = getComputedStyle(el)
     if (
@@ -74,7 +77,12 @@ function verticalScrollReadWrite(from: HTMLElement): { getTop: () => number; set
     return {
       getTop: () => window.scrollY || document.documentElement.scrollTop || document.body?.scrollTop || 0,
       setTop: (top: number) => {
-        window.scrollTo({ top, left: window.scrollX, behavior: "instant" })
+        // behavior:"instant" 미지원 웹뷰(카카오·구형)에서 세로 드래그가 통째로 깨지지 않게 폴백
+        try {
+          window.scrollTo({ top, left: window.scrollX, behavior: "instant" })
+        } catch {
+          window.scrollTo(window.scrollX, top)
+        }
       },
     }
   }
@@ -124,9 +132,10 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(new Set())
 
   /**
-   * 드래그 스크롤: 가로 → scrollEl.scrollLeft / 세로 → 상위 overflow-y 부모/문서 scrollTop
-   * SCHEDULE_SCROLL_DRAG_ARM_PX 이전에는 캡처하지 않아 행 접기/펼치기 클릭과 겹친다.
-   * 그 이후에만 setPointerCapture 로 셀 위에서도 move 가 온다.
+   * 드래그 스크롤:
+   * - 가로: scrollEl.scrollLeft (터치·마우스 공통, capture)
+   * - 세로(터치): touch-pan-y 네이티브 — capture/preventDefault 하지 않음
+   * - 세로(마우스): 상위 overflow-y / 문서 scrollTop
    */
   const scheduleHScrollRef = React.useRef<HTMLDivElement>(null)
   const suppressScheduleRowClickRef = React.useRef(false)
@@ -148,6 +157,8 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     let dragArmed = false
     let dragMoved = false
     let uiDragging = false
+    let captured = false
+    let pointerType: string = "mouse"
 
     let docMove: ((e: PointerEvent) => void) | null = null
     let docUp: ((e: PointerEvent) => void) | null = null
@@ -173,12 +184,13 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       if (activeId == null || e.pointerId !== activeId) return
       activeId = null
       removeDocPointerTracking()
-      if (dragArmed) {
+      if (captured) {
         try {
           scrollEl.releasePointerCapture(e.pointerId)
         } catch {
           /* noop */
         }
+        captured = false
       }
       if (uiDragging) {
         uiDragging = false
@@ -194,7 +206,20 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       if (activeId == null) return
       const pe = e as PointerEvent
       if (pe.pointerId !== activeId) return
+      captured = false
       endPointerSession(pe)
+    }
+
+    function capturePointer(pointerId: number) {
+      if (captured) return
+      try {
+        scrollEl.setPointerCapture(pointerId)
+        captured = true
+        onLostCap = onLostCapture
+        scrollEl.addEventListener("lostpointercapture", onLostCap)
+      } catch {
+        captured = false
+      }
     }
 
     function onPointerMoveDoc(e: PointerEvent) {
@@ -202,23 +227,21 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       const dx = e.clientX - startX
       const dy = e.clientY - startY
       const canScrollH = scrollEl.scrollWidth > scrollEl.clientWidth + 2
+      const isTouchLike = pointerType === "touch" || pointerType === "pen"
 
       if (!dragArmed) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) < SCHEDULE_SCROLL_DRAG_ARM_PX) return
         dragArmed = true
-        try {
-          scrollEl.setPointerCapture(e.pointerId)
-        } catch {
-          /* noop */
-        }
-        onLostCap = onLostCapture
-        scrollEl.addEventListener("lostpointercapture", onLostCap)
         if (!canScrollH) dragAxisLocked = "v"
         else {
           const bias = 4
           if (Math.abs(dy) >= Math.abs(dx) + bias) dragAxisLocked = "v"
           else if (Math.abs(dx) >= Math.abs(dy) + bias) dragAxisLocked = "h"
           else dragAxisLocked = Math.abs(dy) >= Math.abs(dx) ? "v" : "h"
+        }
+        // 터치 세로는 네이티브(touch-pan-y). 가로·마우스 세로만 capture
+        if (dragAxisLocked === "h" || !isTouchLike) {
+          capturePointer(e.pointerId)
         }
       }
 
@@ -228,12 +251,17 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         if (Math.abs(dx) <= 2) return
         dragMoved = true
         scrollEl.scrollLeft = startScroll - dx
+        e.preventDefault()
+      } else if (isTouchLike) {
+        // 네이티브 세로 — preventDefault/capture 금지
+        return
       } else {
         if (Math.abs(dy) <= 2) return
         dragMoved = true
-        if (vScroll) vScroll.setTop(startScrollTop + dy)
+        // 손가락/마우스를 아래로 → 콘텐츠도 아래 = scrollTop 감소
+        if (vScroll) vScroll.setTop(startScrollTop - dy)
+        e.preventDefault()
       }
-      e.preventDefault()
       if (!uiDragging) {
         uiDragging = true
         setScheduleHScrollDragging(true)
@@ -249,6 +277,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A") return
       }
       activeId = e.pointerId
+      pointerType = e.pointerType || "mouse"
       startX = e.clientX
       startY = e.clientY
       startScroll = scrollEl.scrollLeft
@@ -257,6 +286,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       dragAxisLocked = null
       dragArmed = false
       dragMoved = false
+      captured = false
 
       docMove = onPointerMoveDoc
       docUp = endPointerSession
@@ -739,7 +769,8 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
             <div
               ref={scheduleHScrollRef}
               className={cn(
-                "min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-4 pb-4 [-webkit-overflow-scrolling:touch] print:overflow-visible print:px-0 touch-none select-none",
+                // touch-pan-y: 휴대폰 세로 스크롤은 네이티브. 가로는 드래그 핸들러가 담당.
+                "min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-4 pb-4 [-webkit-overflow-scrolling:touch] print:overflow-visible print:px-0 touch-pan-y select-none",
                 scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
               )}
             >

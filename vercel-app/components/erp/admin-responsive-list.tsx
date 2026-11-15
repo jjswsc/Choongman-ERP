@@ -147,8 +147,9 @@ export function AdminTableScroll({
         ref={scrollRef}
         className={cn(
           // min-w-0: 그리드/플렉스 자식이 표 min-width만큼 커져 부모 overflow-clip에 잘리는 것 방지
-          "min-w-0 max-w-full overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]",
-          lockViewport ? cn(ADMIN_TABLE_SCROLL_VIEWPORT_CN, "touch-manipulation") : "touch-pan-x",
+          // lockViewport=false: 페이지 세로 스크롤을 살리려면 touch-pan-x 단독 금지(세로 제스처가 막힘)
+          "min-w-0 max-w-full overflow-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] touch-manipulation",
+          lockViewport ? ADMIN_TABLE_SCROLL_VIEWPORT_CN : null,
           className
         )}
       >
