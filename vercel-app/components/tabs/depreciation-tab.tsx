@@ -24,7 +24,17 @@ import {
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-import { Search, Plus, Pencil, Calculator, Trash2, RotateCcw, ExternalLink, Link2 } from "lucide-react"
+import {
+  Search,
+  Plus,
+  Pencil,
+  Calculator,
+  Trash2,
+  RotateCcw,
+  ExternalLink,
+  Link2,
+  FileSpreadsheet,
+} from "lucide-react"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -42,9 +52,19 @@ import {
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getBangkokRecentYearMonths } from "@/lib/bangkok-time"
+import {
+  getBangkokMonthRange,
+  getBangkokMonthRangeWithOffset,
+  getBangkokRecentYearMonths,
+  getBangkokTodayDateString,
+} from "@/lib/bangkok-time"
 import { CHART_OF_ACCOUNTS_BY_CODE } from "@/lib/chart-of-accounts-mapping"
 import { AdminTableScroll } from "@/components/erp/admin-responsive-list"
+import {
+  buildErpExcelHtmlDocument,
+  erpExcelSimpleTableStyle,
+  triggerErpExcelHtmlDownload,
+} from "@/lib/erp-excel-export"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -81,6 +101,10 @@ type FixedAssetRow = {
   disposal_gain_loss_amount?: number | null
   disposal_journal_entry_id?: number | null
   expense_accrual_id?: number | null
+  /** 감가상각 누계 (API 집계) */
+  accumulated_depreciation?: number
+  /** 장부가액 = 취득가 − 누계 */
+  book_value?: number
 }
 
 type DepreciationEntryRow = {
@@ -216,9 +240,25 @@ export function DepreciationTab() {
 
   const listSummary = React.useMemo(() => {
     const { from, to } = normalizeAcqPeriod(appliedAcqDateFrom, appliedAcqDateTo)
+    let totalCost = 0
+    let totalAccum = 0
+    let totalBook = 0
+    for (const a of displayAssets) {
+      const cost = Number(a.acquisition_cost) || 0
+      const accum = Number(a.accumulated_depreciation) || 0
+      const book =
+        a.book_value != null && Number.isFinite(Number(a.book_value))
+          ? Number(a.book_value)
+          : cost - accum
+      totalCost += cost
+      totalAccum += accum
+      totalBook += book
+    }
     return {
       count: displayAssets.length,
-      totalCost: displayAssets.reduce((sum, a) => sum + Number(a.acquisition_cost || 0), 0),
+      totalCost,
+      totalAccum,
+      totalBook,
       periodFrom: from,
       periodTo: to,
     }
@@ -338,15 +378,113 @@ export function DepreciationTab() {
     [storeFilter, normalizeAcqPeriod]
   )
 
+  const applyAcqPeriodAndSearch = React.useCallback(
+    (fromRaw: string, toRaw: string) => {
+      const { from, to } = normalizeAcqPeriod(fromRaw, toRaw)
+      setAcqDateFrom(from)
+      setAcqDateTo(to)
+      setAppliedAcqDateFrom(from)
+      setAppliedAcqDateTo(to)
+      loadAssets({ from, to })
+      loadDisposedAssets({ from, to })
+    },
+    [normalizeAcqPeriod, loadAssets, loadDisposedAssets]
+  )
+
   const runAssetListSearch = React.useCallback(() => {
-    const { from, to } = normalizeAcqPeriod(acqDateFrom, acqDateTo)
-    setAcqDateFrom(from)
-    setAcqDateTo(to)
-    setAppliedAcqDateFrom(from)
-    setAppliedAcqDateTo(to)
-    loadAssets({ from, to })
-    loadDisposedAssets({ from, to })
-  }, [acqDateFrom, acqDateTo, normalizeAcqPeriod, loadAssets, loadDisposedAssets])
+    applyAcqPeriodAndSearch(acqDateFrom, acqDateTo)
+  }, [acqDateFrom, acqDateTo, applyAcqPeriodAndSearch])
+
+  const applyAcqPeriodPreset = React.useCallback(
+    (preset: "thisMonth" | "lastMonth" | "thisYear") => {
+      if (preset === "thisMonth") {
+        const r = getBangkokMonthRange()
+        applyAcqPeriodAndSearch(r.startStr, r.endStr)
+        return
+      }
+      if (preset === "lastMonth") {
+        const r = getBangkokMonthRangeWithOffset(-1)
+        applyAcqPeriodAndSearch(r.start, r.end)
+        return
+      }
+      const today = getBangkokTodayDateString()
+      const year = today.slice(0, 4)
+      applyAcqPeriodAndSearch(`${year}-01-01`, today)
+    },
+    [applyAcqPeriodAndSearch]
+  )
+
+  const exportAssetListExcel = React.useCallback(async () => {
+    if (displayAssets.length === 0) {
+      await appAlert(tt("pettyNoData", "No data to export."))
+      return
+    }
+    const escapeXml = (s: string) =>
+      String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+    const headers = [
+      tt("dep_code", "Code"),
+      tt("dep_assetName", "Asset name"),
+      t("pL_store"),
+      tt("dep_listStatus", "Status"),
+      tt("dep_acquisitionDate", "Acquisition date"),
+      tt("dep_acquisitionCost", "Acquisition cost"),
+      tt("dep_accumDepreciation", "Accum. depreciation"),
+      tt("dep_bookValue", "Book value"),
+      tt("dep_usefulLifeMonths", "Useful life (months)"),
+      tt("dep_paymentPlanCol", "Payment plan"),
+    ]
+    const rows: (string | number)[][] = [headers]
+    for (const a of displayAssets) {
+      const cost = Number(a.acquisition_cost) || 0
+      const accum = Number(a.accumulated_depreciation) || 0
+      const book =
+        a.book_value != null && Number.isFinite(Number(a.book_value))
+          ? Number(a.book_value)
+          : cost - accum
+      const linked = Number(a.expense_accrual_id || 0) > 0
+      rows.push([
+        a.asset_code || "",
+        a.name || "",
+        a.store_name || "",
+        a.listStatus === "active"
+          ? tt("dep_statusActive", "Active")
+          : tt("dep_statusDisposed", "Disposed"),
+        a.acquisition_date || "",
+        cost,
+        accum,
+        book,
+        a.useful_life_months ?? "",
+        linked
+          ? tt("dep_paymentPlanLinked", "Linked")
+          : tt("dep_paymentPlanUnlinked", "Unlinked"),
+      ])
+    }
+    const tableBody = `<table>
+<tr class="head">${rows[0].map((c) => `<th>${escapeXml(String(c))}</th>`).join("")}</tr>
+${rows
+  .slice(1)
+  .map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}</td>`).join("")}</tr>`)
+  .join("")}
+</table>`
+    const html = buildErpExcelHtmlDocument(
+      tableBody,
+      erpExcelSimpleTableStyle({ includeTh: true, withHead: true })
+    )
+    const { from, to } = normalizeAcqPeriod(appliedAcqDateFrom, appliedAcqDateTo)
+    const suffix = from || to ? `_${from || "from"}_${to || "to"}` : ""
+    triggerErpExcelHtmlDownload(html, `fixed-assets${suffix}.xls`)
+  }, [
+    displayAssets,
+    appliedAcqDateFrom,
+    appliedAcqDateTo,
+    normalizeAcqPeriod,
+    t,
+    tt,
+  ])
 
   const loadEntries = React.useCallback(() => {
     setLoading(true)
@@ -663,7 +801,7 @@ export function DepreciationTab() {
                   <div className="text-xs text-muted-foreground">
                     {tt("dep_listAcqPeriod", "Acquisition period")}
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <Input
                       type="date"
                       className="w-[140px]"
@@ -679,6 +817,36 @@ export function DepreciationTab() {
                       onChange={(e) => setAcqDateTo(e.target.value)}
                       aria-label={t("dateTo")}
                     />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      disabled={loading}
+                      onClick={() => applyAcqPeriodPreset("thisMonth")}
+                    >
+                      {tt("dep_presetThisMonth", "This month")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      disabled={loading}
+                      onClick={() => applyAcqPeriodPreset("lastMonth")}
+                    >
+                      {tt("dep_presetLastMonth", "Last month")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      disabled={loading}
+                      onClick={() => applyAcqPeriodPreset("thisYear")}
+                    >
+                      {tt("dep_presetThisYear", "This year")}
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -693,6 +861,15 @@ export function DepreciationTab() {
                 <Button size="sm" onClick={runAssetListSearch} disabled={loading}>
                   <Search className="h-4 w-4 mr-1" />
                   {t("btn_query")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={loading || displayAssets.length === 0}
+                  onClick={() => void exportAssetListExcel()}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-1" />
+                  {tt("excelBtn", "Excel")}
                 </Button>
                 <Button size="sm" variant="outline" asChild>
                   <Link href="/admin/expense-management?tab=expenseRegister&category=fixed_asset">
@@ -732,6 +909,14 @@ export function DepreciationTab() {
                   {tt("dep_listTotalCost", "Total acquisition cost")}:{" "}
                   <span className="font-mono font-medium">{formatBaht(listSummary.totalCost)}</span>
                 </span>
+                <span>
+                  {tt("dep_listTotalAccum", "Accum. depreciation")}:{" "}
+                  <span className="font-mono font-medium">{formatBaht(listSummary.totalAccum)}</span>
+                </span>
+                <span>
+                  {tt("dep_listTotalBook", "Total book value")}:{" "}
+                  <span className="font-mono font-medium">{formatBaht(listSummary.totalBook)}</span>
+                </span>
               </div>
 
               <AdminTableScroll className="rounded-lg border" hint={false}>
@@ -744,13 +929,24 @@ export function DepreciationTab() {
                       <th className="py-2 px-2 text-center">{tt("dep_listStatus", "Status")}</th>
                       <th className="py-2 px-2 text-right">{t("dep_acquisitionDate")}</th>
                       <th className="py-2 px-2 text-right">{t("dep_acquisitionCost")}</th>
+                      <th className="py-2 px-2 text-right">{tt("dep_accumDepreciation", "Accum. depreciation")}</th>
+                      <th className="py-2 px-2 text-right">{tt("dep_bookValue", "Book value")}</th>
                       <th className="py-2 px-2 text-right">{t("dep_usefulLifeMonths")}</th>
+                      <th className="py-2 px-2 text-center">{tt("dep_paymentPlanCol", "Payment plan")}</th>
                       <th className="py-2 px-2 text-left">{tt("dep_accountMapping", "Account Mapping")}</th>
                       <th className="py-2 px-2 text-center">{t("actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {displayAssets.map((a) => (
+                    {displayAssets.map((a) => {
+                      const cost = Number(a.acquisition_cost) || 0
+                      const accum = Number(a.accumulated_depreciation) || 0
+                      const book =
+                        a.book_value != null && Number.isFinite(Number(a.book_value))
+                          ? Number(a.book_value)
+                          : cost - accum
+                      const paymentLinked = Number(a.expense_accrual_id || 0) > 0
+                      return (
                       <tr key={`${a.listStatus}-${a.id}`} className="border-b hover:bg-muted/20">
                         <td className="py-2 px-2 font-mono text-sm">{a.asset_code || "-"}</td>
                         <td className="py-2 px-2">{a.name}</td>
@@ -771,10 +967,29 @@ export function DepreciationTab() {
                         </td>
                         <td className="py-2 px-2 text-right whitespace-nowrap">{a.acquisition_date || "-"}</td>
                         <td className="py-2 px-2 text-right font-mono whitespace-nowrap">
-                          {formatBaht(a.acquisition_cost ?? 0)}
+                          {formatBaht(cost)}
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono whitespace-nowrap">
+                          {formatBaht(accum)}
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono whitespace-nowrap">
+                          {formatBaht(book)}
                         </td>
                         <td className="py-2 px-2 text-right whitespace-nowrap">
                           {a.useful_life_months} {t("dep_months")}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {a.listStatus === "active" && !paymentLinked ? (
+                            <span className="inline-flex rounded px-2 py-0.5 text-xs bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                              {tt("dep_paymentPlanUnlinked", "Unlinked")}
+                            </span>
+                          ) : a.listStatus === "active" && paymentLinked ? (
+                            <span className="inline-flex rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+                              {tt("dep_paymentPlanLinked", "Linked")}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="py-2 px-2 text-sm min-w-[180px]">
                           <div>{labelByCode(String(a.asset_account_code || ""), "1460")}</div>
@@ -790,9 +1005,7 @@ export function DepreciationTab() {
                             <Button size="sm" variant="ghost" onClick={() => fillFormFromAsset(a)}>
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            {canLegacyCreate &&
-                            a.listStatus === "active" &&
-                            !(Number(a.expense_accrual_id || 0) > 0) ? (
+                            {canLegacyCreate && a.listStatus === "active" && !paymentLinked ? (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -818,7 +1031,8 @@ export function DepreciationTab() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
                 {!loading && displayAssets.length === 0 && (

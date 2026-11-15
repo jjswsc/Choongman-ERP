@@ -1,6 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
+type FixedAssetRow = {
+  id?: number
+  acquisition_cost?: number
+  status?: string
+  accumulated_depreciation?: number
+  book_value?: number
+  [key: string]: unknown
+}
+
+/** 자산별 감가상각 누계·장부가액 부착 */
+async function attachBookValues(assets: FixedAssetRow[]): Promise<FixedAssetRow[]> {
+  if (!assets.length) return assets
+  const ids = assets
+    .map((a) => Number(a.id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+  const accumMap = new Map<number, number>()
+  const BATCH = 200
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const chunk = ids.slice(i, i + BATCH)
+    const entries = (await supabaseSelectFilter(
+      'depreciation_entries',
+      `fixed_asset_id=in.(${chunk.join(',')})`,
+      { select: 'fixed_asset_id,amount', limit: 50000 }
+    )) as { fixed_asset_id?: number; amount?: number }[] | null
+    for (const e of entries || []) {
+      const id = Number(e.fixed_asset_id)
+      if (!Number.isFinite(id) || id <= 0) continue
+      accumMap.set(id, (accumMap.get(id) || 0) + (Number(e.amount) || 0))
+    }
+  }
+  return assets.map((a) => {
+    const cost = Number(a.acquisition_cost) || 0
+    const accum = Math.round((accumMap.get(Number(a.id)) || 0) * 100) / 100
+    const book = Math.round((cost - accum) * 100) / 100
+    return {
+      ...a,
+      accumulated_depreciation: accum,
+      book_value: book,
+    }
+  })
+}
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -11,7 +53,7 @@ export async function GET(request: NextRequest) {
   const dateTo = String(searchParams.get('dateTo') || '').trim().slice(0, 10)
 
   try {
-    let assets: { status?: string }[]
+    let assets: FixedAssetRow[]
     const parts: string[] = []
     if (storeFilter && storeFilter !== 'All') {
       parts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
@@ -32,15 +74,16 @@ export async function GET(request: NextRequest) {
         select: '*',
         order: 'acquisition_date.desc',
         limit: 5000,
-      })) as { status?: string }[]
+      })) as FixedAssetRow[]
     } else {
       assets = (await supabaseSelect('fixed_assets', {
         select: '*',
         order: 'acquisition_date.desc',
         limit: 5000,
-      })) as { status?: string }[]
+      })) as FixedAssetRow[]
     }
-    return NextResponse.json({ success: true, list: assets || [] }, { headers })
+    const list = await attachBookValues(assets || [])
+    return NextResponse.json({ success: true, list }, { headers })
   } catch (e) {
     console.error('getFixedAssets:', e)
     return NextResponse.json(
