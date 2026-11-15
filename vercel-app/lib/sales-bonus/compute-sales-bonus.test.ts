@@ -4,6 +4,10 @@ import {
   normalizeSalesBonusTiers,
   sumCumulativeTierBonus,
 } from '@/lib/sales-bonus/compute-sales-bonus'
+import {
+  buildPosterSalesBonusTiers,
+  CHOONGMAN_POSTER_SALES_BONUS_BASES,
+} from '@/lib/sales-bonus/poster-tiers'
 
 const tiers = [
   { threshold: 500_000, amount: 1_000 },
@@ -129,5 +133,31 @@ describe('computePersonSalesBonus', () => {
     })
     expect(r.multiplier).toBe(2)
     expect(r.finalAmount).toBe(2_000)
+  })
+})
+
+describe('poster sales bonus tiers', () => {
+  it('uses MBK 1.6M (not poster 1.5M)', () => {
+    const mbk = CHOONGMAN_POSTER_SALES_BONUS_BASES.find((x) => x.storeCode === 'CM MBK')
+    expect(mbk?.baseTarget).toBe(1_600_000)
+  })
+
+  it('base 1.6M → 1000, +100k → 1500, manager 2x', () => {
+    const t = buildPosterSalesBonusTiers(1_600_000)
+    expect(sumCumulativeTierBonus(1_599_999, t).baseAmount).toBe(0)
+    expect(sumCumulativeTierBonus(1_600_000, t).baseAmount).toBe(1_000)
+    expect(sumCumulativeTierBonus(1_700_000, t).baseAmount).toBe(1_500)
+    expect(sumCumulativeTierBonus(1_800_000, t).baseAmount).toBe(2_000)
+    const mgr = computePersonSalesBonus({
+      enabled: true,
+      salesTotal: 1_700_000,
+      tiers: t,
+      role: 'Manager',
+      managerMultiplier: 2,
+      staffMultiplier: 1,
+      absenceDays: 0,
+      absencePenaltyPctPerDay: 100,
+    })
+    expect(mgr.finalAmount).toBe(3_000)
   })
 })

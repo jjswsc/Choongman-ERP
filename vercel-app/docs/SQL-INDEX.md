@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **857**개 · 접두어 그룹 **102**개
+- `sql/` 최상위: **859**개 · 접두어 그룹 **102**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -736,6 +736,23 @@
 
 </details>
 
+<details><summary><code>store_*</code> (12)</summary>
+
+- [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
+- [`store_action_items_v2.sql`](../sql/store_action_items_v2.sql)
+- [`store_action_photos_storage_bucket.sql`](../sql/store_action_photos_storage_bucket.sql)
+- [`store_repair_photos_storage_bucket.sql`](../sql/store_repair_photos_storage_bucket.sql) — apply
+- [`store_repair_progress_logs.sql`](../sql/store_repair_progress_logs.sql) — apply
+- [`store_repair_schema_all.sql`](../sql/store_repair_schema_all.sql) — apply
+- [`store_repair_tickets.sql`](../sql/store_repair_tickets.sql) — apply
+- [`store_repair_tickets_vendor_code.sql`](../sql/store_repair_tickets_vendor_code.sql) — apply
+- [`store_sales_bonus_settings_01_table.sql`](../sql/store_sales_bonus_settings_01_table.sql) — log
+- [`store_tax_filing_profiles.sql`](../sql/store_tax_filing_profiles.sql)
+- [`store_tax_filing_profiles_sso_columns.sql`](../sql/store_tax_filing_profiles_sso_columns.sql)
+- [`store_tax_filing_profiles_vendor_code.sql`](../sql/store_tax_filing_profiles_vendor_code.sql)
+
+</details>
+
 <details><summary><code>delete_*</code> (11)</summary>
 
 - [`delete_additive_option_small_kimchi_soup.sql`](../sql/delete_additive_option_small_kimchi_soup.sql) — apply
@@ -749,22 +766,6 @@
 - [`delete_expense_accrual_2451_2452_mbk_shopee.sql`](../sql/delete_expense_accrual_2451_2452_mbk_shopee.sql) — apply
 - [`delete_payable_po_transactions.sql`](../sql/delete_payable_po_transactions.sql) — apply
 - [`delete_worklog_notices_from_send_history.sql`](../sql/delete_worklog_notices_from_send_history.sql) — apply
-
-</details>
-
-<details><summary><code>store_*</code> (11)</summary>
-
-- [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
-- [`store_action_items_v2.sql`](../sql/store_action_items_v2.sql)
-- [`store_action_photos_storage_bucket.sql`](../sql/store_action_photos_storage_bucket.sql)
-- [`store_repair_photos_storage_bucket.sql`](../sql/store_repair_photos_storage_bucket.sql) — apply
-- [`store_repair_progress_logs.sql`](../sql/store_repair_progress_logs.sql) — apply
-- [`store_repair_schema_all.sql`](../sql/store_repair_schema_all.sql) — apply
-- [`store_repair_tickets.sql`](../sql/store_repair_tickets.sql) — apply
-- [`store_repair_tickets_vendor_code.sql`](../sql/store_repair_tickets_vendor_code.sql) — apply
-- [`store_tax_filing_profiles.sql`](../sql/store_tax_filing_profiles.sql)
-- [`store_tax_filing_profiles_sso_columns.sql`](../sql/store_tax_filing_profiles_sso_columns.sql)
-- [`store_tax_filing_profiles_vendor_code.sql`](../sql/store_tax_filing_profiles_vendor_code.sql)
 
 </details>
 
@@ -981,6 +982,16 @@
 
 </details>
 
+<details><summary><code>payroll_*</code> (5)</summary>
+
+- [`payroll_allowance_exclusions.sql`](../sql/payroll_allowance_exclusions.sql)
+- [`payroll_records_employee_keys.sql`](../sql/payroll_records_employee_keys.sql)
+- [`payroll_records_period_dates.sql`](../sql/payroll_records_period_dates.sql)
+- [`payroll_records_published_at.sql`](../sql/payroll_records_published_at.sql)
+- [`payroll_records_sales_bonus_01_alter.sql`](../sql/payroll_records_sales_bonus_01_alter.sql) — log
+
+</details>
+
 <details><summary><code>stock_*</code> (5)</summary>
 
 - [`stock_inbound_shift_bangkok_date_one_day_earlier.sql`](../sql/stock_inbound_shift_bangkok_date_one_day_earlier.sql)
@@ -1006,15 +1017,6 @@
 - [`logistics_hardening_phase1.sql`](../sql/logistics_hardening_phase1.sql)
 - [`logistics_integrity_monitoring_batch.sql`](../sql/logistics_integrity_monitoring_batch.sql)
 - [`logistics_kpi_dashboard_queries.sql`](../sql/logistics_kpi_dashboard_queries.sql)
-
-</details>
-
-<details><summary><code>payroll_*</code> (4)</summary>
-
-- [`payroll_allowance_exclusions.sql`](../sql/payroll_allowance_exclusions.sql)
-- [`payroll_records_employee_keys.sql`](../sql/payroll_records_employee_keys.sql)
-- [`payroll_records_period_dates.sql`](../sql/payroll_records_period_dates.sql)
-- [`payroll_records_published_at.sql`](../sql/payroll_records_published_at.sql)
 
 </details>
 
