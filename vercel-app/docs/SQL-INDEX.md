@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **831**개 · 접두어 그룹 **102**개
+- `sql/` 최상위: **857**개 · 접두어 그룹 **102**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
-<details><summary><code>pos_*</code> (234)</summary>
+<details><summary><code>pos_*</code> (236)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_business_day_start_system_settings.sql`](../sql/pos_business_day_start_system_settings.sql)
@@ -169,6 +169,7 @@
 - [`pos_menu_garlic_bbq_off_03_audit.sql`](../sql/pos_menu_garlic_bbq_off_03_audit.sql) — diagnose
 - [`pos_menu_garlic_bbq_off_04_all_stores_grab.sql`](../sql/pos_menu_garlic_bbq_off_04_all_stores_grab.sql)
 - [`pos_menu_garlic_bbq_off_05_silom_scope.sql`](../sql/pos_menu_garlic_bbq_off_05_silom_scope.sql)
+- [`pos_menu_has_order_usage_01_rpc.sql`](../sql/pos_menu_has_order_usage_01_rpc.sql) — rpc, log
 - [`pos_menu_image_menu_id_mismatch_audit.sql`](../sql/pos_menu_image_menu_id_mismatch_audit.sql) — diagnose
 - [`pos_menu_images_storage_bucket.sql`](../sql/pos_menu_images_storage_bucket.sql)
 - [`pos_menu_ingredients_audit.sql`](../sql/pos_menu_ingredients_audit.sql) — diagnose
@@ -227,7 +228,8 @@
 - [`pos_option_step_store_sold_out_02_verify.sql`](../sql/pos_option_step_store_sold_out_02_verify.sql) — verify
 - [`pos_order_audit_trail.sql`](../sql/pos_order_audit_trail.sql) — diagnose
 - [`pos_order_events.sql`](../sql/pos_order_events.sql)
-- [`pos_order_no_counter_rpc.sql`](../sql/pos_order_no_counter_rpc.sql) — rpc
+- [`pos_order_no_counter_rpc.sql`](../sql/pos_order_no_counter_rpc.sql) — rpc, log
+- [`pos_order_no_counter_rpc_01_check.sql`](../sql/pos_order_no_counter_rpc_01_check.sql) — verify, rpc
 - [`pos_orders_advance_deposit.sql`](../sql/pos_orders_advance_deposit.sql)
 - [`pos_orders_clear_non_dine_in_table_name_ekkamai.sql`](../sql/pos_orders_clear_non_dine_in_table_name_ekkamai.sql)
 - [`pos_orders_collab_discount_amt.sql`](../sql/pos_orders_collab_discount_amt.sql)
@@ -369,7 +371,7 @@
 
 </details>
 
-<details><summary><code>fix_*</code> (37)</summary>
+<details><summary><code>fix_*</code> (43)</summary>
 
 - [`fix_abc_company_1001_align_malatang01.sql`](../sql/fix_abc_company_1001_align_malatang01.sql) — apply
 - [`fix_banjoo_receipt_biz_from_hq.sql`](../sql/fix_banjoo_receipt_biz_from_hq.sql) — apply, log
@@ -387,6 +389,12 @@
 - [`fix_hq_like_receivable_02_delete_cm_office_receive.sql`](../sql/fix_hq_like_receivable_02_delete_cm_office_receive.sql) — apply
 - [`fix_hq_warehouse_accounting_po_receivable.sql`](../sql/fix_hq_warehouse_accounting_po_receivable.sql) — apply
 - [`fix_member_coupon_issued_after_paid_m004579.sql`](../sql/fix_member_coupon_issued_after_paid_m004579.sql) — apply
+- [`fix_omni_maru_menu_image_cross_01_storage_preview.sql`](../sql/fix_omni_maru_menu_image_cross_01_storage_preview.sql) — preview, apply
+- [`fix_omni_maru_menu_image_cross_02_clear_banjoo_urls.sql`](../sql/fix_omni_maru_menu_image_cross_02_clear_banjoo_urls.sql) — apply, log
+- [`fix_omni_maru_menu_image_cross_03_restore_from_storage.sql`](../sql/fix_omni_maru_menu_image_cross_03_restore_from_storage.sql) — apply, log
+- [`fix_omni_maru_menu_image_cross_04_verify.sql`](../sql/fix_omni_maru_menu_image_cross_04_verify.sql) — verify, apply
+- [`fix_omni_maru_menu_image_from_audit_01_preview.sql`](../sql/fix_omni_maru_menu_image_from_audit_01_preview.sql) — preview, diagnose, apply
+- [`fix_omni_maru_menu_image_from_audit_02_apply.sql`](../sql/fix_omni_maru_menu_image_from_audit_02_apply.sql) — diagnose, apply, log
 - [`fix_omnifoodtech_admin_password_hash.sql`](../sql/fix_omnifoodtech_admin_password_hash.sql) — apply
 - [`fix_pay_correct_inflated_discounts.sql`](../sql/fix_pay_correct_inflated_discounts.sql) — apply
 - [`fix_payroll_wht_ledger_pnd3_to_pnd1.sql`](../sql/fix_payroll_wht_ledger_pnd3_to_pnd1.sql) — apply
@@ -574,6 +582,29 @@
 
 </details>
 
+<details><summary><code>diagnose_*</code> (18)</summary>
+
+- [`diagnose_banjoo_receipt_logo_biz_01.sql`](../sql/diagnose_banjoo_receipt_logo_biz_01.sql) — diagnose
+- [`diagnose_banjoo_receipt_logo_biz_02.sql`](../sql/diagnose_banjoo_receipt_logo_biz_02.sql) — diagnose
+- [`diagnose_banjoo_receipt_logo_biz_03_after.sql`](../sql/diagnose_banjoo_receipt_logo_biz_03_after.sql) — diagnose
+- [`diagnose_daily_plan_delegated_stuck_01_preview.sql`](../sql/diagnose_daily_plan_delegated_stuck_01_preview.sql) — preview, diagnose
+- [`diagnose_daily_plan_delegated_stuck_02_apply.sql`](../sql/diagnose_daily_plan_delegated_stuck_02_apply.sql) — diagnose, apply, log
+- [`diagnose_daily_plan_delegated_stuck_03_verify.sql`](../sql/diagnose_daily_plan_delegated_stuck_03_verify.sql) — verify, diagnose
+- [`diagnose_daily_plan_delegated_stuck_04_apply_ids.sql`](../sql/diagnose_daily_plan_delegated_stuck_04_apply_ids.sql) — diagnose, apply, log
+- [`diagnose_fk031_futurepark_01_by_location.sql`](../sql/diagnose_fk031_futurepark_01_by_location.sql) — diagnose
+- [`diagnose_fk031_futurepark_02_asof_compare.sql`](../sql/diagnose_fk031_futurepark_02_asof_compare.sql) — diagnose
+- [`diagnose_fk031_futurepark_03_recent_logs.sql`](../sql/diagnose_fk031_futurepark_03_recent_logs.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
+- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
+- [`diagnose_omni_maru_banjoo_menu_image_cross_01_mismatched.sql`](../sql/diagnose_omni_maru_banjoo_menu_image_cross_01_mismatched.sql) — diagnose
+- [`diagnose_omni_maru_banjoo_menu_image_cross_02_same_code.sql`](../sql/diagnose_omni_maru_banjoo_menu_image_cross_02_same_code.sql) — diagnose
+- [`diagnose_omni_maru_banjoo_menu_image_cross_03_audit_candidates.sql`](../sql/diagnose_omni_maru_banjoo_menu_image_cross_03_audit_candidates.sql) — diagnose
+- [`diagnose_omni_maru_menu_image_empty_01.sql`](../sql/diagnose_omni_maru_menu_image_empty_01.sql) — diagnose
+
+</details>
+
 <details><summary><code>tax_*</code> (18)</summary>
 
 - [`tax_accounting_periods_01.sql`](../sql/tax_accounting_periods_01.sql)
@@ -688,6 +719,23 @@
 
 </details>
 
+<details><summary><code>grab_*</code> (12)</summary>
+
+- [`grab_auto_settle_backfill_01_preview.sql`](../sql/grab_auto_settle_backfill_01_preview.sql) — preview, backfill
+- [`grab_cash_to_delivery_app_01_preview.sql`](../sql/grab_cash_to_delivery_app_01_preview.sql) — preview
+- [`grab_cash_to_delivery_app_02_order_events.sql`](../sql/grab_cash_to_delivery_app_02_order_events.sql)
+- [`grab_cash_to_delivery_app_03_apply.sql`](../sql/grab_cash_to_delivery_app_03_apply.sql) — apply, log
+- [`grab_cash_to_delivery_app_04_order_row.sql`](../sql/grab_cash_to_delivery_app_04_order_row.sql)
+- [`grab_item_availability_orphan_policies_01_preview.sql`](../sql/grab_item_availability_orphan_policies_01_preview.sql) — preview
+- [`grab_item_availability_orphan_policies_02_delete_test_office.sql`](../sql/grab_item_availability_orphan_policies_02_delete_test_office.sql) — apply, log
+- [`grab_item_availability_orphan_policies_03_delete_phuket.sql`](../sql/grab_item_availability_orphan_policies_03_delete_phuket.sql) — apply, log
+- [`grab_option_integrity_audit.sql`](../sql/grab_option_integrity_audit.sql) — diagnose
+- [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
+- [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
+- [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
+
+</details>
+
 <details><summary><code>delete_*</code> (11)</summary>
 
 - [`delete_additive_option_small_kimchi_soup.sql`](../sql/delete_additive_option_small_kimchi_soup.sql) — apply
@@ -720,18 +768,18 @@
 
 </details>
 
-<details><summary><code>diagnose_*</code> (10)</summary>
+<details><summary><code>daily_*</code> (10)</summary>
 
-- [`diagnose_banjoo_receipt_logo_biz_01.sql`](../sql/diagnose_banjoo_receipt_logo_biz_01.sql) — diagnose
-- [`diagnose_banjoo_receipt_logo_biz_02.sql`](../sql/diagnose_banjoo_receipt_logo_biz_02.sql) — diagnose
-- [`diagnose_banjoo_receipt_logo_biz_03_after.sql`](../sql/diagnose_banjoo_receipt_logo_biz_03_after.sql) — diagnose
-- [`diagnose_fk031_futurepark_01_by_location.sql`](../sql/diagnose_fk031_futurepark_01_by_location.sql) — diagnose
-- [`diagnose_fk031_futurepark_02_asof_compare.sql`](../sql/diagnose_fk031_futurepark_02_asof_compare.sql) — diagnose
-- [`diagnose_fk031_futurepark_03_recent_logs.sql`](../sql/diagnose_fk031_futurepark_03_recent_logs.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_01_samples.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_01_samples.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_02_oct25_agg.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_03_audit.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_03_audit.sql) — diagnose
-- [`diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql`](../sql/diagnose_futurepark_paid_at_vs_updated_04_order_meta.sql) — diagnose
+- [`daily_plans_01_schema.sql`](../sql/daily_plans_01_schema.sql)
+- [`daily_plans_02_time_rpc.sql`](../sql/daily_plans_02_time_rpc.sql) — rpc
+- [`daily_plans_03_seed_sv_template.sql`](../sql/daily_plans_03_seed_sv_template.sql)
+- [`daily_plans_04_schedule_columns.sql`](../sql/daily_plans_04_schedule_columns.sql)
+- [`daily_plans_05_item_delegate.sql`](../sql/daily_plans_05_item_delegate.sql) — log
+- [`daily_plans_06_template_employee.sql`](../sql/daily_plans_06_template_employee.sql) — log
+- [`daily_plans_07_template_item_employee.sql`](../sql/daily_plans_07_template_item_employee.sql) — log
+- [`daily_plans_08_cancel.sql`](../sql/daily_plans_08_cancel.sql) — log
+- [`daily_plans_09_time_exclude_cancelled.sql`](../sql/daily_plans_09_time_exclude_cancelled.sql) — log
+- [`daily_plans_10_tenant_id.sql`](../sql/daily_plans_10_tenant_id.sql) — log
 
 </details>
 
@@ -779,20 +827,6 @@
 
 </details>
 
-<details><summary><code>grab_*</code> (9)</summary>
-
-- [`grab_auto_settle_backfill_01_preview.sql`](../sql/grab_auto_settle_backfill_01_preview.sql) — preview, backfill
-- [`grab_cash_to_delivery_app_01_preview.sql`](../sql/grab_cash_to_delivery_app_01_preview.sql) — preview
-- [`grab_cash_to_delivery_app_02_order_events.sql`](../sql/grab_cash_to_delivery_app_02_order_events.sql)
-- [`grab_cash_to_delivery_app_03_apply.sql`](../sql/grab_cash_to_delivery_app_03_apply.sql) — apply, log
-- [`grab_cash_to_delivery_app_04_order_row.sql`](../sql/grab_cash_to_delivery_app_04_order_row.sql)
-- [`grab_option_integrity_audit.sql`](../sql/grab_option_integrity_audit.sql) — diagnose
-- [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
-- [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
-- [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
-
-</details>
-
 <details><summary><code>payable_*</code> (9)</summary>
 
 - [`payable_backfill_from_bank_purchase_payment.sql`](../sql/payable_backfill_from_bank_purchase_payment.sql) — backfill
@@ -818,6 +852,20 @@
 - [`remove_ottogi_mayo_invoice_07_billing_preview.sql`](../sql/remove_ottogi_mayo_invoice_07_billing_preview.sql) — preview
 - [`remove_ottogi_mayo_invoice_08_billing_update.sql`](../sql/remove_ottogi_mayo_invoice_08_billing_update.sql) — apply
 - [`remove_ottogi_mayo_invoice_09_billing_verify.sql`](../sql/remove_ottogi_mayo_invoice_09_billing_verify.sql) — verify
+
+</details>
+
+<details><summary><code>the_*</code> (9)</summary>
+
+- [`the_street_20261106_settlement_01_preview.sql`](../sql/the_street_20261106_settlement_01_preview.sql) — preview
+- [`the_street_20261106_settlement_02_unclose.sql`](../sql/the_street_20261106_settlement_02_unclose.sql) — log
+- [`the_street_customer_display_01_settings.sql`](../sql/the_street_customer_display_01_settings.sql)
+- [`the_street_customer_display_02_audit.sql`](../sql/the_street_customer_display_02_audit.sql) — diagnose
+- [`the_street_qr_carryover_floor_01_live_preview.sql`](../sql/the_street_qr_carryover_floor_01_live_preview.sql) — preview
+- [`the_street_qr_carryover_floor_02_live_bump_bizday.sql`](../sql/the_street_qr_carryover_floor_02_live_bump_bizday.sql) — log
+- [`the_street_qr_carryover_floor_02b_live_verify.sql`](../sql/the_street_qr_carryover_floor_02b_live_verify.sql) — verify
+- [`the_street_qr_carryover_floor_03_zombies_preview.sql`](../sql/the_street_qr_carryover_floor_03_zombies_preview.sql) — preview
+- [`the_street_qr_carryover_floor_04_zombies_close.sql`](../sql/the_street_qr_carryover_floor_04_zombies_close.sql) — log
 
 </details>
 
@@ -857,18 +905,6 @@
 - [`expense_document_no_pv_pp.sql`](../sql/expense_document_no_pv_pp.sql)
 - [`expense_document_type.sql`](../sql/expense_document_type.sql)
 - [`expense_payee_bank_transfer_fields.sql`](../sql/expense_payee_bank_transfer_fields.sql)
-
-</details>
-
-<details><summary><code>the_*</code> (7)</summary>
-
-- [`the_street_customer_display_01_settings.sql`](../sql/the_street_customer_display_01_settings.sql)
-- [`the_street_customer_display_02_audit.sql`](../sql/the_street_customer_display_02_audit.sql) — diagnose
-- [`the_street_qr_carryover_floor_01_live_preview.sql`](../sql/the_street_qr_carryover_floor_01_live_preview.sql) — preview
-- [`the_street_qr_carryover_floor_02_live_bump_bizday.sql`](../sql/the_street_qr_carryover_floor_02_live_bump_bizday.sql) — log
-- [`the_street_qr_carryover_floor_02b_live_verify.sql`](../sql/the_street_qr_carryover_floor_02b_live_verify.sql) — verify
-- [`the_street_qr_carryover_floor_03_zombies_preview.sql`](../sql/the_street_qr_carryover_floor_03_zombies_preview.sql) — preview
-- [`the_street_qr_carryover_floor_04_zombies_close.sql`](../sql/the_street_qr_carryover_floor_04_zombies_close.sql) — log
 
 </details>
 
@@ -932,16 +968,6 @@
 - [`company_hybrid_documents_all_in_one.sql`](../sql/company_hybrid_documents_all_in_one.sql) — bundle
 - [`company_hybrid_documents_metadata.sql`](../sql/company_hybrid_documents_metadata.sql)
 - [`company_hybrid_documents_summary_rpc.sql`](../sql/company_hybrid_documents_summary_rpc.sql) — rpc
-
-</details>
-
-<details><summary><code>daily_*</code> (5)</summary>
-
-- [`daily_plans_01_schema.sql`](../sql/daily_plans_01_schema.sql)
-- [`daily_plans_02_time_rpc.sql`](../sql/daily_plans_02_time_rpc.sql) — rpc
-- [`daily_plans_03_seed_sv_template.sql`](../sql/daily_plans_03_seed_sv_template.sql)
-- [`daily_plans_04_schedule_columns.sql`](../sql/daily_plans_04_schedule_columns.sql)
-- [`daily_plans_05_item_delegate.sql`](../sql/daily_plans_05_item_delegate.sql) — log
 
 </details>
 

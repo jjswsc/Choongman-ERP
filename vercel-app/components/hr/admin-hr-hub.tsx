@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { CalendarDays, CalendarClock, Palmtree, RefreshCw, Wallet } from "lucide-react"
+import { CalendarDays, CalendarClock, Gift, Palmtree, RefreshCw, Wallet } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
@@ -12,9 +12,11 @@ import { getAdminDashboardStats, getAdminEmployeeList } from "@/lib/api-client"
 import { buildHrCalendarEvents } from "@/lib/hr-calendar-events"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { canAccessAdminPayroll } from "@/lib/permissions"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 
 export function AdminHrHub() {
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
   const { lang } = useLang()
   const t = useT(lang)
   const [loading, setLoading] = useState(false)
@@ -22,7 +24,9 @@ export function AdminHrHub() {
   const [attPending, setAttPending] = useState(0)
   const [weekEvents, setWeekEvents] = useState(0)
 
-  const canAccessPayroll = canAccessAdminPayroll(auth?.role || "")
+  const canAccessPayroll = canAccessAdminPayroll(auth?.role || "", brand.key, {
+    canViewStorePayroll: auth?.canViewStorePayroll === true,
+  })
 
   const weekRangeLabel = useMemo(() => {
     const today = getBangkokTodayDateString()
@@ -108,6 +112,15 @@ export function AdminHrHub() {
             cta: t("hr_hub_go_payroll"),
             icon: Wallet,
             className: "border-emerald-500/40",
+          },
+          {
+            label: t("hr_hub_sales_bonus"),
+            value: "→",
+            sub: t("hr_hub_sales_bonus_sub"),
+            href: "/admin/hr-sales-bonus",
+            cta: t("hr_hub_go_sales_bonus"),
+            icon: Gift,
+            className: "border-violet-500/40",
           },
         ]
       : []),

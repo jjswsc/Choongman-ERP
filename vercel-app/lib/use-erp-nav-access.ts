@@ -26,8 +26,9 @@ export function useErpNavAccess() {
       saasModules,
       aiModuleEnabled,
       brandKey: brand.key,
+      canViewStorePayroll: auth?.canViewStorePayroll === true,
     }),
-    [auth?.role, auth?.store, saasModules, aiModuleEnabled, brand.key]
+    [auth?.role, auth?.store, auth?.canViewStorePayroll, saasModules, aiModuleEnabled, brand.key]
   )
 
   const accessibleHrefs = React.useMemo(() => getAccessibleErpNavHrefs(ctx), [ctx])

@@ -73,6 +73,7 @@ type PayrollRow = {
   holidayPay: number
   holidayWorkDays?: number
   splBonus: number
+  salesBonus: number
   ot15?: number
   ot20?: number
   ot30?: number
@@ -105,6 +106,7 @@ type PayrollCalcExplain = {
   birthBonus: PayrollExplainEntry[]
   holidayPay: PayrollExplainEntry[]
   splBonus: PayrollExplainEntry[]
+  salesBonus: PayrollExplainEntry[]
   ot: PayrollExplainEntry[]
   lateEarly: PayrollExplainEntry[]
   sso: PayrollExplainEntry[]
@@ -120,6 +122,7 @@ const PAYROLL_EXPLAIN_TITLE_KEY: Partial<Record<keyof PayrollCalcExplain, string
   birthBonus: "pay_birth",
   holidayPay: "pay_holiday",
   splBonus: "pay_spl_bonus",
+  salesBonus: "pay_sales_bonus",
   ot: "pay_modal_ot",
   lateEarly: "pay_explain_title_late_early",
   sso: "pay_explain_reason_sso",
@@ -141,6 +144,7 @@ function calcNetPay(r: PayrollRow): number {
     r.birthBonus +
     r.holidayPay +
     r.splBonus +
+    (r.salesBonus ?? 0) +
     r.otAmt
   const deduct = r.lateDed + (r.earlyDed ?? 0) + r.sso + r.tax + r.otherDed
   return Math.max(0, income - deduct)
@@ -196,6 +200,7 @@ export function AdminPayrollCalc() {
   const [editBirthBonus, setEditBirthBonus] = useState("0")
   const [editHolidayPay, setEditHolidayPay] = useState("0")
   const [editSplBonus, setEditSplBonus] = useState("0")
+  const [editSalesBonus, setEditSalesBonus] = useState("0")
   const [editOtAmt, setEditOtAmt] = useState("0")
   const [editLateDed, setEditLateDed] = useState("0")
   const [editSso, setEditSso] = useState("0")
@@ -292,6 +297,7 @@ export function AdminPayrollCalc() {
           holidayPay: Number(r.holiday_pay) ?? 0,
           holidayWorkDays: 0,
           splBonus: Number(r.spl_bonus) ?? 0,
+          salesBonus: Number(r.sales_bonus) ?? 0,
           ot15: Number(r.ot_15) ?? 0,
           ot20: Number(r.ot_20) ?? 0,
           ot30: Number(r.ot_30) ?? 0,
@@ -369,6 +375,7 @@ export function AdminPayrollCalc() {
           holidayPay: Number(r.holidayPay) || 0,
           holidayWorkDays: Number(r.holidayWorkDays) || 0,
           splBonus: Number(r.splBonus) || 0,
+          salesBonus: Number(r.salesBonus) || 0,
           ot15: Number(r.ot15) || 0,
           ot20: Number(r.ot20) || 0,
           ot30: Number(r.ot30) || 0,
@@ -389,6 +396,7 @@ export function AdminPayrollCalc() {
             birthBonus: Number(r.birthBonus) || 0,
             holidayPay: Number(r.holidayPay) || 0,
             splBonus: Number(r.splBonus) || 0,
+            salesBonus: Number(r.salesBonus) || 0,
             otAmt: Number(r.otAmt) || 0,
             lateDed: Number(r.lateDed) || 0,
             earlyDed: Number(r.earlyDed) || 0,
@@ -459,6 +467,7 @@ export function AdminPayrollCalc() {
         birthBonus: acc.birthBonus + r.birthBonus,
         holidayPay: acc.holidayPay + r.holidayPay,
         splBonus: acc.splBonus + r.splBonus,
+        salesBonus: acc.salesBonus + (r.salesBonus ?? 0),
         ot15: acc.ot15 + (r.ot15 ?? 0),
         otAmt: acc.otAmt + r.otAmt,
         lateEarly: acc.lateEarly + (r.lateDed || 0) + (r.earlyDed ?? 0),
@@ -475,6 +484,7 @@ export function AdminPayrollCalc() {
         birthBonus: 0,
         holidayPay: 0,
         splBonus: 0,
+        salesBonus: 0,
         ot15: 0,
         otAmt: 0,
         lateEarly: 0,
@@ -512,6 +522,7 @@ export function AdminPayrollCalc() {
     setEditBirthBonus(String(r.birthBonus ?? 0))
     setEditHolidayPay(String(r.holidayPay ?? 0))
     setEditSplBonus(String(r.splBonus || 0))
+    setEditSalesBonus(String(r.salesBonus || 0))
     setEditOtAmt(String(r.otAmt || 0))
     // 표 "지각" 열은 lateDed+earlyDed 합계 — 모달도 동일 금액으로 열어야 수동 수정이 반영됨
     setEditLateDed(String((r.lateDed || 0) + (r.earlyDed ?? 0)))
@@ -530,6 +541,7 @@ export function AdminPayrollCalc() {
     const birthBonus = Number(editBirthBonus) || 0
     const holidayPay = Number(editHolidayPay) || 0
     const splBonus = Number(editSplBonus) || 0
+    const salesBonus = Number(editSalesBonus) || 0
     const otAmt = Number(editOtAmt) || 0
     const lateDed = Number(editLateDed) || 0
     const earlyDed = 0
@@ -544,6 +556,7 @@ export function AdminPayrollCalc() {
       birthBonus,
       holidayPay,
       splBonus,
+      salesBonus,
       otAmt,
       lateDed,
       earlyDed,
@@ -558,6 +571,7 @@ export function AdminPayrollCalc() {
         birthBonus,
         holidayPay,
         splBonus,
+        salesBonus,
         otAmt,
         lateDed,
         earlyDed,
@@ -584,6 +598,7 @@ export function AdminPayrollCalc() {
       birthBonus: row.birthBonus,
       holidayPay: row.holidayPay,
       splBonus: row.splBonus,
+      salesBonus: row.salesBonus,
       ot: row.otAmt,
       lateEarly: (row.lateDed || 0) + (row.earlyDed ?? 0),
       sso: row.sso,
@@ -624,6 +639,7 @@ export function AdminPayrollCalc() {
           holidayPay: r.holidayPay,
           holidayWorkDays: r.holidayWorkDays || 0,
           splBonus: r.splBonus,
+          salesBonus: r.salesBonus ?? 0,
           ot15: r.ot15 || 0,
           ot20: r.ot20 || 0,
           ot30: r.ot30 || 0,
@@ -694,6 +710,7 @@ export function AdminPayrollCalc() {
           holidayPay: r.holidayPay,
           holidayWorkDays: r.holidayWorkDays || 0,
           splBonus: r.splBonus,
+          salesBonus: r.salesBonus ?? 0,
           ot15: r.ot15 || 0,
           ot20: r.ot20 || 0,
           ot30: r.ot30 || 0,
@@ -845,7 +862,7 @@ export function AdminPayrollCalc() {
 
         {hasResult && (
           <AdminTableScroll className="-mx-2">
-            <table className="w-full text-sm border-collapse min-w-[1220px]">
+            <table className="w-full text-sm border-collapse min-w-[1280px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th rowSpan={2} className="p-1.5 text-center font-medium w-8 min-w-[2rem]">No</th>
@@ -855,7 +872,7 @@ export function AdminPayrollCalc() {
                   <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[3.5rem]">{t("eval_analytics_type_kitchen")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium min-w-[3.5rem]">{t("eval_analytics_type_service")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium bg-muted/70 whitespace-nowrap tabular-nums w-[1%] min-w-[4.25rem]">{t("pay_col_base")}</th>
-                  <th colSpan={6} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
+                  <th colSpan={7} className="p-2 text-center font-medium text-primary">{t("pay_allowance")}</th>
                   <th colSpan={2} className="p-2 text-center font-medium text-primary">{t("pay_ot")}</th>
                   <th colSpan={4} className="p-2 text-center font-medium text-destructive">{t("pay_deduct")}</th>
                   <th rowSpan={2} className="p-1.5 text-center font-medium font-semibold bg-muted/70 whitespace-nowrap tabular-nums">{t("pay_net")}</th>
@@ -873,6 +890,7 @@ export function AdminPayrollCalc() {
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_birth")}</th>
                   <th className="p-1.5 text-center font-medium text-primary" title={t("pay_col_holiday")}>{t("pay_col_holiday")}</th>
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_bonus")}</th>
+                  <th className="p-1.5 text-center font-medium text-primary">{t("pay_sales_bonus")}</th>
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_ot_hr")}</th>
                   <th className="p-1.5 text-center font-medium text-primary">{t("pay_col_ot_amt")}</th>
                   <th className="p-1.5 text-center font-medium text-destructive">{t("pay_col_late")}</th>
@@ -979,6 +997,15 @@ export function AdminPayrollCalc() {
                         {fmt(r.splBonus)}
                       </button>
                     </td>
+                    <td className="p-1.5 text-right whitespace-nowrap tabular-nums font-medium">
+                      <button
+                        type="button"
+                        className="block w-full text-right hover:underline underline-offset-2"
+                        onClick={() => openExplain(r, "salesBonus")}
+                      >
+                        {fmt(r.salesBonus ?? 0)}
+                      </button>
+                    </td>
                     <td className="p-1.5 text-center text-muted-foreground whitespace-nowrap">
                       {i18nVar(t("pay_explain_ot_line"), { h: r.ot15 ?? 0 })}
                     </td>
@@ -1058,6 +1085,7 @@ export function AdminPayrollCalc() {
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.birthBonus)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.holidayPay)}</td>
                   <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.splBonus)}</td>
+                  <td className="p-1.5 text-right whitespace-nowrap tabular-nums">{fmt(payrollColumnTotals.salesBonus)}</td>
                   <td className="p-1.5 text-center text-muted-foreground whitespace-nowrap">
                     {i18nVar(t("pay_explain_ot_line"), {
                       h: Math.round(payrollColumnTotals.ot15 * 10) / 10,
@@ -1164,6 +1192,15 @@ export function AdminPayrollCalc() {
                     type="number"
                     value={editSplBonus}
                     onChange={(e) => setEditSplBonus(e.target.value)}
+                    className="text-end h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-primary block mb-1">➕ {t("pay_sales_bonus")}</label>
+                  <Input
+                    type="number"
+                    value={editSalesBonus}
+                    onChange={(e) => setEditSalesBonus(e.target.value)}
                     className="text-end h-9"
                   />
                 </div>

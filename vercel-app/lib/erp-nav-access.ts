@@ -31,6 +31,7 @@ export const ERP_NAV_MANAGER_HIDDEN_HREFS = new Set([
   "/admin/items",
   "/admin/vendors",
   "/admin/payroll",
+  "/admin/hr-sales-bonus",
 ])
 
 /** POS 메뉴별 href → 권한 체크 함수 */
@@ -54,10 +55,12 @@ export type ErpNavAccessContext = {
   aiModuleEnabled: boolean | null
   /** Omni vs 충만. 없으면 env/쿠키 브랜드 */
   brandKey?: AppBrandKey | string | null
+  /** Omni 매장 매니저 급여 조회 (employees.can_view_store_payroll) */
+  canViewStorePayroll?: boolean
 }
 
 export function isErpNavHrefAccessible(href: string, ctx: ErpNavAccessContext): boolean {
-  const { role, saasModules, aiModuleEnabled, brandKey } = ctx
+  const { role, saasModules, aiModuleEnabled, brandKey, canViewStorePayroll } = ctx
   if (!isSaasModuleEnabled(saasModules, resolveAdminPathSaasModule(href))) return false
   if (href === "/admin/ai-center") {
     return canAccessAiCenter(role) && aiModuleEnabled !== false
@@ -69,7 +72,10 @@ export function isErpNavHrefAccessible(href: string, ctx: ErpNavAccessContext): 
     return canAccessSettings(role, brandKey)
   }
   if (href === "/admin/payroll" || href.startsWith("/admin/payroll/")) {
-    return canAccessAdminPayroll(role, brandKey)
+    return canAccessAdminPayroll(role, brandKey, { canViewStorePayroll })
+  }
+  if (href === "/admin/hr-sales-bonus" || href.startsWith("/admin/hr-sales-bonus/")) {
+    return canAccessAdminPayroll(role, brandKey, { canViewStorePayroll })
   }
   return true
 }
@@ -80,9 +86,20 @@ export function filterErpNavSectionItems(
 ): ErpNavMenuItem[] {
   const isManager = isManagerRole(ctx.role, ctx.brandKey) || isFranchiseeRole(ctx.role)
   const isPosStaff = isPosOrderOnlyRole(ctx.role) || isPosSettlementOnlyRole(ctx.role)
+  const payrollOpts = { canViewStorePayroll: ctx.canViewStorePayroll }
 
   return section.items
-    .filter((item) => !(isManager && ERP_NAV_MANAGER_HIDDEN_HREFS.has(item.href)))
+    .filter((item) => {
+      if (!(isManager && ERP_NAV_MANAGER_HIDDEN_HREFS.has(item.href))) return true
+      // Omni 점주·허용 매니저: 급여는 HIDDEN 예외 (canAccessAdminPayroll)
+      if (
+        (item.href === "/admin/payroll" || item.href === "/admin/hr-sales-bonus") &&
+        canAccessAdminPayroll(ctx.role, ctx.brandKey, payrollOpts)
+      ) {
+        return true
+      }
+      return false
+    })
     .filter((item) => {
       if (!isPosStaff) return isErpNavHrefAccessible(item.href, ctx)
       if (section.titleKey !== "adminSectionPos") return false

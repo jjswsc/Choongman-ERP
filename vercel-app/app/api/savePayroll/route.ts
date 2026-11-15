@@ -60,6 +60,7 @@ export interface PayrollSaveRow {
   birthBonus?: number
   holidayPay?: number
   splBonus?: number
+  salesBonus?: number
   ot15?: number
   ot20?: number
   ot30?: number
@@ -90,6 +91,11 @@ function withoutEarlyLeaveCols(row: Record<string, unknown>): Record<string, unk
     late_min: (Number(rest.late_min) || 0) + earlyMin,
     late_ded: (Number(rest.late_ded) || 0) + earlyDed,
   }
+}
+
+function withoutSalesBonusCol(row: Record<string, unknown>): Record<string, unknown> {
+  const { sales_bonus: _sb, ...rest } = row
+  return rest
 }
 
 function isMissingPayrollColumnError(em: string): boolean {
@@ -402,6 +408,7 @@ export async function POST(request: NextRequest) {
       birth_bonus: Number(r.birthBonus) || 0,
       holiday_pay: Number(r.holidayPay) ?? 0,
       spl_bonus: Number(r.splBonus) || 0,
+      sales_bonus: Number(r.salesBonus) || 0,
       ot_15: Number(r.ot15) || 0,
       ot_20: Number(r.ot20) || 0,
       ot_30: Number(r.ot30) || 0,
@@ -430,8 +437,18 @@ export async function POST(request: NextRequest) {
       } catch (e0) {
         const em0 = e0 instanceof Error ? e0.message : String(e0)
         let e: unknown = e0
-        if (isMissingPayrollColumnError(em0) && /early_min|early_ded/i.test(em0)) {
-          payload = chunk.map(withoutEarlyLeaveCols)
+        if (isMissingPayrollColumnError(em0) && /sales_bonus/i.test(em0)) {
+          payload = chunk.map(withoutSalesBonusCol)
+          try {
+            await savePayrollRecordsChunk(monthStr, payload, tenantScope)
+            continue
+          } catch (eSb) {
+            e = eSb
+          }
+        }
+        const emAfterSb = e instanceof Error ? e.message : String(e)
+        if (isMissingPayrollColumnError(emAfterSb) && /early_min|early_ded/i.test(emAfterSb)) {
+          payload = (Array.isArray(payload) ? payload : chunk).map(withoutEarlyLeaveCols)
           try {
             await savePayrollRecordsChunk(monthStr, payload, tenantScope)
             continue

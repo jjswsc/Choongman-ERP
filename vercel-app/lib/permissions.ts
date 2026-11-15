@@ -171,7 +171,8 @@ export function resolveAuthRoleFromEmployeeRoleColumn(roleRaw: string): string |
 }
 
 /** JWT·직원 role에 한글/현지 표기가 섞여도 매장 관리자로 인식 */
-function roleTextMatchesManager(role: string): boolean {
+/** JWT·직원 role에 한글/현지 표기가 섞여도 매장 매니저로 인식 (Omni Officer 승격과 무관) */
+export function roleTextMatchesManager(role: string): boolean {
   const raw = String(role || "").trim()
   const lo = raw.toLowerCase()
   if (lo.includes(MANAGER_ROLE)) return true
@@ -366,18 +367,40 @@ export function canAccessSettings(role: string, brandKey?: PermissionBrandKey): 
   return isOfficeRole(role, brandKey)
 }
 
+export type PayrollAccessOpts = {
+  /** employees.can_view_store_payroll — Omni 매니저만 사용 */
+  canViewStorePayroll?: boolean
+}
+
 /**
  * 관리자 「급여 관리」 메뉴·API 접근.
- * 본사(Office)·회계·슈퍼바이저만. 매장 Manager·가맹점주는 불가(시재 출금 등 Manager PIN과 분리).
- * Omni Manager는 Officer 승격으로 isOfficeRole=true → 허용.
+ * - 본사(Director/Officer/Secretary)·회계·슈퍼바이저: 항상 허용
+ * - Omni 점주(franchisee): 허용(자기 매장)
+ * - Omni 매니저: canViewStorePayroll=true 일 때만 (점주가 직원 카드에서 지정)
+ * - 충만 매니저·점주: 불가 (시재 Manager PIN과 분리)
+ * ※ 급여만 Officer 승격에서 제외 — Omni 매니저 전원 자동 허용하지 않음.
  */
-export function canAccessAdminPayroll(role: string, brandKey?: PermissionBrandKey): boolean {
-  return isOfficeRole(role, brandKey) || isAccountingRole(role) || isSupervisorRole(role)
+export function canAccessAdminPayroll(
+  role: string,
+  brandKey?: PermissionBrandKey,
+  opts?: PayrollAccessOpts
+): boolean {
+  if (isNativeOfficeRole(role) || isAccountingRole(role) || isSupervisorRole(role)) return true
+  const brand = resolvePermissionBrandKey(brandKey)
+  if (brand === "omnifoodtech") {
+    if (isFranchiseeRole(role)) return true
+    if (roleTextMatchesManager(role)) return opts?.canViewStorePayroll === true
+  }
+  return false
 }
 
 /** 직원 카드의 급여·수당·급여계좌 열람 — 관리자 급여와 동일 기준 */
-export function canViewEmployeePayrollFields(role: string, brandKey?: PermissionBrandKey): boolean {
-  return canAccessAdminPayroll(role, brandKey)
+export function canViewEmployeePayrollFields(
+  role: string,
+  brandKey?: PermissionBrandKey,
+  opts?: PayrollAccessOpts
+): boolean {
+  return canAccessAdminPayroll(role, brandKey, opts)
 }
 
 /** 해당 경로에 매니저 접근 불가 여부 */
@@ -386,12 +409,27 @@ const MANAGER_DENIED_PATHS = [
   "/admin/vendors",
   "/admin/settings",
   "/admin/payroll",
+  "/admin/hr-sales-bonus",
 ]
 
 /** 매니저·가맹점주가 해당 경로에 접근할 수 있는지 */
-export function canManagerAccessPath(pathname: string): boolean {
+export function canManagerAccessPath(
+  pathname: string,
+  brandKey?: PermissionBrandKey,
+  opts?: PayrollAccessOpts & { role?: string }
+): boolean {
   const p = String(pathname || "").trim()
   if (!p.startsWith("/admin")) return true
+  const isPayrollPath = p === "/admin/payroll" || p.startsWith("/admin/payroll/")
+  const isSalesBonusPath = p === "/admin/hr-sales-bonus" || p.startsWith("/admin/hr-sales-bonus/")
+  if (
+    (isPayrollPath || isSalesBonusPath) &&
+    resolvePermissionBrandKey(brandKey) === "omnifoodtech"
+  ) {
+    const role = String(opts?.role || "")
+    if (isFranchiseeRole(role)) return true
+    if (roleTextMatchesManager(role) && opts?.canViewStorePayroll === true) return true
+  }
   return !MANAGER_DENIED_PATHS.some((denied) => p === denied || p.startsWith(denied + "/"))
 }
 

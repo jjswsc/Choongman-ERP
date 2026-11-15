@@ -1,12 +1,27 @@
 import { NextResponse } from 'next/server'
-import { canAccessAdminPayroll } from '@/lib/permissions'
+import { canAccessAdminPayroll, type PayrollAccessOpts } from '@/lib/permissions'
+import { getAppBrandConfigFromEnv } from '@/lib/app-brand'
 
-/** 관리자 급여 API — Manager/Franchisee 등 비권한 403 */
+export type PayrollGateAuth = {
+  role?: string | null
+  canViewStorePayroll?: boolean | null
+}
+
+/** 관리자 급여 API — 비권한 403 (Omni 점주·허용 매니저 포함) */
 export function forbidUnlessAdminPayroll(
-  role: string | undefined | null,
+  authOrRole: string | PayrollGateAuth | undefined | null,
   headers?: Headers
 ): NextResponse | null {
-  if (canAccessAdminPayroll(String(role || ''))) return null
+  const role =
+    typeof authOrRole === 'string' || authOrRole == null
+      ? String(authOrRole || '')
+      : String(authOrRole.role || '')
+  const opts: PayrollAccessOpts =
+    typeof authOrRole === 'object' && authOrRole != null
+      ? { canViewStorePayroll: authOrRole.canViewStorePayroll === true }
+      : {}
+  const brandKey = getAppBrandConfigFromEnv().key
+  if (canAccessAdminPayroll(role, brandKey, opts)) return null
   return NextResponse.json(
     {
       success: false,

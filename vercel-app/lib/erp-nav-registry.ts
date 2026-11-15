@@ -46,6 +46,7 @@ import {
   Radio,
   Settings,
   Smartphone,
+  Gift,
 } from "lucide-react"
 
 export type ErpNavMenuItem = {
@@ -143,6 +144,7 @@ export const ERP_NAV_MENU_SECTIONS: ErpNavMenuSection[] = [
       { titleKey: "adminHrCalendar", icon: CalendarDays, href: "/admin/hr-calendar" },
       { titleKey: "adminAttendance", icon: CalendarClock, href: "/admin/attendance" },
       { titleKey: "adminLeave", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
+      { titleKey: "adminHrSalesBonus", icon: Gift, href: "/admin/hr-sales-bonus" },
     ],
   },
   {

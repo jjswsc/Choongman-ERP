@@ -147,6 +147,7 @@ export const API_PATH_RULES: ReadonlyArray<{ prefix: string; module: SaasModuleK
   { prefix: "/api/saveHrPolicy", module: "attendance" },
   { prefix: "/api/confirmHrPolicy", module: "attendance" },
   { prefix: "/api/getMyHrPol", module: "attendance" },
+  { prefix: "/api/hr/sales-bonus", module: "attendance" },
   { prefix: "/api/employeeJobCatalog", module: "pos_base" },
   { prefix: "/api/franchiseeMultiStore", module: "attendance" },
   { prefix: "/api/getEvaluation", module: "attendance" },

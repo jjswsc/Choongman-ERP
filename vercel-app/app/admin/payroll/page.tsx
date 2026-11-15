@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { canAccessAdminPayroll } from "@/lib/permissions"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
 import { PayrollHelpContent } from "@/components/admin/payroll-help-content"
 import { HrPageShell } from "@/components/hr/hr-page-shell"
 
@@ -37,9 +38,12 @@ function isPayrollTab(v: string | null): v is PayrollTab {
 
 function PayrollPageInner() {
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
   const t = useT(useLang().lang)
   const searchParams = useSearchParams()
-  const canAccessPayroll = canAccessAdminPayroll(auth?.role || "")
+  const canAccessPayroll = canAccessAdminPayroll(auth?.role || "", brand.key, {
+    canViewStorePayroll: auth?.canViewStorePayroll === true,
+  })
 
   /** 탭은 URL과 분리. keep-alive 중 다른 메뉴 ?tab=으로 덮지 않음. */
   const [tabValue, setTabValue] = useState<PayrollTab>("calc")

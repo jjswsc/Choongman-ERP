@@ -88,6 +88,7 @@ export function grossWageBeforeSSO(params: {
   diligenceAllow?: number
   birthBonus: number
   holidayPay: number
+  salesBonus?: number
   otAmt: number
   lateDed: number
   earlyDed: number
@@ -95,6 +96,7 @@ export function grossWageBeforeSSO(params: {
 }): number {
   const u = params.unpaidAbsenceDed ?? 0
   const d = params.diligenceAllow ?? 0
+  const sb = params.salesBonus ?? 0
   const raw =
     params.salary +
     params.posAllow +
@@ -102,6 +104,7 @@ export function grossWageBeforeSSO(params: {
     d +
     params.birthBonus +
     params.holidayPay +
+    sb +
     params.otAmt -
     params.lateDed -
     params.earlyDed -
@@ -118,6 +121,7 @@ export type PayrollPnd1GrossInput = {
   birth_bonus?: number | null
   holiday_pay?: number | null
   spl_bonus?: number | null
+  sales_bonus?: number | null
   ot_amt?: number | null
   sso?: number | null
 }
@@ -140,6 +144,7 @@ export function payrollPnd1GrossAmount(row: PayrollPnd1GrossInput): number {
     finitePay(row.birth_bonus) +
     finitePay(row.holiday_pay) +
     finitePay(row.spl_bonus) +
+    finitePay(row.sales_bonus) +
     finitePay(row.ot_amt)
   const sso = Math.max(0, finitePay(row.sso))
   return Math.max(0, earnings + sso)

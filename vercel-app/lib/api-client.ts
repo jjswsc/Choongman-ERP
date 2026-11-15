@@ -23,6 +23,7 @@ export { invalidateAppDataCache, getAppData } from './api-client/app-data-cache'
 
 export * from './api-client/stock'
 export * from './api-client/hr'
+export * from './api-client/hr-sales-bonus'
 export * from './api-client/admin'
 export * from './api-client/work-log'
 export * from './api-client/timesheet'

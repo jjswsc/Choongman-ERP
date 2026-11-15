@@ -64,6 +64,14 @@ import {
   resolveSaasTenantScope,
   selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
+import {
+  computePersonSalesBonus,
+  defaultStoreSalesBonusSettings,
+} from '@/lib/sales-bonus/compute-sales-bonus'
+import {
+  loadSalesBonusContextForPayroll,
+  resolveSalesTotalForStore,
+} from '@/lib/sales-bonus/calc-store-month-server'
 
 const LATE_DED_HOURS_BASE = 208 // 지각/조퇴 공제 기준(기존 정책 유지)
 const MONTHLY_OT_HOURS_BASE = 240 // 월급제 OT 기준: 월급 ÷ 30일 ÷ 8시간
@@ -160,6 +168,7 @@ export type PayrollCalcExplain = {
   birthBonus: PayrollExplainEntry[]
   holidayPay: PayrollExplainEntry[]
   splBonus: PayrollExplainEntry[]
+  salesBonus: PayrollExplainEntry[]
   ot: PayrollExplainEntry[]
   lateEarly: PayrollExplainEntry[]
   sso: PayrollExplainEntry[]
@@ -700,6 +709,8 @@ export interface PayrollCalcRow {
   holidayPay: number
   holidayWorkDays: number
   splBonus: number
+  /** 매장 매출 구간 보너스 (자동) */
+  salesBonus: number
   ot15: number
   ot20: number
   ot30: number
@@ -748,7 +759,7 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
-  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  const payrollGate = forbidUnlessAdminPayroll(auth, headers)
   if (payrollGate) return payrollGate
   const tenantScope = await resolveSaasTenantScope({ auth })
   if (isSaasTenantQueryBlocked(tenantScope, 'employees')) {
@@ -1211,6 +1222,35 @@ export async function GET(request: NextRequest) {
     const list: PayrollCalcRow[] = []
     const allowanceExclusionKeys = await loadAllowanceExclusionKeysForMonth(normMonth)
 
+    const storeCodesForBonus = Array.from(
+      new Set(
+        (empRows || [])
+          .map((e) => String(e.store || '').trim())
+          .filter((s) => s && !isOfficeStore(s))
+      )
+    )
+    let salesBonusSettingsByStore = new Map<
+      string,
+      import('@/lib/sales-bonus/types').StoreSalesBonusSettings
+    >()
+    let salesBonusSalesByStore = new Map<string, number>()
+    try {
+      const bonusCtx = await loadSalesBonusContextForPayroll({
+        startStr,
+        endStr,
+        storeCodes: storeCodesForBonus,
+        request,
+        tenantScope,
+      })
+      salesBonusSettingsByStore = bonusCtx.settingsByStore
+      salesBonusSalesByStore = bonusCtx.salesByStore
+    } catch (bonusErr) {
+      console.warn(
+        'getPayrollCalc sales bonus context:',
+        bonusErr instanceof Error ? bonusErr.message : bonusErr
+      )
+    }
+
     for (const e of empRows || []) {
       const store = String(e.store || '').trim()
       const name = String(e.name || '').trim()
@@ -1489,6 +1529,33 @@ export async function GET(request: NextRequest) {
       }
       // 출퇴근 0건이면 집계 미연동·키 불일치와 무근무를 구분할 수 없어 자동 '결석' 공제는 하지 않음(무급휴가는 leave만)
       const absenceDays = workDays === 0 ? 0 : absenceDateList.length
+      // 매출 보너스 패널티: 유급휴가만 제외 (무급·노쇼는 차감). 출근 0건이면 0
+      let salesBonusAbsenceDays = 0
+      if (workDays > 0 && hasScheduleBasis) {
+        for (const ds of Array.from(scheduleExpectedDates).sort()) {
+          if (presentDates.has(ds)) continue
+          if (paidLeaveDateSet.has(ds)) continue
+          salesBonusAbsenceDays += 1
+        }
+      } else if (workDays > 0) {
+        salesBonusAbsenceDays = absenceDays + Math.floor(unpaidLeaveDays)
+      }
+      const salesBonusSettings =
+        salesBonusSettingsByStore.get(store) || defaultStoreSalesBonusSettings(store)
+      const storeSalesTotal = resolveSalesTotalForStore(salesBonusSalesByStore, store)
+      const salesBonusResult = isOfficeStore(store)
+        ? null
+        : computePersonSalesBonus({
+            enabled: salesBonusSettings.enabled,
+            salesTotal: storeSalesTotal,
+            tiers: salesBonusSettings.tiers,
+            role,
+            managerMultiplier: salesBonusSettings.managerMultiplier,
+            staffMultiplier: salesBonusSettings.staffMultiplier,
+            absenceDays: salesBonusAbsenceDays,
+            absencePenaltyPctPerDay: salesBonusSettings.absencePenaltyPctPerDay,
+          })
+      const salesBonus = salesBonusResult?.finalAmount ?? 0
       // 태국 관행: 일급 = 월급 ÷ 당월 근무일수. 금액은 상세(일별·휴가 건별 floor) 합과 표시 일치
       const dailyRate = expectedWorkDays > 0 ? salary / expectedWorkDays : 0
       let unpaidAbsenceDed = 0
@@ -1533,7 +1600,14 @@ export async function GET(request: NextRequest) {
       }
 
       const income =
-        salary + posAllowFinal + hazAllowFinal + diligenceAllow + birthBonus + holidayPay + otAmt
+        salary +
+        posAllowFinal +
+        hazAllowFinal +
+        diligenceAllow +
+        birthBonus +
+        holidayPay +
+        salesBonus +
+        otAmt
       const ssoExempt = isEmployeeSsoExemptFlag((e as EmpRowPayroll).sso_exempt)
       const ssoBase = ssoContributionBaseWage(isHourly, salAmt, salary)
       const ssoGrossWage = grossWageBeforeSSO({
@@ -1543,6 +1617,7 @@ export async function GET(request: NextRequest) {
         diligenceAllow,
         birthBonus,
         holidayPay,
+        salesBonus,
         otAmt,
         lateDed,
         earlyDed,
@@ -1567,11 +1642,21 @@ export async function GET(request: NextRequest) {
         birthBonus: [],
         holidayPay: [],
         splBonus: [],
+        salesBonus: [],
         ot: [],
         lateEarly: [],
         sso: [],
         tax: [],
         otherDed: [],
+      }
+      if (salesBonusResult) {
+        for (const line of salesBonusResult.explain) {
+          explain.salesBonus.push({
+            reason: line.reason,
+            detail: line.detail,
+            amount: line.amount,
+          })
+        }
       }
 
       explain.salary.push({
@@ -1849,6 +1934,7 @@ export async function GET(request: NextRequest) {
         holidayPay,
         holidayWorkDays,
         splBonus: 0,
+        salesBonus,
         ot15,
         ot20: 0,
         ot30: 0,

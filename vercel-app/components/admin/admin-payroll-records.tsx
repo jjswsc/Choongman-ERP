@@ -53,6 +53,7 @@ type RecordRow = {
   birth_bonus: number
   holiday_pay: number
   spl_bonus: number
+  sales_bonus?: number
   ot_amt: number
   late_min: number
   late_ded: number
@@ -75,7 +76,8 @@ function sumAllowance(r: RecordRow): number {
     (r.diligence_allow || 0) +
     (r.birth_bonus || 0) +
     (r.holiday_pay || 0) +
-    (r.spl_bonus || 0)
+    (r.spl_bonus || 0) +
+    (r.sales_bonus || 0)
   )
 }
 
@@ -293,6 +295,7 @@ export function AdminPayrollRecords() {
       t("pay_birth"),
       t("pay_holiday"),
       t("pay_spl_bonus"),
+      t("pay_sales_bonus"),
       t("pay_ot"),
       t("pay_col_late"),
       t("pay_late_ded"),
@@ -311,6 +314,7 @@ export function AdminPayrollRecords() {
       birth: 0,
       hol: 0,
       spl: 0,
+      sales: 0,
       ot: 0,
       lateDed: 0,
       sso: 0,
@@ -333,6 +337,7 @@ export function AdminPayrollRecords() {
       sums.birth += r.birth_bonus || 0
       sums.hol += r.holiday_pay || 0
       sums.spl += r.spl_bonus || 0
+      sums.sales += r.sales_bonus || 0
       sums.ot += r.ot_amt || 0
       sums.lateDed += r.late_ded || 0
       sums.sso += r.sso || 0
@@ -352,6 +357,7 @@ export function AdminPayrollRecords() {
         String(r.birth_bonus ?? 0),
         String(r.holiday_pay ?? 0),
         String(r.spl_bonus ?? 0),
+        String(r.sales_bonus ?? 0),
         String(r.ot_amt ?? 0),
         String(r.late_min ?? 0),
         String(r.late_ded ?? 0),
@@ -375,6 +381,7 @@ export function AdminPayrollRecords() {
       String(sums.birth),
       String(sums.hol),
       String(sums.spl),
+      String(sums.sales),
       String(sums.ot),
       "",
       String(sums.lateDed),

@@ -16,20 +16,59 @@ describe('canAccessAdminPayroll', () => {
   })
 
   it('denies store manager and franchisee on Choongman', () => {
-    expect(canAccessAdminPayroll('manager')).toBe(false)
-    expect(canAccessAdminPayroll('Manager')).toBe(false)
-    expect(canAccessAdminPayroll('franchisee')).toBe(false)
-    expect(canAccessAdminPayroll('staff')).toBe(false)
+    expect(canAccessAdminPayroll('manager', 'choongman')).toBe(false)
+    expect(canAccessAdminPayroll('Manager', 'choongman')).toBe(false)
+    expect(canAccessAdminPayroll('franchisee', 'choongman')).toBe(false)
+    expect(canAccessAdminPayroll('staff', 'choongman')).toBe(false)
   })
 
-  it('allows Omni manager via Officer equivalence', () => {
-    expect(canAccessAdminPayroll('manager', 'omnifoodtech')).toBe(true)
-    expect(canViewEmployeePayrollFields('manager', 'omnifoodtech')).toBe(true)
+  it('allows Omni franchisee always', () => {
+    expect(canAccessAdminPayroll('franchisee', 'omnifoodtech')).toBe(true)
+    expect(canViewEmployeePayrollFields('franchisee', 'omnifoodtech')).toBe(true)
   })
 
-  it('blocks manager path /admin/payroll', () => {
-    expect(canManagerAccessPath('/admin/payroll')).toBe(false)
-    expect(canManagerAccessPath('/admin/payroll/')).toBe(false)
+  it('allows Omni manager only when store payroll flag is on', () => {
+    expect(canAccessAdminPayroll('manager', 'omnifoodtech')).toBe(false)
+    expect(canAccessAdminPayroll('manager', 'omnifoodtech', { canViewStorePayroll: false })).toBe(
+      false
+    )
+    expect(canAccessAdminPayroll('manager', 'omnifoodtech', { canViewStorePayroll: true })).toBe(
+      true
+    )
+    expect(
+      canViewEmployeePayrollFields('manager', 'omnifoodtech', { canViewStorePayroll: true })
+    ).toBe(true)
+  })
+
+  it('does not treat Omni manager as automatic Officer for payroll', () => {
+    expect(canAccessAdminPayroll('manager', 'omnifoodtech')).toBe(false)
+  })
+})
+
+describe('canManagerAccessPath payroll', () => {
+  it('blocks manager path /admin/payroll on Choongman', () => {
+    expect(canManagerAccessPath('/admin/payroll', 'choongman', { role: 'manager' })).toBe(false)
+    expect(canManagerAccessPath('/admin/payroll/', 'choongman', { role: 'franchisee' })).toBe(
+      false
+    )
     expect(canManagerAccessPath('/admin/employees')).toBe(true)
+  })
+
+  it('allows Omni franchisee payroll path', () => {
+    expect(
+      canManagerAccessPath('/admin/payroll', 'omnifoodtech', { role: 'franchisee' })
+    ).toBe(true)
+  })
+
+  it('allows Omni manager payroll path only with flag', () => {
+    expect(canManagerAccessPath('/admin/payroll', 'omnifoodtech', { role: 'manager' })).toBe(
+      false
+    )
+    expect(
+      canManagerAccessPath('/admin/payroll', 'omnifoodtech', {
+        role: 'manager',
+        canViewStorePayroll: true,
+      })
+    ).toBe(true)
   })
 })

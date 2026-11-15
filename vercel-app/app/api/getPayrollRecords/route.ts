@@ -30,6 +30,7 @@ export interface PayrollRecordRow {
   birth_bonus: number
   holiday_pay: number
   spl_bonus: number
+  sales_bonus?: number
   ot_15: number
   ot_20: number
   ot_30: number
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
     return authResult.errorResponse
   }
   const { auth } = authResult
-  const payrollGate = forbidUnlessAdminPayroll(auth.role, headers)
+  const payrollGate = forbidUnlessAdminPayroll(auth, headers)
   if (payrollGate) return payrollGate
 
   const tenantScope = await resolveSaasTenantScope({ auth })
@@ -143,6 +144,7 @@ export async function GET(request: NextRequest) {
       birth_bonus: Number(r.birth_bonus) || 0,
       holiday_pay: Number(r.holiday_pay) ?? 0,
       spl_bonus: Number(r.spl_bonus) || 0,
+      sales_bonus: Number(r.sales_bonus) || 0,
       ot_15: Number(r.ot_15) || 0,
       ot_20: Number(r.ot_20) || 0,
       ot_30: Number(r.ot_30) || 0,

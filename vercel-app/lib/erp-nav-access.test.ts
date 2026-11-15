@@ -62,19 +62,24 @@ describe("POS-only ERP nav", () => {
 
 describe("Omni vs Choongman manager logistics nav", () => {
   const logisticsOn = modulesOn(["logistics", "pos_base"])
+  /** payroll 메뉴는 attendance 모듈 게이트 */
+  const hrNavOn = modulesOn(["logistics", "pos_base", "attendance"])
 
-  function managerCtx(brandKey: "choongman" | "omnifoodtech"): ErpNavAccessContext {
+  function managerCtx(
+    brandKey: "choongman" | "omnifoodtech",
+    modules: SaasEnabledModulesMap = logisticsOn
+  ): ErpNavAccessContext {
     return {
       role: "manager",
       store: "1001",
-      saasModules: logisticsOn,
+      saasModules: modules,
       aiModuleEnabled: false,
       brandKey,
     }
   }
 
   it("hides items, vendors, and payroll for Choongman manager", () => {
-    const hrefs = getAccessibleErpNavHrefs(managerCtx("choongman"))
+    const hrefs = getAccessibleErpNavHrefs(managerCtx("choongman", hrNavOn))
     expect(hrefs).not.toContain("/admin/items")
     expect(hrefs).not.toContain("/admin/vendors")
     expect(hrefs).not.toContain("/admin/payroll")
@@ -83,10 +88,41 @@ describe("Omni vs Choongman manager logistics nav", () => {
   })
 
   it("shows items, vendors, and settings for Omni manager", () => {
-    const hrefs = getAccessibleErpNavHrefs(managerCtx("omnifoodtech"))
+    const hrefs = getAccessibleErpNavHrefs(managerCtx("omnifoodtech", hrNavOn))
     expect(hrefs).toContain("/admin/items")
     expect(hrefs).toContain("/admin/vendors")
     expect(hrefs).toContain("/admin/inbound")
     expect(hrefs).toContain("/admin/settings")
+    expect(hrefs).not.toContain("/admin/payroll")
+  })
+
+  it("shows payroll for Omni manager when canViewStorePayroll", () => {
+    const hrefs = getAccessibleErpNavHrefs({
+      ...managerCtx("omnifoodtech", hrNavOn),
+      canViewStorePayroll: true,
+    })
+    expect(hrefs).toContain("/admin/payroll")
+  })
+
+  it("shows payroll for Omni franchisee", () => {
+    const hrefs = getAccessibleErpNavHrefs({
+      role: "franchisee",
+      store: "1001",
+      saasModules: hrNavOn,
+      aiModuleEnabled: false,
+      brandKey: "omnifoodtech",
+    })
+    expect(hrefs).toContain("/admin/payroll")
+  })
+
+  it("hides payroll for Choongman franchisee", () => {
+    const hrefs = getAccessibleErpNavHrefs({
+      role: "franchisee",
+      store: "1001",
+      saasModules: hrNavOn,
+      aiModuleEnabled: false,
+      brandKey: "choongman",
+    })
+    expect(hrefs).not.toContain("/admin/payroll")
   })
 })
