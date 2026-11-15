@@ -68,12 +68,20 @@ export async function POST(request: NextRequest) {
         amount: Number(o.amount) || 0,
       }
     })
+    const designeeRaw = body.doubleBonusEmployeeId ?? body.double_bonus_employee_id
+    const designeeId =
+      designeeRaw == null || designeeRaw === '' || designeeRaw === 0
+        ? null
+        : Math.floor(Number(designeeRaw))
     const input = {
       storeCode: String(body.storeCode || body.store || '').trim(),
       enabled: body.enabled === true || body.enabled === 'true' || body.enabled === 1,
       absencePenaltyPctPerDay: Number(body.absencePenaltyPctPerDay ?? body.absence_penalty_pct_per_day) || 0,
       managerMultiplier: Number(body.managerMultiplier ?? body.manager_multiplier) || 2,
       staffMultiplier: Number(body.staffMultiplier ?? body.staff_multiplier) || 1,
+      doubleBonusEmployeeId:
+        designeeId != null && Number.isFinite(designeeId) && designeeId > 0 ? designeeId : null,
+      payoutDay: Number(body.payoutDay ?? body.payout_day) || 5,
       tiers,
     }
     const checked = validateSalesBonusSettingsInput(input)

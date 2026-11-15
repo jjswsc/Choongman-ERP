@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **859**개 · 접두어 그룹 **102**개
+- `sql/` 최상위: **860**개 · 접두어 그룹 **102**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -701,6 +701,24 @@
 
 </details>
 
+<details><summary><code>store_*</code> (13)</summary>
+
+- [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
+- [`store_action_items_v2.sql`](../sql/store_action_items_v2.sql)
+- [`store_action_photos_storage_bucket.sql`](../sql/store_action_photos_storage_bucket.sql)
+- [`store_repair_photos_storage_bucket.sql`](../sql/store_repair_photos_storage_bucket.sql) — apply
+- [`store_repair_progress_logs.sql`](../sql/store_repair_progress_logs.sql) — apply
+- [`store_repair_schema_all.sql`](../sql/store_repair_schema_all.sql) — apply
+- [`store_repair_tickets.sql`](../sql/store_repair_tickets.sql) — apply
+- [`store_repair_tickets_vendor_code.sql`](../sql/store_repair_tickets_vendor_code.sql) — apply
+- [`store_sales_bonus_settings_01_table.sql`](../sql/store_sales_bonus_settings_01_table.sql) — log
+- [`store_sales_bonus_settings_02_seed_choongman_poster.sql`](../sql/store_sales_bonus_settings_02_seed_choongman_poster.sql) — log
+- [`store_tax_filing_profiles.sql`](../sql/store_tax_filing_profiles.sql)
+- [`store_tax_filing_profiles_sso_columns.sql`](../sql/store_tax_filing_profiles_sso_columns.sql)
+- [`store_tax_filing_profiles_vendor_code.sql`](../sql/store_tax_filing_profiles_vendor_code.sql)
+
+</details>
+
 <details><summary><code>true_*</code> (13)</summary>
 
 - [`true_digital_emergency_autoprint_off_01.sql`](../sql/true_digital_emergency_autoprint_off_01.sql)
@@ -733,23 +751,6 @@
 - [`grab_option_integrity_fix.sql`](../sql/grab_option_integrity_fix.sql) — apply
 - [`grab_sync_actor_01_menu_audit.sql`](../sql/grab_sync_actor_01_menu_audit.sql) — diagnose
 - [`grab_tenant_id.sql`](../sql/grab_tenant_id.sql)
-
-</details>
-
-<details><summary><code>store_*</code> (12)</summary>
-
-- [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
-- [`store_action_items_v2.sql`](../sql/store_action_items_v2.sql)
-- [`store_action_photos_storage_bucket.sql`](../sql/store_action_photos_storage_bucket.sql)
-- [`store_repair_photos_storage_bucket.sql`](../sql/store_repair_photos_storage_bucket.sql) — apply
-- [`store_repair_progress_logs.sql`](../sql/store_repair_progress_logs.sql) — apply
-- [`store_repair_schema_all.sql`](../sql/store_repair_schema_all.sql) — apply
-- [`store_repair_tickets.sql`](../sql/store_repair_tickets.sql) — apply
-- [`store_repair_tickets_vendor_code.sql`](../sql/store_repair_tickets_vendor_code.sql) — apply
-- [`store_sales_bonus_settings_01_table.sql`](../sql/store_sales_bonus_settings_01_table.sql) — log
-- [`store_tax_filing_profiles.sql`](../sql/store_tax_filing_profiles.sql)
-- [`store_tax_filing_profiles_sso_columns.sql`](../sql/store_tax_filing_profiles_sso_columns.sql)
-- [`store_tax_filing_profiles_vendor_code.sql`](../sql/store_tax_filing_profiles_vendor_code.sql)
 
 </details>
 

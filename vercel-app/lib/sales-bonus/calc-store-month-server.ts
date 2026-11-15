@@ -1,6 +1,4 @@
 import { NextRequest } from 'next/server'
-import { resolvePayrollPeriod, type ResolvedPayrollPeriod } from '@/lib/payroll-cycle'
-import { loadPayrollCycleSettings } from '@/lib/payroll-cycle-settings'
 import { tryFetchPosSalesAnalyticsAggIgnoreTimeout } from '@/lib/pos-sales-analytics-rpc-server'
 import { mapAnalyticsAggToStoreResults } from '@/lib/pos-sales-analytics-rpc-map'
 import { canonicalSalesStoreRowKey } from '@/lib/pos-sales-store-filter'
@@ -12,6 +10,10 @@ import {
   loadStoreSalesBonusSettings,
   loadStoreSalesBonusSettingsMap,
 } from '@/lib/sales-bonus/load-store-settings-server'
+import {
+  resolveSalesBonusCalendarPeriod,
+  type SalesBonusResolvedPeriod,
+} from '@/lib/sales-bonus/period'
 import type { SalesBonusPersonResult, StoreSalesBonusSettings } from '@/lib/sales-bonus/types'
 import type { SaasTenantScope } from '@/lib/saas-tenant-scope'
 
@@ -29,7 +31,7 @@ export type SalesBonusStorePreview = {
   storeCode: string
   settings: StoreSalesBonusSettings
   salesTotal: number
-  period: Pick<ResolvedPayrollPeriod, 'month' | 'start' | 'end' | 'payYmd'>
+  period: Pick<SalesBonusResolvedPeriod, 'month' | 'start' | 'end' | 'payYmd' | 'payoutDay'>
   employees: SalesBonusPreviewEmployee[]
 }
 
@@ -293,30 +295,31 @@ export async function calcSalesBonusPreviewForStores(params: {
   const month = String(params.month || '').slice(0, 7)
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('month는 YYYY-MM 형식이어야 합니다.')
 
-  const cycleSettings = await loadPayrollCycleSettings().catch(() => null)
-  const period = resolvePayrollPeriod(month, cycleSettings || { versions: [] })
-  const startStr = period.start
-  const endStr = period.end
-
   const storeCodes = Array.from(
     new Set(params.storeCodes.map((s) => String(s || '').trim()).filter(Boolean))
   )
   if (storeCodes.length === 0) return []
 
-  const [settingsMap, salesRows] = await Promise.all([
-    loadStoreSalesBonusSettingsMap(storeCodes),
-    fetchPeriodStoreSalesTotals({
-      startStr,
-      endStr,
-      request: params.request,
-      tenantScope: params.tenantScope,
-    }),
-  ])
+  const settingsMap = await loadStoreSalesBonusSettingsMap(storeCodes)
+  // 집계 기간은 달력월. 지급일은 매장 설정(없으면 5일) — 매출 구간은 매장마다 동일.
+  const samplePayoutDay =
+    storeCodes.map((c) => settingsMap.get(c)?.payoutDay).find((d) => d && d > 0) || 5
+  const period = resolveSalesBonusCalendarPeriod(month, samplePayoutDay)
+  const startStr = period.start
+  const endStr = period.end
+
+  const salesRows = await fetchPeriodStoreSalesTotals({
+    startStr,
+    endStr,
+    request: params.request,
+    tenantScope: params.tenantScope,
+  })
 
   const out: SalesBonusStorePreview[] = []
 
   for (const storeCode of storeCodes) {
     const settings = settingsMap.get(storeCode) || (await loadStoreSalesBonusSettings(storeCode))
+    const storePeriod = resolveSalesBonusCalendarPeriod(month, settings.payoutDay)
     const salesTotal = findStoreSalesTotal(salesRows, storeCode)
     const empFilter = `store=eq.${encodeURIComponent(storeCode)}`
     const empRows = (await supabaseSelectFilter('employees', empFilter, {
@@ -373,7 +376,8 @@ export async function calcSalesBonusPreviewForStores(params: {
         enabled: settings.enabled,
         salesTotal,
         tiers: settings.tiers,
-        role,
+        employeeId,
+        doubleBonusEmployeeId: settings.doubleBonusEmployeeId,
         managerMultiplier: settings.managerMultiplier,
         staffMultiplier: settings.staffMultiplier,
         absenceDays,
@@ -390,16 +394,22 @@ export async function calcSalesBonusPreviewForStores(params: {
       })
     }
 
-    employees.sort((a, b) => a.name.localeCompare(b.name))
+    employees.sort((a, b) => {
+      const ad = a.result.isDoubleBonusDesignee ? 0 : 1
+      const bd = b.result.isDoubleBonusDesignee ? 0 : 1
+      if (ad !== bd) return ad - bd
+      return a.name.localeCompare(b.name)
+    })
     out.push({
       storeCode,
       settings,
       salesTotal,
       period: {
-        month: period.month,
-        start: period.start,
-        end: period.end,
-        payYmd: period.payYmd,
+        month: storePeriod.month,
+        start: storePeriod.start,
+        end: storePeriod.end,
+        payYmd: storePeriod.payYmd,
+        payoutDay: storePeriod.payoutDay,
       },
       employees,
     })

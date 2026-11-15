@@ -8,8 +8,14 @@ export type StoreSalesBonusSettings = {
   storeCode: string
   enabled: boolean
   absencePenaltyPctPerDay: number
+  /** 지정자(doubleBonusEmployeeId)에게 적용하는 배수. 기본 2 */
   managerMultiplier: number
+  /** 그 외 직원 배수. 기본 1 */
   staffMultiplier: number
+  /** 배수 대상 직원 employees.id (역할 무관, 매장당 1명) */
+  doubleBonusEmployeeId: number | null
+  /** 익월 지급일 1~28 (매출은 달력월 전체 집계) */
+  payoutDay: number
   tiers: SalesBonusTier[]
   updatedAt?: string
 }
@@ -30,4 +36,5 @@ export type SalesBonusPersonResult = {
   finalAmount: number
   appliedTiers: SalesBonusTier[]
   explain: SalesBonusExplainLine[]
+  isDoubleBonusDesignee?: boolean
 }

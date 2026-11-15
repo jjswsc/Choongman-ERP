@@ -1235,9 +1235,12 @@ export async function GET(request: NextRequest) {
     >()
     let salesBonusSalesByStore = new Map<string, number>()
     try {
+      // 매출 보너스: 급여 주기(26~25)가 아니라 달력월 전체 집계 → 익월 지급일 확정용
+      const { resolveSalesBonusCalendarPeriod } = await import('@/lib/sales-bonus/period')
+      const bonusPeriod = resolveSalesBonusCalendarPeriod(normMonth, 5)
       const bonusCtx = await loadSalesBonusContextForPayroll({
-        startStr,
-        endStr,
+        startStr: bonusPeriod.start || startStr,
+        endStr: bonusPeriod.end || endStr,
         storeCodes: storeCodesForBonus,
         request,
         tenantScope,
@@ -1549,7 +1552,8 @@ export async function GET(request: NextRequest) {
             enabled: salesBonusSettings.enabled,
             salesTotal: storeSalesTotal,
             tiers: salesBonusSettings.tiers,
-            role,
+            employeeId,
+            doubleBonusEmployeeId: salesBonusSettings.doubleBonusEmployeeId,
             managerMultiplier: salesBonusSettings.managerMultiplier,
             staffMultiplier: salesBonusSettings.staffMultiplier,
             absenceDays: salesBonusAbsenceDays,

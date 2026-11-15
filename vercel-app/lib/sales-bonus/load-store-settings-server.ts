@@ -4,6 +4,7 @@ import {
   normalizeSalesBonusTiers,
   parseStoreSalesBonusSettingsRow,
 } from '@/lib/sales-bonus/compute-sales-bonus'
+import { normalizeSalesBonusPayoutDay } from '@/lib/sales-bonus/period'
 import type { SalesBonusTier, StoreSalesBonusSettings } from '@/lib/sales-bonus/types'
 
 export async function loadAllStoreSalesBonusSettings(): Promise<StoreSalesBonusSettings[]> {
@@ -78,6 +79,8 @@ export type SaveStoreSalesBonusSettingsInput = {
   absencePenaltyPctPerDay: number
   managerMultiplier: number
   staffMultiplier: number
+  doubleBonusEmployeeId: number | null
+  payoutDay: number
   tiers: SalesBonusTier[]
 }
 
@@ -93,10 +96,16 @@ export function validateSalesBonusSettingsInput(
   const managerMultiplier = Number(input.managerMultiplier)
   const staffMultiplier = Number(input.staffMultiplier)
   if (!Number.isFinite(managerMultiplier) || managerMultiplier <= 0 || managerMultiplier > 20) {
-    return { ok: false, msg: '매니저 배수는 0 초과 20 이하여야 합니다.' }
+    return { ok: false, msg: '지정자 배수는 0 초과 20 이하여야 합니다.' }
   }
   if (!Number.isFinite(staffMultiplier) || staffMultiplier <= 0 || staffMultiplier > 20) {
     return { ok: false, msg: '일반 배수는 0 초과 20 이하여야 합니다.' }
+  }
+  const payoutDay = normalizeSalesBonusPayoutDay(input.payoutDay, 5)
+  let doubleBonusEmployeeId: number | null = null
+  if (input.doubleBonusEmployeeId != null && input.doubleBonusEmployeeId !== ('' as unknown)) {
+    const id = Math.floor(Number(input.doubleBonusEmployeeId))
+    if (Number.isFinite(id) && id > 0) doubleBonusEmployeeId = id
   }
   const tiers = normalizeSalesBonusTiers(input.tiers)
   for (const t of tiers) {
@@ -112,6 +121,8 @@ export function validateSalesBonusSettingsInput(
       absencePenaltyPctPerDay,
       managerMultiplier,
       staffMultiplier,
+      doubleBonusEmployeeId,
+      payoutDay,
       tiers,
     },
   }
@@ -123,15 +134,28 @@ export async function saveStoreSalesBonusSettings(
   const checked = validateSalesBonusSettingsInput(input)
   if (!checked.ok) throw new Error(checked.msg)
   const v = checked.value
-  const row = {
+  const row: Record<string, unknown> = {
     store_code: v.storeCode,
     enabled: v.enabled,
     absence_penalty_pct_per_day: v.absencePenaltyPctPerDay,
     manager_multiplier: v.managerMultiplier,
     staff_multiplier: v.staffMultiplier,
+    double_bonus_employee_id: v.doubleBonusEmployeeId,
+    payout_day: v.payoutDay,
     tiers: v.tiers,
     updated_at: new Date().toISOString(),
   }
-  await supabaseUpsertMerge('store_sales_bonus_settings', 'store_code', row)
+  try {
+    await supabaseUpsertMerge('store_sales_bonus_settings', 'store_code', row)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // 컬럼 미적용 DB 폴백
+    if (/double_bonus_employee_id|payout_day|PGRST204|42703/i.test(msg)) {
+      const { double_bonus_employee_id: _d, payout_day: _p, ...legacy } = row
+      await supabaseUpsertMerge('store_sales_bonus_settings', 'store_code', legacy)
+      return parseStoreSalesBonusSettingsRow(legacy, v.storeCode)
+    }
+    throw e
+  }
   return parseStoreSalesBonusSettingsRow(row, v.storeCode)
 }

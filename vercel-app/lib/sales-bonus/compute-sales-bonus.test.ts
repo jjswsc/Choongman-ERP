@@ -8,6 +8,7 @@ import {
   buildPosterSalesBonusTiers,
   CHOONGMAN_POSTER_SALES_BONUS_BASES,
 } from '@/lib/sales-bonus/poster-tiers'
+import { resolveSalesBonusCalendarPeriod } from '@/lib/sales-bonus/period'
 
 const tiers = [
   { threshold: 500_000, amount: 1_000 },
@@ -48,7 +49,8 @@ describe('computePersonSalesBonus', () => {
       enabled: true,
       salesTotal: 650_000,
       tiers,
-      role: 'Staff',
+      employeeId: 10,
+      doubleBonusEmployeeId: 99,
       managerMultiplier: 2,
       staffMultiplier: 1,
       absenceDays: 0,
@@ -57,50 +59,51 @@ describe('computePersonSalesBonus', () => {
     expect(r.baseAmount).toBe(2_000)
     expect(r.multiplier).toBe(1)
     expect(r.finalAmount).toBe(2_000)
+    expect(r.isDoubleBonusDesignee).toBe(false)
   })
 
-  it('applies manager 2x', () => {
-    const r = computePersonSalesBonus({
+  it('applies 2x only to designated employee, not role', () => {
+    const designee = computePersonSalesBonus({
       enabled: true,
-      salesTotal: 650_000,
+      salesTotal: 500_000,
       tiers,
-      role: 'Manager',
+      employeeId: 42,
+      doubleBonusEmployeeId: 42,
       managerMultiplier: 2,
       staffMultiplier: 1,
       absenceDays: 0,
-      absencePenaltyPctPerDay: 5,
+      absencePenaltyPctPerDay: 0,
     })
-    expect(r.roleAmount).toBe(4_000)
-    expect(r.finalAmount).toBe(4_000)
-  })
+    expect(designee.multiplier).toBe(2)
+    expect(designee.finalAmount).toBe(2_000)
+    expect(designee.isDoubleBonusDesignee).toBe(true)
 
-  it('subtracts penalty pct per absence day', () => {
-    const r = computePersonSalesBonus({
+    const other = computePersonSalesBonus({
       enabled: true,
-      salesTotal: 650_000,
+      salesTotal: 500_000,
       tiers,
-      role: 'Staff',
+      employeeId: 7,
+      doubleBonusEmployeeId: 42,
       managerMultiplier: 2,
       staffMultiplier: 1,
-      absenceDays: 2,
-      absencePenaltyPctPerDay: 5,
+      absenceDays: 0,
+      absencePenaltyPctPerDay: 0,
     })
-    // 2000 * 10% = 200 → 1800
-    expect(r.penaltyPct).toBe(10)
-    expect(r.penaltyAmount).toBe(200)
-    expect(r.finalAmount).toBe(1_800)
+    expect(other.multiplier).toBe(1)
+    expect(other.finalAmount).toBe(1_000)
   })
 
-  it('floors at 0 when penalty exceeds 100%', () => {
+  it('zeroes bonus on 1 absence day at 100% penalty', () => {
     const r = computePersonSalesBonus({
       enabled: true,
-      salesTotal: 650_000,
+      salesTotal: 500_000,
       tiers,
-      role: 'Staff',
+      employeeId: 1,
+      doubleBonusEmployeeId: 1,
       managerMultiplier: 2,
       staffMultiplier: 1,
-      absenceDays: 25,
-      absencePenaltyPctPerDay: 5,
+      absenceDays: 1,
+      absencePenaltyPctPerDay: 100,
     })
     expect(r.penaltyPct).toBe(100)
     expect(r.finalAmount).toBe(0)
@@ -111,28 +114,14 @@ describe('computePersonSalesBonus', () => {
       enabled: false,
       salesTotal: 999_999,
       tiers,
-      role: 'Manager',
+      employeeId: 1,
+      doubleBonusEmployeeId: 1,
       managerMultiplier: 2,
       staffMultiplier: 1,
       absenceDays: 0,
       absencePenaltyPctPerDay: 0,
     })
     expect(r.finalAmount).toBe(0)
-  })
-
-  it('matches 점장 as manager', () => {
-    const r = computePersonSalesBonus({
-      enabled: true,
-      salesTotal: 500_000,
-      tiers,
-      role: '점장',
-      managerMultiplier: 2,
-      staffMultiplier: 1,
-      absenceDays: 0,
-      absencePenaltyPctPerDay: 0,
-    })
-    expect(r.multiplier).toBe(2)
-    expect(r.finalAmount).toBe(2_000)
   })
 })
 
@@ -142,7 +131,7 @@ describe('poster sales bonus tiers', () => {
     expect(mbk?.baseTarget).toBe(1_600_000)
   })
 
-  it('base 1.6M → 1000, +100k → 1500, manager 2x', () => {
+  it('base 1.6M → 1000, +100k → 1500, designee 2x', () => {
     const t = buildPosterSalesBonusTiers(1_600_000)
     expect(sumCumulativeTierBonus(1_599_999, t).baseAmount).toBe(0)
     expect(sumCumulativeTierBonus(1_600_000, t).baseAmount).toBe(1_000)
@@ -152,12 +141,26 @@ describe('poster sales bonus tiers', () => {
       enabled: true,
       salesTotal: 1_700_000,
       tiers: t,
-      role: 'Manager',
+      employeeId: 9,
+      doubleBonusEmployeeId: 9,
       managerMultiplier: 2,
       staffMultiplier: 1,
       absenceDays: 0,
       absencePenaltyPctPerDay: 100,
     })
     expect(mgr.finalAmount).toBe(3_000)
+  })
+})
+
+describe('resolveSalesBonusCalendarPeriod', () => {
+  it('uses full calendar month and next-month payout day', () => {
+    const p = resolveSalesBonusCalendarPeriod('2026-11', 5)
+    expect(p.start).toBe('2026-11-01')
+    expect(p.end).toBe('2026-11-30')
+    expect(p.payYmd).toBe('2026-12-05')
+  })
+
+  it('supports payout day 1', () => {
+    expect(resolveSalesBonusCalendarPeriod('2026-11', 1).payYmd).toBe('2026-12-01')
   })
 })

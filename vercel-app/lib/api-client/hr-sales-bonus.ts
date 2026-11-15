@@ -12,6 +12,8 @@ export type StoreSalesBonusSettingsDto = {
   absencePenaltyPctPerDay: number
   managerMultiplier: number
   staffMultiplier: number
+  doubleBonusEmployeeId: number | null
+  payoutDay: number
   tiers: SalesBonusTierDto[]
   updatedAt?: string
 }
@@ -32,6 +34,7 @@ export type SalesBonusPreviewEmployeeDto = {
     penaltyAmount: number
     finalAmount: number
     appliedTiers?: SalesBonusTierDto[]
+    isDoubleBonusDesignee?: boolean
   }
 }
 
@@ -39,7 +42,7 @@ export type SalesBonusStorePreviewDto = {
   storeCode: string
   settings: StoreSalesBonusSettingsDto
   salesTotal: number
-  period: { month: string; start: string; end: string; payYmd: string }
+  period: { month: string; start: string; end: string; payYmd: string; payoutDay?: number }
   employees: SalesBonusPreviewEmployeeDto[]
 }
 

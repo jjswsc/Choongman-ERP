@@ -36,7 +36,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/use-store-list"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { roleTextMatchesManager } from "@/lib/permissions"
+import { useAuth } from "@/lib/auth-context"
+import { getAdminEmployeeList } from "@/lib/api-client/employees-core"
 import {
   getSalesBonusPreview,
   getSalesBonusSettings,
@@ -50,6 +51,7 @@ import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { cn } from "@/lib/utils"
 
 const ALL_STORES = "__all__"
+const NO_DESIGNEE = "__none__"
 
 function currentPayrollMonthLabel(): string {
   return getBangkokTodayDateString().slice(0, 7)
@@ -63,9 +65,11 @@ function emptySettings(storeCode: string): StoreSalesBonusSettingsDto {
   return {
     storeCode,
     enabled: false,
-    absencePenaltyPctPerDay: 5,
+    absencePenaltyPctPerDay: 100,
     managerMultiplier: 2,
     staffMultiplier: 1,
+    doubleBonusEmployeeId: null,
+    payoutDay: 5,
     tiers: [{ threshold: 500000, amount: 1000 }],
   }
 }
@@ -95,7 +99,7 @@ type EmpFlat = {
   roleAmount: number
   penaltyAmount: number
   finalAmount: number
-  isManager: boolean
+  isDesignee: boolean
 }
 
 function KpiCard(props: {
@@ -133,6 +137,7 @@ function KpiCard(props: {
 export function HrSalesBonusContent() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
   const { stores, storeLabels, loading: storesLoading } = useStoreList()
   const [tab, setTab] = useState("query")
   const [settingsStore, setSettingsStore] = useState("")
@@ -145,6 +150,10 @@ export function HrSalesBonusContent() {
   const [previewStores, setPreviewStores] = useState<SalesBonusStorePreviewDto[]>([])
   const [loadingQuery, setLoadingQuery] = useState(false)
   const [queried, setQueried] = useState(false)
+  const [detailStore, setDetailStore] = useState("")
+  const [storeEmployees, setStoreEmployees] = useState<{ id: number; name: string; role: string }[]>(
+    []
+  )
   const [statusMsg, setStatusMsg] = useState("")
   const [statusOk, setStatusOk] = useState(false)
 
@@ -201,6 +210,41 @@ export function HrSalesBonusContent() {
     if (settingsStore && tab === "settings") void loadSettings(settingsStore)
   }, [settingsStore, loadSettings, tab])
 
+  useEffect(() => {
+    if (tab !== "settings" || !settingsStore) {
+      setStoreEmployees([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await getAdminEmployeeList({
+          userStore: auth?.store || "Office",
+          userRole: auth?.role || "admin",
+          store: settingsStore,
+          status: "active",
+          pageSize: 500,
+        })
+        if (cancelled) return
+        setStoreEmployees(
+          (res.list || [])
+            .map((e) => ({
+              id: Math.floor(Number(e.row) || 0),
+              name: String(e.name || "").trim(),
+              role: String(e.role || e.job || "").trim(),
+            }))
+            .filter((e) => e.id > 0 && e.name)
+            .sort((a, b) => a.name.localeCompare(b.name))
+        )
+      } catch {
+        if (!cancelled) setStoreEmployees([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, settingsStore, auth?.store, auth?.role])
+
   const updateTier = (tiers: SalesBonusTierDto[]) => {
     setSettings((prev) => (prev ? { ...prev, tiers } : prev))
   }
@@ -231,6 +275,7 @@ export function HrSalesBonusContent() {
     setLoadingQuery(true)
     setStatusMsg("")
     setQueried(false)
+    setDetailStore("")
     try {
       const codes =
         queryStore === ALL_STORES ? storeOptions : [queryStore].filter(Boolean)
@@ -239,7 +284,6 @@ export function HrSalesBonusContent() {
         setQueried(true)
         return
       }
-      // 너무 많으면 배치로 (한 번에 최대 8매장)
       const batchSize = 8
       const all: SalesBonusStorePreviewDto[] = []
       for (let i = 0; i < codes.length; i += batchSize) {
@@ -253,6 +297,7 @@ export function HrSalesBonusContent() {
       all.sort((a, b) => a.storeCode.localeCompare(b.storeCode))
       setPreviewStores(all)
       setQueried(true)
+      if (codes.length === 1) setDetailStore(codes[0])
     } catch (e) {
       setPreviewStores([])
       setQueried(true)
@@ -263,15 +308,7 @@ export function HrSalesBonusContent() {
     }
   }, [month, queryStore, storeOptions])
 
-  useEffect(() => {
-    if (tab === "query" && storeOptions.length > 0 && !queried && !loadingQuery) {
-      void runQuery()
-    }
-    // 최초 진입·매장목록 준비 시 1회
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, storeOptions.length])
-
-  const flatEmployees: EmpFlat[] = useMemo(() => {
+  const allFlatEmployees: EmpFlat[] = useMemo(() => {
     const rows: EmpFlat[] = []
     for (const st of previewStores) {
       for (const e of st.employees) {
@@ -287,37 +324,49 @@ export function HrSalesBonusContent() {
           roleAmount: e.result.roleAmount,
           penaltyAmount: e.result.penaltyAmount,
           finalAmount: e.result.finalAmount,
-          isManager: roleTextMatchesManager(e.role),
+          isDesignee: Boolean(e.result.isDoubleBonusDesignee) || e.result.multiplier > 1,
         })
       }
     }
-    rows.sort((a, b) =>
-      a.storeLabel !== b.storeLabel
-        ? a.storeLabel.localeCompare(b.storeLabel)
-        : a.name.localeCompare(b.name)
-    )
+    rows.sort((a, b) => {
+      if (a.isDesignee !== b.isDesignee) return a.isDesignee ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
     return rows
   }, [previewStores, labelOf])
 
+  const flatEmployees = useMemo(() => {
+    if (!detailStore) return []
+    return allFlatEmployees.filter((e) => e.storeCode === detailStore)
+  }, [allFlatEmployees, detailStore])
+
+  const detailEmpTotals = useMemo(() => {
+    return {
+      empCount: flatEmployees.length,
+      bonusTotal: flatEmployees.reduce((s, x) => s + x.finalAmount, 0),
+      penaltyTotal: flatEmployees.reduce((s, x) => s + x.penaltyAmount, 0),
+    }
+  }, [flatEmployees])
+
   const totals = useMemo(() => {
     const salesTotal = previewStores.reduce((s, x) => s + (x.salesTotal || 0), 0)
-    const bonusTotal = flatEmployees.reduce((s, x) => s + x.finalAmount, 0)
-    const penaltyTotal = flatEmployees.reduce((s, x) => s + x.penaltyAmount, 0)
+    const bonusTotal = allFlatEmployees.reduce((s, x) => s + x.finalAmount, 0)
+    const penaltyTotal = allFlatEmployees.reduce((s, x) => s + x.penaltyAmount, 0)
     const enabledStores = previewStores.filter((x) => x.settings.enabled).length
-    const paidPeople = flatEmployees.filter((x) => x.finalAmount > 0).length
-    const absentPeople = flatEmployees.filter((x) => x.absenceDays > 0).length
+    const paidPeople = allFlatEmployees.filter((x) => x.finalAmount > 0).length
+    const absentPeople = allFlatEmployees.filter((x) => x.absenceDays > 0).length
     return {
       salesTotal,
       bonusTotal,
       penaltyTotal,
       storeCount: previewStores.length,
       enabledStores,
-      empCount: flatEmployees.length,
+      empCount: allFlatEmployees.length,
       paidPeople,
       absentPeople,
       avgBonus: paidPeople > 0 ? bonusTotal / paidPeople : 0,
     }
-  }, [previewStores, flatEmployees])
+  }, [previewStores, allFlatEmployees])
 
   const storeRows = useMemo(() => {
     return previewStores.map((st) => {
@@ -346,9 +395,11 @@ export function HrSalesBonusContent() {
   const periodLabel = previewStores[0]?.period
     ? `${previewStores[0].period.start} ~ ${previewStores[0].period.end}`
     : ""
+  const payoutLabel = previewStores[0]?.period?.payYmd || ""
 
   const exportCsv = () => {
-    if (flatEmployees.length === 0) return
+    const rows = detailStore ? flatEmployees : allFlatEmployees
+    if (rows.length === 0) return
     const cols = [
       t("hrSalesBonus_month"),
       t("hrSalesBonus_col_store"),
@@ -362,7 +413,7 @@ export function HrSalesBonusContent() {
       t("hrSalesBonus_col_final"),
     ]
     const lines = [cols.join(",")]
-    for (const e of flatEmployees) {
+    for (const e of rows) {
       lines.push(
         [
           month,
@@ -378,25 +429,26 @@ export function HrSalesBonusContent() {
         ].join(",")
       )
     }
+    const tot = detailStore ? detailEmpTotals : totals
     lines.push(
       [
         "",
         t("hrSalesBonus_total"),
-        String(totals.empCount),
+        String(tot.empCount),
         "",
         "",
         "",
         "",
         "",
-        totals.penaltyTotal,
-        totals.bonusTotal,
+        tot.penaltyTotal,
+        tot.bonusTotal,
       ].join(",")
     )
     const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `sales-bonus-${month}.csv`
+    a.download = `sales-bonus-${month}${detailStore ? `-${detailStore}` : ""}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -466,7 +518,7 @@ export function HrSalesBonusContent() {
           <Card className="shadow-sm">
             <CardContent className="flex flex-wrap items-end gap-3 p-4">
               <div className="space-y-1.5">
-                <Label>{t("hrSalesBonus_month")}</Label>
+                <Label>{t("hrSalesBonus_sales_month")}</Label>
                 <Input
                   type="month"
                   className="w-[170px]"
@@ -474,6 +526,7 @@ export function HrSalesBonusContent() {
                   onChange={(e) => {
                     setMonth(e.target.value)
                     setQueried(false)
+                    setDetailStore("")
                   }}
                 />
               </div>
@@ -484,6 +537,7 @@ export function HrSalesBonusContent() {
                   onValueChange={(v) => {
                     setQueryStore(v)
                     setQueried(false)
+                    setDetailStore("")
                   }}
                   disabled={storesLoading}
                 >
@@ -512,15 +566,22 @@ export function HrSalesBonusContent() {
                 type="button"
                 variant="outline"
                 onClick={exportCsv}
-                disabled={flatEmployees.length === 0}
+                disabled={allFlatEmployees.length === 0}
               >
                 <Download className="mr-1.5 h-4 w-4" />
                 {t("hrSalesBonus_export_csv")}
               </Button>
               {periodLabel ? (
-                <p className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">
-                  {t("hrSalesBonus_period")}: {periodLabel}
-                </p>
+                <div className="w-full space-y-0.5 text-xs text-muted-foreground sm:ml-auto sm:w-auto sm:text-right">
+                  <p>
+                    {t("hrSalesBonus_period")}: {periodLabel}
+                  </p>
+                  {payoutLabel ? (
+                    <p>
+                      {t("hrSalesBonus_payout_date")}: {payoutLabel}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </CardContent>
           </Card>
@@ -593,7 +654,14 @@ export function HrSalesBonusContent() {
                       </thead>
                       <tbody>
                         {storeRows.map((r) => (
-                          <tr key={r.storeCode} className="border-b border-border/60 hover:bg-muted/30">
+                          <tr
+                            key={r.storeCode}
+                            className={cn(
+                              "border-b border-border/60 cursor-pointer hover:bg-muted/40",
+                              detailStore === r.storeCode && "bg-sky-500/10"
+                            )}
+                            onClick={() => setDetailStore(r.storeCode)}
+                          >
                             <td className="p-2 font-medium">{r.label}</td>
                             <td className="p-2">
                               {r.enabled ? (
@@ -659,97 +727,106 @@ export function HrSalesBonusContent() {
                 </CardContent>
               </Card>
 
-              {/* 직원 상세 */}
+              {/* 직원 상세 — 매장 클릭 후 */}
               <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Users className="h-4 w-4" />
                     {t("hrSalesBonus_emp_detail")}
+                    {detailStore ? (
+                      <Badge variant="secondary" className="font-normal">
+                        {labelOf(detailStore)}
+                      </Badge>
+                    ) : null}
                   </CardTitle>
-                  <CardDescription>{t("hrSalesBonus_emp_detail_hint")}</CardDescription>
+                  <CardDescription>
+                    {detailStore
+                      ? t("hrSalesBonus_emp_detail_hint")
+                      : t("hrSalesBonus_click_store_for_staff")}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <AdminTableScroll>
-                    <table className="w-full min-w-[860px] text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b bg-muted/50 text-left text-muted-foreground">
-                          <th className="p-2 font-medium">#</th>
-                          {queryStore === ALL_STORES ? (
-                            <th className="p-2 font-medium">{t("hrSalesBonus_col_store")}</th>
-                          ) : null}
-                          <th className="p-2 font-medium">{t("hrSalesBonus_col_name")}</th>
-                          <th className="p-2 font-medium">{t("hrSalesBonus_col_role")}</th>
-                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_base")}</th>
-                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_mult")}</th>
-                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_role_amt")}</th>
-                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_absent")}</th>
-                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_penalty")}</th>
-                          <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_final")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {flatEmployees.map((e, i) => (
-                          <tr
-                            key={`${e.storeCode}-${e.employeeId}-${e.name}`}
-                            className={cn(
-                              "border-b border-border/60 hover:bg-muted/30",
-                              e.isManager && "bg-violet-500/5"
-                            )}
-                          >
-                            <td className="p-2 text-muted-foreground">{i + 1}</td>
-                            {queryStore === ALL_STORES ? (
-                              <td className="p-2 text-muted-foreground">{e.storeLabel}</td>
-                            ) : null}
-                            <td className="p-2 font-medium">{e.name}</td>
-                            <td className="p-2">
-                              <span className="inline-flex items-center gap-1">
-                                {e.role || "—"}
-                                {e.isManager ? (
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                    ×{e.multiplier}
-                                  </Badge>
-                                ) : null}
-                              </span>
-                            </td>
-                            <td className="p-2 text-right tabular-nums">{fmtBaht(e.baseAmount)}</td>
-                            <td className="p-2 text-right tabular-nums">×{e.multiplier}</td>
-                            <td className="p-2 text-right tabular-nums">{fmtBaht(e.roleAmount)}</td>
-                            <td className="p-2 text-right tabular-nums">
-                              {e.absenceDays > 0 ? (
-                                <span className="text-amber-700 dark:text-amber-300">{e.absenceDays}</span>
-                              ) : (
-                                0
+                  {!detailStore ? (
+                    <p className="py-10 text-center text-sm text-muted-foreground">
+                      {t("hrSalesBonus_click_store_for_staff")}
+                    </p>
+                  ) : (
+                    <AdminTableScroll>
+                      <table className="w-full min-w-[760px] text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-muted/50 text-left text-muted-foreground">
+                            <th className="p-2 font-medium">#</th>
+                            <th className="p-2 font-medium">{t("hrSalesBonus_col_name")}</th>
+                            <th className="p-2 font-medium">{t("hrSalesBonus_col_role")}</th>
+                            <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_base")}</th>
+                            <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_mult")}</th>
+                            <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_role_amt")}</th>
+                            <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_absent")}</th>
+                            <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_penalty")}</th>
+                            <th className="p-2 font-medium text-right">{t("hrSalesBonus_col_final")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {flatEmployees.map((e, i) => (
+                            <tr
+                              key={`${e.storeCode}-${e.employeeId}-${e.name}`}
+                              className={cn(
+                                "border-b border-border/60 hover:bg-muted/30",
+                                e.isDesignee && "bg-violet-500/5"
                               )}
+                            >
+                              <td className="p-2 text-muted-foreground">{i + 1}</td>
+                              <td className="p-2 font-medium">
+                                <span className="inline-flex items-center gap-1.5">
+                                  {e.name}
+                                  {e.isDesignee ? (
+                                    <Badge className="bg-violet-600 hover:bg-violet-600 text-[10px] px-1.5 py-0">
+                                      {t("hrSalesBonus_designee_badge")} ×{e.multiplier}
+                                    </Badge>
+                                  ) : null}
+                                </span>
+                              </td>
+                              <td className="p-2">{e.role || "—"}</td>
+                              <td className="p-2 text-right tabular-nums">{fmtBaht(e.baseAmount)}</td>
+                              <td className="p-2 text-right tabular-nums">×{e.multiplier}</td>
+                              <td className="p-2 text-right tabular-nums">{fmtBaht(e.roleAmount)}</td>
+                              <td className="p-2 text-right tabular-nums">
+                                {e.absenceDays > 0 ? (
+                                  <span className="text-amber-700 dark:text-amber-300">{e.absenceDays}</span>
+                                ) : (
+                                  0
+                                )}
+                              </td>
+                              <td className="p-2 text-right tabular-nums text-amber-700 dark:text-amber-300">
+                                {e.penaltyAmount > 0 ? `−${fmtBaht(e.penaltyAmount)}` : "0"}
+                              </td>
+                              <td className="p-2 text-right tabular-nums font-semibold">
+                                {fmtBaht(e.finalAmount)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 bg-muted/60 font-semibold">
+                            <td className="p-2" colSpan={3}>
+                              {t("hrSalesBonus_total")} ({detailEmpTotals.empCount})
                             </td>
+                            <td className="p-2" />
+                            <td className="p-2" />
+                            <td className="p-2" />
+                            <td className="p-2" />
                             <td className="p-2 text-right tabular-nums text-amber-700 dark:text-amber-300">
-                              {e.penaltyAmount > 0 ? `−${fmtBaht(e.penaltyAmount)}` : "0"}
+                              −{fmtBaht(detailEmpTotals.penaltyTotal)}
                             </td>
-                            <td className="p-2 text-right tabular-nums font-semibold">
-                              {fmtBaht(e.finalAmount)}
+                            <td className="p-2 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+                              ฿{fmtBaht(detailEmpTotals.bonusTotal)}
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 bg-muted/60 font-semibold">
-                          <td className="p-2" colSpan={queryStore === ALL_STORES ? 4 : 3}>
-                            {t("hrSalesBonus_total")} ({totals.empCount})
-                          </td>
-                          <td className="p-2" />
-                          <td className="p-2" />
-                          <td className="p-2" />
-                          <td className="p-2" />
-                          <td className="p-2 text-right tabular-nums text-amber-700 dark:text-amber-300">
-                            −{fmtBaht(totals.penaltyTotal)}
-                          </td>
-                          <td className="p-2 text-right tabular-nums text-emerald-700 dark:text-emerald-300">
-                            ฿{fmtBaht(totals.bonusTotal)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </AdminTableScroll>
-                  {flatEmployees.length === 0 ? (
+                        </tfoot>
+                      </table>
+                    </AdminTableScroll>
+                  )}
+                  {detailStore && flatEmployees.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       {t("hrSalesBonus_no_employees")}
                     </p>
@@ -812,7 +889,59 @@ export function HrSalesBonusContent() {
                       onCheckedChange={(v) => setSettings({ ...settings, enabled: v === true })}
                     />
                   </label>
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                      <Label>{t("hrSalesBonus_designee")}</Label>
+                      <Select
+                        value={
+                          settings.doubleBonusEmployeeId
+                            ? String(settings.doubleBonusEmployeeId)
+                            : NO_DESIGNEE
+                        }
+                        onValueChange={(v) =>
+                          setSettings({
+                            ...settings,
+                            doubleBonusEmployeeId:
+                              v === NO_DESIGNEE ? null : Math.floor(Number(v)) || null,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("hrSalesBonus_designee_placeholder")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_DESIGNEE}>{t("hrSalesBonus_designee_none")}</SelectItem>
+                          {storeEmployees.map((e) => (
+                            <SelectItem key={e.id} value={String(e.id)}>
+                              {e.name}
+                              {e.role ? ` (${e.role})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">{t("hrSalesBonus_designee_hint")}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{t("hrSalesBonus_payout_day")}</Label>
+                      <Select
+                        value={String(settings.payoutDay || 5)}
+                        onValueChange={(v) =>
+                          setSettings({ ...settings, payoutDay: Math.floor(Number(v)) || 5 })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 28].map((d) => (
+                            <SelectItem key={d} value={String(d)}>
+                              {t("hrSalesBonus_payout_day_opt").replace("{d}", String(d))}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">{t("hrSalesBonus_payout_day_hint")}</p>
+                    </div>
                     <div className="space-y-1.5">
                       <Label>{t("hrSalesBonus_penalty_pct")}</Label>
                       <Input

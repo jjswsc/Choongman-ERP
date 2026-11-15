@@ -1,4 +1,4 @@
-import { roleTextMatchesManager } from '@/lib/permissions'
+import { normalizeSalesBonusPayoutDay } from '@/lib/sales-bonus/period'
 import type {
   SalesBonusExplainLine,
   SalesBonusPersonResult,
@@ -10,6 +10,12 @@ function finiteNonNeg(n: unknown, fallback = 0): number {
   const x = Number(n)
   if (!Number.isFinite(x)) return fallback
   return Math.max(0, x)
+}
+
+function parseEmployeeId(raw: unknown): number | null {
+  const n = Math.floor(Number(raw))
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n
 }
 
 /** 임계값 오름차순·유효한 구간만 */
@@ -45,13 +51,22 @@ export function sumCumulativeTierBonus(salesTotal: number, tiers: SalesBonusTier
   return { baseAmount: Math.round(base * 100) / 100, appliedTiers: applied }
 }
 
-export function resolveSalesBonusMultiplier(
-  role: string,
-  settings: Pick<StoreSalesBonusSettings, 'managerMultiplier' | 'staffMultiplier'>
-): number {
-  const mgr = finiteNonNeg(settings.managerMultiplier, 2)
-  const staff = finiteNonNeg(settings.staffMultiplier, 1)
-  return roleTextMatchesManager(role) ? (mgr > 0 ? mgr : 2) : staff > 0 ? staff : 1
+/** 역할이 아니라 매장 지정자(employees.id)만 배수 적용 */
+export function resolveSalesBonusMultiplier(params: {
+  employeeId?: number | null
+  doubleBonusEmployeeId?: number | null
+  managerMultiplier: number
+  staffMultiplier: number
+}): { multiplier: number; isDesignee: boolean } {
+  const mgr = finiteNonNeg(params.managerMultiplier, 2) || 2
+  const staff = finiteNonNeg(params.staffMultiplier, 1) || 1
+  const empId = parseEmployeeId(params.employeeId)
+  const designeeId = parseEmployeeId(params.doubleBonusEmployeeId)
+  const isDesignee = empId != null && designeeId != null && empId === designeeId
+  return {
+    multiplier: isDesignee ? mgr : staff,
+    isDesignee,
+  }
 }
 
 /**
@@ -62,7 +77,8 @@ export function computePersonSalesBonus(params: {
   enabled: boolean
   salesTotal: number
   tiers: SalesBonusTier[]
-  role: string
+  employeeId?: number | null
+  doubleBonusEmployeeId?: number | null
   managerMultiplier: number
   staffMultiplier: number
   absenceDays: number
@@ -78,6 +94,7 @@ export function computePersonSalesBonus(params: {
     finalAmount: 0,
     appliedTiers: [],
     explain: extra || [],
+    isDoubleBonusDesignee: false,
   })
 
   if (!params.enabled) {
@@ -85,7 +102,7 @@ export function computePersonSalesBonus(params: {
   }
 
   const { baseAmount, appliedTiers } = sumCumulativeTierBonus(params.salesTotal, params.tiers)
-  const multiplier = resolveSalesBonusMultiplier(params.role, params)
+  const { multiplier, isDesignee } = resolveSalesBonusMultiplier(params)
   const roleAmount = Math.round(baseAmount * multiplier * 100) / 100
   const absenceDays = Math.max(0, Math.floor(Number(params.absenceDays) || 0))
   const pctPerDay = finiteNonNeg(params.absencePenaltyPctPerDay)
@@ -114,7 +131,7 @@ export function computePersonSalesBonus(params: {
   }
   if (baseAmount > 0 && multiplier !== 1) {
     explain.push({
-      reason: '역할 배수',
+      reason: isDesignee ? '지정자 배수' : '배수',
       detail: `× ${multiplier}`,
       amount: roleAmount,
     })
@@ -144,6 +161,7 @@ export function computePersonSalesBonus(params: {
     finalAmount,
     appliedTiers,
     explain,
+    isDoubleBonusDesignee: isDesignee,
   }
 }
 
@@ -159,6 +177,10 @@ export function parseStoreSalesBonusSettingsRow(
     absencePenaltyPctPerDay: finiteNonNeg(r.absence_penalty_pct_per_day ?? r.absencePenaltyPctPerDay),
     managerMultiplier: finiteNonNeg(r.manager_multiplier ?? r.managerMultiplier, 2) || 2,
     staffMultiplier: finiteNonNeg(r.staff_multiplier ?? r.staffMultiplier, 1) || 1,
+    doubleBonusEmployeeId: parseEmployeeId(
+      r.double_bonus_employee_id ?? r.doubleBonusEmployeeId
+    ),
+    payoutDay: normalizeSalesBonusPayoutDay(r.payout_day ?? r.payoutDay, 5),
     tiers: normalizeSalesBonusTiers(r.tiers),
     updatedAt: r.updated_at != null ? String(r.updated_at) : undefined,
   }
@@ -171,6 +193,8 @@ export function defaultStoreSalesBonusSettings(storeCode: string): StoreSalesBon
     absencePenaltyPctPerDay: 0,
     managerMultiplier: 2,
     staffMultiplier: 1,
+    doubleBonusEmployeeId: null,
+    payoutDay: 5,
     tiers: [],
   }
 }
