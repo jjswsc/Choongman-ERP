@@ -1,5 +1,5 @@
 /**
- * 매장 매출 보너스 — 설정·미리보기 API 클라이언트
+ * 매장 매출 보너스 — 설정·조회 API 클라이언트
  */
 import { apiFetch } from '../api/fetch'
 import { apiFetchWithOffline } from '../api/fetch-offline'
@@ -31,6 +31,7 @@ export type SalesBonusPreviewEmployeeDto = {
     penaltyPct: number
     penaltyAmount: number
     finalAmount: number
+    appliedTiers?: SalesBonusTierDto[]
   }
 }
 
@@ -81,12 +82,12 @@ export async function saveSalesBonusSettings(
 
 export async function getSalesBonusPreview(params: {
   month: string
-  store: string
+  store?: string
+  stores?: string[]
 }): Promise<SalesBonusStorePreviewDto[]> {
-  const q = new URLSearchParams({
-    month: params.month,
-    store: params.store,
-  })
+  const q = new URLSearchParams({ month: params.month })
+  if (params.store) q.set('store', params.store)
+  if (params.stores && params.stores.length > 0) q.set('stores', params.stores.join(','))
   const res = await apiFetch(`/api/hr/sales-bonus/preview?${q}`)
   const data = (await res.json()) as {
     success?: boolean
