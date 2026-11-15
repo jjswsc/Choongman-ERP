@@ -778,7 +778,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     })
   }, [periodSplitSeries, storesForCompareChart, periodGroupUi, tr])
 
-  /** 매장·기간 목록 — 단일 매장은 periodData(일별)와 동일, 복수 매장은 split 시리즈 */
+  /** 매장별 기간 추이 — 단일 매장은 periodData(일별)와 동일, 복수 매장은 split 시리즈 */
   const storeByPeriodFlatRows = React.useMemo(() => {
     if (selectedView !== "store-period") return []
 

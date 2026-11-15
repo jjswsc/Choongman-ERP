@@ -1,5 +1,5 @@
 /**
- * 매장별 매출 집계. pos_orders 기반.
+ * 매장별 합계. pos_orders 기반.
  * 우선 RPC get_pos_sales_analytics_agg (DB 집계, 행 상한 없음) → 미배포 시 fetch 폴백.
  */
 import { NextRequest, NextResponse } from 'next/server'
