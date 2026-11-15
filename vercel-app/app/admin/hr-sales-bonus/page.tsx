@@ -20,14 +20,14 @@ export default function AdminHrSalesBonusPage() {
 
   if (!allowed) {
     return (
-      <HrPageShell icon={Gift} title={t("adminHrSalesBonus")} subtitle={t("adminHrSalesBonusSub")}>
+      <HrPageShell icon={Gift} title={t("adminHrSalesBonus")}>
         <p className="text-sm text-muted-foreground">{t("hrSalesBonus_no_access")}</p>
       </HrPageShell>
     )
   }
 
   return (
-    <HrPageShell icon={Gift} title={t("adminHrSalesBonus")} subtitle={t("adminHrSalesBonusSub")}>
+    <HrPageShell icon={Gift} title={t("adminHrSalesBonus")}>
       <HrSalesBonusContent />
     </HrPageShell>
   )

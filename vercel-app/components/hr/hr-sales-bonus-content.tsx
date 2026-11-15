@@ -49,8 +49,6 @@ import {
   type SalesBonusTierDto,
   type StoreSalesBonusSettingsDto,
 } from "@/lib/api-client/hr-sales-bonus"
-import { HelpSumHowBlocks } from "@/components/erp/help-sum-how-blocks"
-import { hrefToHelpSummaryKey } from "@/lib/admin-help-registry"
 import { cn } from "@/lib/utils"
 
 const ALL_STORES = "__all__"
@@ -545,31 +543,13 @@ export function HrSalesBonusContent() {
 
   return (
     <div className="space-y-4">
-      <HelpSumHowBlocks helpSumKey={hrefToHelpSummaryKey("/admin/hr-sales-bonus")} />
-
-      <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-500/10 via-background to-sky-500/10 p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-              <Gift className="h-5 w-5" aria-hidden />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">{t("adminHrSalesBonus")}</h2>
-              <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">
-                {t("adminHrSalesBonusSub")}
-              </p>
-            </div>
-          </div>
-          {enabledSettingsCount > 0 ? (
-            <Badge variant="secondary" className="bg-emerald-600/15 text-emerald-800 dark:text-emerald-200">
-              {t("hrSalesBonus_enabled_stores_count").replace(
-                "{n}",
-                String(enabledSettingsCount)
-              )}
-            </Badge>
-          ) : null}
+      {enabledSettingsCount > 0 ? (
+        <div className="flex justify-end">
+          <Badge variant="secondary" className="bg-emerald-600/15 text-emerald-800 dark:text-emerald-200">
+            {t("hrSalesBonus_enabled_stores_count").replace("{n}", String(enabledSettingsCount))}
+          </Badge>
         </div>
-      </div>
+      ) : null}
 
       {statusMsg ? (
         <div
