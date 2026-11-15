@@ -32,6 +32,7 @@ import {
   crmDormantDateBounds,
   crmRecentDateBounds,
   CRM_DATE_PRESET_IDS,
+  CRM_DATE_PRESET_I18N_KEYS,
   isCrmCutoffOrderValid,
   matchCrmDatePreset,
   resolveCrmDormantCutoff,
@@ -296,15 +297,7 @@ export default function CrmSegmentsPage() {
                   variant={activePreset === id ? "default" : "outline"}
                   onClick={() => applyPreset(id)}
                 >
-                  {t(
-                    id === "d7_30"
-                      ? "crmDashPreset7_30"
-                      : id === "d30_90"
-                        ? "crmDashPreset30_90"
-                        : id === "d60_180"
-                          ? "crmDashPreset60_180"
-                          : "crmDashPresetThisMonth"
-                  )}
+                  {t(CRM_DATE_PRESET_I18N_KEYS[id])}
                 </Button>
               ))}
             </div>

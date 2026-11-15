@@ -1,6 +1,7 @@
 import {
   addBangkokCalendarDays,
   getBangkokMonthRange,
+  getBangkokMonthRangeWithOffset,
   getBangkokStartOfDayUtcIso,
   getBangkokTodayDateString,
 } from '@/lib/bangkok-time'
@@ -12,8 +13,16 @@ export const CRM_DORMANT_DAYS_MAX = 720
 export const CRM_RECENT_DAYS_DEFAULT = 30
 export const CRM_DORMANT_DAYS_DEFAULT = 90
 
-export const CRM_DATE_PRESET_IDS = ['d7_30', 'd30_90', 'd60_180', 'thisMonth'] as const
+/** 단일 라벨 프리셋: 최근활동 창을 기준으로 잡고, 휴면은 내부에서 짝을 맞춤 */
+export const CRM_DATE_PRESET_IDS = ['d7', 'd30', 'thisMonth', 'lastMonth'] as const
 export type CrmDatePresetId = (typeof CRM_DATE_PRESET_IDS)[number]
+
+export const CRM_DATE_PRESET_I18N_KEYS: Record<CrmDatePresetId, string> = {
+  d7: 'crmDashPreset7',
+  d30: 'crmDashPreset30',
+  thisMonth: 'crmDashPresetThisMonth',
+  lastMonth: 'crmDashPresetLastMonth',
+}
 
 export type CrmCutoffResolved = { days: number; date: string }
 
@@ -83,24 +92,56 @@ export function isCrmCutoffOrderValid(recentDate: string, dormantDate: string): 
   return recent > dormant
 }
 
+function bangkokBaseFromToday(today: string): Date {
+  return new Date(`${today}T12:00:00+07:00`)
+}
+
+function pairWithDefaultDormant(
+  recent: CrmCutoffResolved,
+  today: string
+): { recent: CrmCutoffResolved; dormant: CrmCutoffResolved } {
+  const dormant = {
+    days: CRM_DORMANT_DAYS_DEFAULT,
+    date: crmCutoffDateFromDays(CRM_DORMANT_DAYS_DEFAULT, today),
+  }
+  if (isCrmCutoffOrderValid(recent.date, dormant.date)) {
+    return { recent, dormant }
+  }
+  const fallbackDays = clampCrmDormantDays(recent.days + 60)
+  return {
+    recent,
+    dormant: {
+      days: fallbackDays,
+      date: crmCutoffDateFromDays(fallbackDays, today),
+    },
+  }
+}
+
 export function applyCrmDatePreset(
   id: CrmDatePresetId,
   today = getBangkokTodayDateString()
 ): { recent: CrmCutoffResolved; dormant: CrmCutoffResolved } {
+  const base = bangkokBaseFromToday(today)
+
   if (id === 'thisMonth') {
-    const monthStart = getBangkokMonthRange(undefined, new Date(`${today}T12:00:00+07:00`)).startStr
-    const recent = resolveCrmRecentCutoff(monthStart, today)
-    const dormant = {
-      days: CRM_DORMANT_DAYS_DEFAULT,
-      date: crmCutoffDateFromDays(CRM_DORMANT_DAYS_DEFAULT, today),
-    }
-    return { recent, dormant }
+    const monthStart = getBangkokMonthRange(undefined, base).startStr
+    return pairWithDefaultDormant(resolveCrmRecentCutoff(monthStart, today), today)
   }
 
-  const pairs: Record<Exclude<CrmDatePresetId, 'thisMonth'>, { recent: number; dormant: number }> = {
-    d7_30: { recent: 7, dormant: 30 },
-    d30_90: { recent: CRM_RECENT_DAYS_DEFAULT, dormant: CRM_DORMANT_DAYS_DEFAULT },
-    d60_180: { recent: 60, dormant: 180 },
+  if (id === 'lastMonth') {
+    const lastStart = getBangkokMonthRangeWithOffset(-1, base).start
+    const prevStart = getBangkokMonthRangeWithOffset(-2, base).start
+    const recent = resolveCrmRecentCutoff(lastStart, today)
+    const dormant = resolveCrmDormantCutoff(prevStart, today)
+    if (isCrmCutoffOrderValid(recent.date, dormant.date)) {
+      return { recent, dormant }
+    }
+    return pairWithDefaultDormant(recent, today)
+  }
+
+  const pairs: Record<Exclude<CrmDatePresetId, 'thisMonth' | 'lastMonth'>, { recent: number; dormant: number }> = {
+    d7: { recent: 7, dormant: 30 },
+    d30: { recent: CRM_RECENT_DAYS_DEFAULT, dormant: CRM_DORMANT_DAYS_DEFAULT },
   }
   const pair = pairs[id]
   return {

@@ -50,12 +50,12 @@ describe('crm dashboard cutoff dates', () => {
     expect(isCrmCutoffOrderValid('2026-06-30', '2026-06-30')).toBe(false)
   })
 
-  it('applies day presets and this-month recent cutoff', () => {
-    expect(applyCrmDatePreset('d7_30', TODAY)).toEqual({
+  it('applies single-label day presets and month windows', () => {
+    expect(applyCrmDatePreset('d7', TODAY)).toEqual({
       recent: { days: 7, date: '2026-09-21' },
       dormant: { days: 30, date: '2026-08-29' },
     })
-    expect(applyCrmDatePreset('d30_90', TODAY)).toEqual({
+    expect(applyCrmDatePreset('d30', TODAY)).toEqual({
       recent: { days: 30, date: '2026-08-29' },
       dormant: { days: 90, date: '2026-06-30' },
     })
@@ -64,12 +64,17 @@ describe('crm dashboard cutoff dates', () => {
       date: '2026-09-01',
     })
     expect(applyCrmDatePreset('thisMonth', TODAY).dormant.days).toBe(90)
+    expect(applyCrmDatePreset('lastMonth', TODAY)).toEqual({
+      recent: { days: 58, date: '2026-08-01' },
+      dormant: { days: 89, date: '2026-07-01' },
+    })
   })
 
   it('matches applied presets by day counts', () => {
-    expect(matchCrmDatePreset(30, 90, TODAY)).toBe('d30_90')
-    expect(matchCrmDatePreset(7, 30, TODAY)).toBe('d7_30')
+    expect(matchCrmDatePreset(30, 90, TODAY)).toBe('d30')
+    expect(matchCrmDatePreset(7, 30, TODAY)).toBe('d7')
     expect(matchCrmDatePreset(27, 90, TODAY)).toBe('thisMonth')
+    expect(matchCrmDatePreset(58, 89, TODAY)).toBe('lastMonth')
     expect(matchCrmDatePreset(15, 90, TODAY)).toBeNull()
   })
 })

@@ -8110,7 +8110,7 @@ orderItemQty: 'Qty',
   helpSum_admin_crm:
     'Command (priority) screen: KPIs, today’s actions, and store comparison. Run full lists, CSV, and campaigns in Customer Segments.',
   helpHow_admin_crm:
-    '① Use presets (7/30, 30/90, 60/180, this month) or pick cutoff dates, then Search — KPIs and segment counts share those dates. Store filter also applies to KPIs.\n② Recent-activity date must be after the dormant date (at-risk window).\n③ Today’s actions lists top dormant / at-risk / new members with links to member detail and coupon issue.\n④ Store comparison shows active/new/dormant by join store; cards and rows deep-link to Segments.',
+    '① Use presets (7 days, 30 days, this month, last month) or pick cutoff dates, then Search — KPIs and segment counts share those dates. Store filter also applies to KPIs.\n② Recent-activity date must be after the dormant date (at-risk window).\n③ Today’s actions lists top dormant / at-risk / new members with links to member detail and coupon issue.\n④ Store comparison shows active/new/dormant by join store; cards and rows deep-link to Segments.',
   helpSum_admin_crm_segments:
     'Execution (audience) screen: full segment lists, join-store filter, CSV, and coupon/campaign actions. Set priorities on the CRM dashboard.',
   helpHow_admin_crm_segments:
