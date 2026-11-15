@@ -1830,7 +1830,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_hr_sales_bonus:
     'Configure tiers, absence penalty, one designee per store, and next-month payout day. Query is for a single month; Stats sums multiple months. Sales use full calendar months.',
   helpHow_admin_hr_sales_bonus:
-    '① Query: one sales month → click a store for staff.\n② Stats: from–to months, store totals (per-month calc then sum).\n③ Settings: tiers, designee, payout day, absence %.\n④ Payroll sales_bonus uses calendar-month sales. Absence = scheduled with no clock-in and no paid leave.',
+    '① Query: one sales month → click a store for staff.\n② Stats: from–to months.\n③ Settings: tiers, designee, payout day, absence %.\n④ Absence penalty: scheduled workdays (≈6/week). Weekly off + approved sick/annual/leave/lakij are excluded. No-show and unpaid leave count against the bonus.',
   homeSectionHrPolicies: 'HR policies',
   hrPolicyBodyOrFileRequired: 'Please enter the body or attach a file.',
   hrPolicyDefaultBodyWhenFileOnly: 'Please review the attached file. (Body is optional.)',

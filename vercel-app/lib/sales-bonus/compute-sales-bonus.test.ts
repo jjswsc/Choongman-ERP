@@ -8,6 +8,7 @@ import {
   buildPosterSalesBonusTiers,
   CHOONGMAN_POSTER_SALES_BONUS_BASES,
 } from '@/lib/sales-bonus/poster-tiers'
+import { isSalesBonusExcusedLeaveType } from '@/lib/sales-bonus/absence-leave'
 import {
   listYearMonthsInclusive,
   resolveSalesBonusCalendarPeriod,
@@ -165,6 +166,18 @@ describe('resolveSalesBonusCalendarPeriod', () => {
 
   it('supports payout day 1', () => {
     expect(resolveSalesBonusCalendarPeriod('2026-11', 1).payYmd).toBe('2026-12-01')
+  })
+})
+
+describe('isSalesBonusExcusedLeaveType', () => {
+  it('excuses sick, annual, lakij; not unpaid or empty', () => {
+    expect(isSalesBonusExcusedLeaveType('병가')).toBe(true)
+    expect(isSalesBonusExcusedLeaveType('연차')).toBe(true)
+    expect(isSalesBonusExcusedLeaveType('ลากิจ')).toBe(true)
+    expect(isSalesBonusExcusedLeaveType('휴가')).toBe(true)
+    expect(isSalesBonusExcusedLeaveType('무급휴가')).toBe(false)
+    expect(isSalesBonusExcusedLeaveType('Unpaid')).toBe(false)
+    expect(isSalesBonusExcusedLeaveType('')).toBe(false)
   })
 })
 

@@ -64,6 +64,7 @@ import {
   resolveSaasTenantScope,
   selectWithSaasTenantFallback,
 } from '@/lib/saas-tenant-scope'
+import { isSalesBonusExcusedLeaveType } from '@/lib/sales-bonus/absence-leave'
 import {
   computePersonSalesBonus,
   defaultStoreSalesBonusSettings,
@@ -1503,6 +1504,10 @@ export async function GET(request: NextRequest) {
       const paidLeaveDaysFromEvents = leaveEvents.filter((x) => x.kind === 'paid').reduce((s, x) => s + x.days, 0)
       const paidLeaveDateSet = new Set(leaveEvents.filter((x) => x.kind === 'paid').map((x) => x.date))
       const unpaidLeaveDateSet = new Set(leaveEvents.filter((x) => x.kind === 'unpaid').map((x) => x.date))
+      // 매출 보너스: 병가·연차/휴가·ลากิจ만 결근 면제 (무급·무단은 패널티)
+      const salesBonusExcusedLeaveDateSet = new Set(
+        leaveEvents.filter((x) => isSalesBonusExcusedLeaveType(x.type)).map((x) => x.date)
+      )
       const expectedWorkDays = effectiveExpectedWorkDays
       const absenceDateList: string[] = []
       if (hasScheduleBasis) {
@@ -1532,15 +1537,16 @@ export async function GET(request: NextRequest) {
       }
       // 출퇴근 0건이면 집계 미연동·키 불일치와 무근무를 구분할 수 없어 자동 '결석' 공제는 하지 않음(무급휴가는 leave만)
       const absenceDays = workDays === 0 ? 0 : absenceDateList.length
-      // 매출 보너스 패널티: 유급휴가만 제외 (무급·노쇼는 차감). 출근 0건이면 0
+      // 매출 보너스 패널티: 병가·연차/휴가·ลากิจ 제외, 주휴(스케줄 없음) 제외, 무급·노쇼 차감. 출근 0건이면 0
       let salesBonusAbsenceDays = 0
       if (workDays > 0 && hasScheduleBasis) {
         for (const ds of Array.from(scheduleExpectedDates).sort()) {
           if (presentDates.has(ds)) continue
-          if (paidLeaveDateSet.has(ds)) continue
+          if (salesBonusExcusedLeaveDateSet.has(ds)) continue
           salesBonusAbsenceDays += 1
         }
       } else if (workDays > 0) {
+        // 스케줄 키 불일치 시: 급여 결석 + 무급일 (면제휴가는 absenceDateList에 이미 없음)
         salesBonusAbsenceDays = absenceDays + Math.floor(unpaidLeaveDays)
       }
       const salesBonusSettings =

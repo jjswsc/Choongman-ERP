@@ -5,6 +5,7 @@ import { canonicalSalesStoreRowKey } from '@/lib/pos-sales-store-filter'
 import { supabaseSelectFilter, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { scheduleDateKey, toDateStrBangkok } from '@/lib/attendance-utils'
 import { normalizeEmployeeNameForGradeMatch } from '@/lib/employee-display-name'
+import { isSalesBonusExcusedLeaveType } from '@/lib/sales-bonus/absence-leave'
 import { computePersonSalesBonus } from '@/lib/sales-bonus/compute-sales-bonus'
 import {
   loadStoreSalesBonusSettings,
@@ -218,14 +219,11 @@ async function buildAbsenceContext(params: {
     addKeys(presentDatesByKey, keys, d)
   }
 
+  // 승인 휴가 중 병가·연차/휴가·ลากิจ만 결근 면제 (무급·그 외는 패널티)
   const paidLeaveDatesByKey: Record<string, Set<string>> = {}
   for (const lr of leaveRows || []) {
     const type = String(lr.type || '').trim()
-    const isUnpaid = /무급|unpaid/i.test(type)
-    if (isUnpaid) continue
-    // 유급만 제외 (연차·반차·병가 등). 입사 1년 미만 세부는 급여 쪽과 동일하게 맞추지 않고 승인 유급으로 처리
-    const isPaidLike = /연차|반차|병가|annual|half|sick|ลากิจ|lakij|유급|paid/i.test(type) || !isUnpaid
-    if (!isPaidLike) continue
+    if (!isSalesBonusExcusedLeaveType(type)) continue
     const d = toYmd(lr.leave_date)
     const store = String(lr.store || '').trim()
     const name = String(lr.name || '').trim()
@@ -245,8 +243,8 @@ async function buildAbsenceContext(params: {
 }
 
 /**
- * 스케줄 근무일 − 출근 − 유급휴가 = 결근일.
- * 출근 기록이 한 건도 없으면 0 (급여와 동일 가드).
+ * 결근일 = 스케줄(근무 plan_in/out 있는 날) − 출근 − 면제휴가(병가·연차/휴가·ลากิจ).
+ * 주휴(스케줄 없음)는 대상 아님. 출근 0건이면 0 (급여와 동일 가드).
  */
 export function countSalesBonusAbsenceDays(params: {
   store: string
