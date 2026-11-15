@@ -110,6 +110,12 @@ export function DepreciationTab() {
 
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [assetStatusFilter, setAssetStatusFilter] = React.useState<"active" | "disposed" | "all">("active")
+  /** 입력란 (검색 클릭 전) */
+  const [acqDateFrom, setAcqDateFrom] = React.useState("")
+  const [acqDateTo, setAcqDateTo] = React.useState("")
+  /** 검색 적용된 취득일 기간 — 목록·취득가 합계 기준 */
+  const [appliedAcqDateFrom, setAppliedAcqDateFrom] = React.useState("")
+  const [appliedAcqDateTo, setAppliedAcqDateTo] = React.useState("")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [showLegacyCreateForm, setShowLegacyCreateForm] = React.useState(false)
   const [yearMonth, setYearMonth] = React.useState(() => getBangkokRecentYearMonths(1)[0])
@@ -157,6 +163,17 @@ export function DepreciationTab() {
     })
   }, [])
 
+  const normalizeAcqPeriod = React.useCallback((fromRaw: string, toRaw: string) => {
+    let from = fromRaw.trim().slice(0, 10)
+    let to = toRaw.trim().slice(0, 10)
+    if (from && to && from > to) {
+      const swap = from
+      from = to
+      to = swap
+    }
+    return { from, to }
+  }, [])
+
   const displayAssets = React.useMemo(() => {
     const activeRows = assets.map((a) => ({ ...a, listStatus: "active" as const }))
     const disposedRows = disposedAssets.map((a) => ({ ...a, listStatus: "disposed" as const }))
@@ -166,6 +183,16 @@ export function DepreciationTab() {
         : assetStatusFilter === "disposed"
           ? disposedRows
           : [...activeRows, ...disposedRows]
+    const { from, to } = normalizeAcqPeriod(appliedAcqDateFrom, appliedAcqDateTo)
+    if (from || to) {
+      rows = rows.filter((a) => {
+        const d = String(a.acquisition_date || "").slice(0, 10)
+        if (!d) return false
+        if (from && d < from) return false
+        if (to && d > to) return false
+        return true
+      })
+    }
     const q = searchQuery.trim().toLowerCase()
     if (q) {
       rows = rows.filter((a) => {
@@ -177,15 +204,25 @@ export function DepreciationTab() {
     return rows.sort((a, b) =>
       String(b.acquisition_date || "").localeCompare(String(a.acquisition_date || ""))
     )
-  }, [assets, disposedAssets, assetStatusFilter, searchQuery])
+  }, [
+    assets,
+    disposedAssets,
+    assetStatusFilter,
+    appliedAcqDateFrom,
+    appliedAcqDateTo,
+    searchQuery,
+    normalizeAcqPeriod,
+  ])
 
-  const listSummary = React.useMemo(
-    () => ({
+  const listSummary = React.useMemo(() => {
+    const { from, to } = normalizeAcqPeriod(appliedAcqDateFrom, appliedAcqDateTo)
+    return {
       count: displayAssets.length,
       totalCost: displayAssets.reduce((sum, a) => sum + Number(a.acquisition_cost || 0), 0),
-    }),
-    [displayAssets]
-  )
+      periodFrom: from,
+      periodTo: to,
+    }
+  }, [displayAssets, appliedAcqDateFrom, appliedAcqDateTo, normalizeAcqPeriod])
 
   const showAssetForm = editingId != null || showLegacyCreateForm
 
@@ -255,21 +292,61 @@ export function DepreciationTab() {
     [accountOptions, accountSubjectDisplayName]
   )
 
-  const loadAssets = React.useCallback(() => {
-    setLoading(true)
-    getFixedAssets({ storeFilter: storeFilter !== "All" ? storeFilter : undefined, status: "active" })
-      .then((r) => setAssets((r.list || []) as FixedAssetRow[]))
-      .catch(() => setAssets([]))
-      .finally(() => setLoading(false))
-  }, [storeFilter])
+  const appliedAcqPeriodRef = React.useRef({ from: "", to: "" })
+  appliedAcqPeriodRef.current = {
+    from: appliedAcqDateFrom,
+    to: appliedAcqDateTo,
+  }
 
-  const loadDisposedAssets = React.useCallback(() => {
-    setLoading(true)
-    getFixedAssets({ storeFilter: storeFilter !== "All" ? storeFilter : undefined, status: "disposed" })
-      .then((r) => setDisposedAssets((r.list || []) as FixedAssetRow[]))
-      .catch(() => setDisposedAssets([]))
-      .finally(() => setLoading(false))
-  }, [storeFilter])
+  const loadAssets = React.useCallback(
+    (period?: { from?: string; to?: string }) => {
+      const { from, to } = normalizeAcqPeriod(
+        period?.from ?? appliedAcqPeriodRef.current.from,
+        period?.to ?? appliedAcqPeriodRef.current.to
+      )
+      setLoading(true)
+      getFixedAssets({
+        storeFilter: storeFilter !== "All" ? storeFilter : undefined,
+        status: "active",
+        dateFrom: from || undefined,
+        dateTo: to || undefined,
+      })
+        .then((r) => setAssets((r.list || []) as FixedAssetRow[]))
+        .catch(() => setAssets([]))
+        .finally(() => setLoading(false))
+    },
+    [storeFilter, normalizeAcqPeriod]
+  )
+
+  const loadDisposedAssets = React.useCallback(
+    (period?: { from?: string; to?: string }) => {
+      const { from, to } = normalizeAcqPeriod(
+        period?.from ?? appliedAcqPeriodRef.current.from,
+        period?.to ?? appliedAcqPeriodRef.current.to
+      )
+      setLoading(true)
+      getFixedAssets({
+        storeFilter: storeFilter !== "All" ? storeFilter : undefined,
+        status: "disposed",
+        dateFrom: from || undefined,
+        dateTo: to || undefined,
+      })
+        .then((r) => setDisposedAssets((r.list || []) as FixedAssetRow[]))
+        .catch(() => setDisposedAssets([]))
+        .finally(() => setLoading(false))
+    },
+    [storeFilter, normalizeAcqPeriod]
+  )
+
+  const runAssetListSearch = React.useCallback(() => {
+    const { from, to } = normalizeAcqPeriod(acqDateFrom, acqDateTo)
+    setAcqDateFrom(from)
+    setAcqDateTo(to)
+    setAppliedAcqDateFrom(from)
+    setAppliedAcqDateTo(to)
+    loadAssets({ from, to })
+    loadDisposedAssets({ from, to })
+  }, [acqDateFrom, acqDateTo, normalizeAcqPeriod, loadAssets, loadDisposedAssets])
 
   const loadEntries = React.useCallback(() => {
     setLoading(true)
@@ -583,6 +660,28 @@ export function DepreciationTab() {
                   </Select>
                 </div>
                 <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">
+                    {tt("dep_listAcqPeriod", "Acquisition period")}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="date"
+                      className="w-[140px]"
+                      value={acqDateFrom}
+                      onChange={(e) => setAcqDateFrom(e.target.value)}
+                      aria-label={t("dateFrom")}
+                    />
+                    <span className="text-xs text-muted-foreground shrink-0">~</span>
+                    <Input
+                      type="date"
+                      className="w-[140px]"
+                      value={acqDateTo}
+                      onChange={(e) => setAcqDateTo(e.target.value)}
+                      aria-label={t("dateTo")}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
                   <div className="text-xs text-muted-foreground">{tt("dep_listSearch", "Search")}</div>
                   <Input
                     className="w-[200px]"
@@ -591,14 +690,7 @@ export function DepreciationTab() {
                     placeholder={tt("dep_listSearchPh", "Code or asset name")}
                   />
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    loadAssets()
-                    loadDisposedAssets()
-                  }}
-                  disabled={loading}
-                >
+                <Button size="sm" onClick={runAssetListSearch} disabled={loading}>
                   <Search className="h-4 w-4 mr-1" />
                   {t("btn_query")}
                 </Button>
@@ -624,6 +716,14 @@ export function DepreciationTab() {
               </div>
 
               <div className="flex flex-wrap items-center gap-4 text-sm">
+                {(listSummary.periodFrom || listSummary.periodTo) && (
+                  <span className="text-muted-foreground">
+                    {tt("dep_listAcqPeriod", "Acquisition period")}:{" "}
+                    <span className="font-medium text-foreground">
+                      {listSummary.periodFrom || "…"} ~ {listSummary.periodTo || "…"}
+                    </span>
+                  </span>
+                )}
                 <span>
                   {tt("dep_listCount", "Count")}:{" "}
                   <span className="font-medium">{listSummary.count.toLocaleString()}</span>

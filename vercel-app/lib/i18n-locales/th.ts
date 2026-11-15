@@ -5007,6 +5007,7 @@ orderItemQty: 'จำนวน',
   dep_createBlockedUseExpense:
     'ลงทะเบียนสินทรัพย์ใหม่ที่จัดการค่าใช้จ่าย → ลงทะเบียน (ประเภทสินทรัพย์ถาวร)',
   dep_goExpenseRegister: 'จัดการค่าใช้จ่าย → ลงทะเบียน',
+  dep_listAcqPeriod: 'ช่วงวันที่ได้มา',
   dep_assetAccountCode: 'บัญชีสินทรัพย์',
   dep_accumDepAccountCode: 'บัญชีค่าเสื่อมสะสม',
   dep_expenseAccountCode: 'บัญชีค่าใช้จ่ายค่าเสื่อม',

@@ -4740,7 +4740,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_depreciation:
     'Fixed assets list/edit, monthly depreciation, disposal. New buys via Expense Register or exception register (auto payment plan) / Create payment plan, then bank link.',
   helpHow_admin_depreciation:
-    '① Filter Asset List by store, status, search.\n② Edit (✎), delete (trash), or Create payment plan (link icon) when missing—store must match the bank account.\n③ Run monthly depreciation on the Depreciation tab.\n④ Dispose on the Disposal tab. Exception register creates a payment plan by default (uncheck via Opening balance only).',
+    '① On Asset List, set store, status, and acquisition date range, then Search—the list and total acquisition cost update together for that period.\n② Edit (✎), delete (trash), or Create payment plan (link icon) when missing—store must match the bank account.\n③ Run monthly depreciation on the Depreciation tab.\n④ Dispose on the Disposal tab. Exception register creates a payment plan by default (uncheck via Opening balance only).',
   bankManualScreenFixedExpenses: 'Fixed expenses: Manage monthly fixed expense items',
   bankManualScreenExplanation: 'Guide: This manual and memo keyword rules',
   bankManualS1Title: '1. Input Tab – CSV Upload',
@@ -5768,6 +5768,7 @@ Only matters the employee must handle personally on a working day:
   dep_listStatus: 'Status',
   dep_statusActive: 'Active',
   dep_statusDisposed: 'Disposed',
+  dep_listAcqPeriod: 'Acquisition period',
   dep_listSearch: 'Search',
   dep_listSearchPh: 'Code or asset name',
   dep_listCount: 'Count',

@@ -7,16 +7,26 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const storeFilter = searchParams.get('storeFilter') || ''
   const status = searchParams.get('status') || 'active'
+  const dateFrom = String(searchParams.get('dateFrom') || '').trim().slice(0, 10)
+  const dateTo = String(searchParams.get('dateTo') || '').trim().slice(0, 10)
 
   try {
     let assets: { status?: string }[]
-    let filter = ''
+    const parts: string[] = []
     if (storeFilter && storeFilter !== 'All') {
-      filter = `store_name=ilike.${encodeURIComponent(storeFilter)}`
+      parts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
     }
     if (status && status !== 'all') {
-      filter += filter ? `&status=eq.${status}` : `status=eq.${status}`
+      parts.push(`status=eq.${status}`)
     }
+    // 취득일 기간 — 자산 목록·취득가 합계 조회 기준
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
+      parts.push(`acquisition_date=gte.${dateFrom}`)
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+      parts.push(`acquisition_date=lte.${dateTo}`)
+    }
+    const filter = parts.join('&')
     if (filter) {
       assets = (await supabaseSelectFilter('fixed_assets', filter, {
         select: '*',

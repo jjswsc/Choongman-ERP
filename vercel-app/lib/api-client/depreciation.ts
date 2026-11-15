@@ -4,10 +4,19 @@
 import { apiFetchWithOffline } from '../api/fetch-offline'
 import { jsonAsArray, jsonAsPlainObject } from '../safe-api-json'
 
-export async function getFixedAssets(params: { storeFilter?: string; status?: string }) {
+export async function getFixedAssets(params: {
+  storeFilter?: string
+  status?: string
+  /** 취득일 시작 (YYYY-MM-DD) */
+  dateFrom?: string
+  /** 취득일 종료 (YYYY-MM-DD) */
+  dateTo?: string
+}) {
   const q = new URLSearchParams()
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.status) q.set('status', params.status)
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom)
+  if (params.dateTo) q.set('dateTo', params.dateTo)
   const res = await apiFetchWithOffline(`/api/getFixedAssets?${q}`)
   const raw: unknown = await res.json()
   const o = jsonAsPlainObject(raw)

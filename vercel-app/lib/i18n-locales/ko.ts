@@ -4744,7 +4744,7 @@ export const I18N_BASE_KO = {
   helpSum_admin_depreciation:
     '고정자산 목록·수정, 월 감가상각, 처분. 신규는 지출등록(고정자산) 또는 예외등록(지급예정 자동)·목록의 지급예정 만들기 후 통장 연결.',
   helpHow_admin_depreciation:
-    '① 자산 목록에서 매장·상태·검색으로 조회합니다.\n② 행의 수정(✎)·삭제(휴지통), 지급예정이 없으면 링크(🔗)로 지급예정을 만듭니다(매장은 통장 계좌와 같아야 함).\n③ 감가상각 실행 탭에서 월별 미리보기 후 분개합니다.\n④ 처분은 자산 처분 탭에서 합니다. 예외 등록 기본은 지급예정 생성(기초잔액만 체크 시 생략).',
+    '① 자산 목록에서 매장·상태·취득일 기간을 고른 뒤 검색하면 해당 기간 자산 목록과 취득가 합계가 함께 나옵니다.\n② 행의 수정(✎)·삭제(휴지통), 지급예정이 없으면 링크(🔗)로 지급예정을 만듭니다(매장은 통장 계좌와 같아야 함).\n③ 감가상각 실행 탭에서 월별 미리보기 후 분개합니다.\n④ 처분은 자산 처분 탭에서 합니다. 예외 등록 기본은 지급예정 생성(기초잔액만 체크 시 생략).',
   bankManualScreenFixedExpenses: '고정비: 월별 고정 지출 항목 관리',
   bankManualScreenExplanation: '설명: 이 매뉴얼 및 적요 키워드 규칙 설정',
   bankManualS1Title: '1. 입력 탭 – CSV 업로드',
@@ -5770,6 +5770,7 @@ export const I18N_BASE_KO = {
   dep_listStatus: '상태',
   dep_statusActive: '운용',
   dep_statusDisposed: '처분',
+  dep_listAcqPeriod: '취득일 기간',
   dep_listSearch: '검색',
   dep_listSearchPh: '코드·자산명',
   dep_listCount: '건수',
