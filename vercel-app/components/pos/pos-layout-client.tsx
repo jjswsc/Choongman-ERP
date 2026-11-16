@@ -25,7 +25,8 @@ import { PosMainDeviceSyncHost } from "@/components/pos/pos-main-device-sync-hos
 import { PosOfflineQueueSyncRunner } from "@/components/pos/pos-offline-queue-sync-runner"
 
 import { PosDrawerPinProvider } from "@/components/pos/pos-drawer-pin-provider"
-import { PosStoreProvider } from "@/lib/pos-store-provider"
+import { isPosCustomerDisplayPathname } from "@/lib/pos-customer-display-state"
+import { PosStoreProvider, PosStoreStubProvider } from "@/lib/pos-store-provider"
 import { appAlert } from "@/lib/app-message"
 import { resolveAdminPathSaasModule } from "@/lib/saas/erp-route-modules"
 import { isSaasModuleEnabled, useSaasEnabledModules } from "@/lib/use-saas-enabled-modules"
@@ -180,7 +181,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
   const isPosLoginPage = pathname === "/pos/login"
   const isFirstScreen = pathname === "/pos" || pathname === "/pos/"
   const isTerminalPage = pathname === "/pos/terminal"
-  const isCustomerDisplayPage = pathname === "/pos/customer-display"
+  const isCustomerDisplayPage = isPosCustomerDisplayPathname(pathname || "")
   const [shellUpdateAvailable, setShellUpdateAvailable] = useState(false)
   const [shellExitFullscreenAvailable, setShellExitFullscreenAvailable] = useState(false)
   const [shellMinimizeAvailable, setShellMinimizeAvailable] = useState(false)
@@ -282,7 +283,7 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
     if (!isCmPosHybridShell()) return
     if (typeof window === "undefined") return
     /** 고객용 모니터(/pos/customer-display)에는 캐셔용 프린터 점검 알림을 띄우지 않음 */
-    if (pathname === "/pos/customer-display") return
+    if (isPosCustomerDisplayPathname(pathname || "")) return
     const shell = window.cmPosShell
     if (typeof shell?.listPrinters !== "function" || typeof shell?.getPrintConfig !== "function") return
 
@@ -462,9 +463,11 @@ export function PosLayoutClient({ children }: { children: React.ReactNode }) {
 
   if (isCustomerDisplayPage) {
     return (
-      <div className="fixed inset-0 flex flex-col overflow-hidden bg-zinc-950 text-zinc-50">
-        {children}
-      </div>
+      <PosStoreStubProvider>
+        <div className="fixed inset-0 flex flex-col overflow-hidden bg-zinc-950 text-zinc-50">
+          {children}
+        </div>
+      </PosStoreStubProvider>
     )
   }
 

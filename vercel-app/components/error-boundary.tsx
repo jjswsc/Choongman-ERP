@@ -70,6 +70,24 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo)
+    const msg = String(error?.message || "")
+    const path = typeof window !== "undefined" ? window.location.pathname || "" : ""
+    /** 손님 모니터 PosStoreProvider 누락 크래시 — 재시도만으로는 같은 청크에 남을 수 있어 한 번 강제 새로고침 */
+    if (
+      msg.includes("usePosStore must be used within PosStoreProvider") &&
+      path.replace(/\/+$/, "") === "/pos/customer-display"
+    ) {
+      try {
+        const key = "cm:pos:customer-display:provider-reload"
+        if (sessionStorage.getItem(key) !== "1") {
+          sessionStorage.setItem(key, "1")
+          window.location.reload()
+          return
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     if (!isStaleClientBundleError(error)) return
     if (hasRecentChunkRecovery()) return
     this.startStaleBundleRecovery()

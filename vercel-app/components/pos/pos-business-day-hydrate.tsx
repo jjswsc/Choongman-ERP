@@ -4,18 +4,18 @@ import { useEffect, useMemo } from 'react'
 import { setPosBusinessHoursClient } from '@/lib/pos-business-day'
 import { getPosBusinessDaySettings, useStoreList } from '@/lib/api-client'
 import { useAuth } from '@/lib/auth-context'
-import { usePosStore } from '@/hooks/use-pos-store'
+import { usePosStoreOptional } from '@/lib/pos-store-provider'
 import { resolveStoreListKey } from '@/lib/store-list-keys'
 
 /** POS 단말에서 `getPosBusinessDateStr()`이 서버 설정과 맞도록 주입 (매장 기준 단일 소스) */
 export function PosBusinessDayHydrate() {
   const { auth } = useAuth()
-  const { currentStoreId } = usePosStore()
+  const posStore = usePosStoreOptional()
+  const currentStoreId = String(posStore?.currentStoreId || '').trim()
   const { posStores: storeCodes, legacyToCanonical } = useStoreList()
 
   const storeForQuery = useMemo(() => {
-    const fromPosStore = String(currentStoreId || '').trim()
-    if (fromPosStore) return fromPosStore
+    if (currentStoreId) return currentStoreId
     const raw = String(auth?.store || '').trim()
     if (!raw) return ''
     return resolveStoreListKey(raw, storeCodes, legacyToCanonical)
