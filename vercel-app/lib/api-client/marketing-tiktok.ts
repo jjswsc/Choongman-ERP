@@ -10,6 +10,7 @@ export type TikTokAdInsightRow = {
   clicks: number
   ctr: number
   spend: number
+  createdTime?: string
 }
 
 export type TikTokSyncPayload = {

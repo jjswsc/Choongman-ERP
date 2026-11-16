@@ -15,6 +15,8 @@ export type TikTokAdInsightRow = {
   clicks: number
   ctr: number
   spend: number
+  /** 캠페인 생성 시각(ISO 또는 unix). 매핑 연도 칩용 */
+  createdTime?: string
 }
 
 export type TikTokSyncPayload = {
@@ -173,6 +175,96 @@ export async function tiktokListAdvertisers(accessToken: string): Promise<{
   return { ok: true, advertisers, error: "" }
 }
 
+/** Ads Manager 캠페인 목록 (매핑용 카탈로그). page_size 최대 1000. */
+export async function tiktokListCampaigns(
+  accessToken: string,
+  advertiserId: string
+): Promise<{
+  ok: boolean
+  campaigns: { campaignId: string; campaignName: string; createdTime?: string }[]
+  error: string
+}> {
+  const campaigns: { campaignId: string; campaignName: string; createdTime?: string }[] = []
+  let page = 1
+  const pageSize = 200
+  for (let guard = 0; guard < 20; guard += 1) {
+    const res = await tiktokApiGet<{
+      list?: {
+        campaign_id?: string | number
+        campaign_name?: string
+        create_time?: string | number
+      }[]
+      page_info?: { total_number?: number; total_page?: number; page?: number }
+    }>("campaign/get/", accessToken, {
+      advertiser_id: advertiserId,
+      fields: JSON.stringify(["campaign_id", "campaign_name", "create_time"]),
+      page: String(page),
+      page_size: String(pageSize),
+    })
+    if (!res.ok) {
+      return { ok: false, campaigns, error: res.error?.message || "campaign/get failed" }
+    }
+    for (const row of res.json?.list || []) {
+      const campaignId = String(row.campaign_id ?? "").trim()
+      if (!campaignId) continue
+      const createRaw = row.create_time
+      const createdTime =
+        createRaw == null || createRaw === ""
+          ? undefined
+          : typeof createRaw === "number"
+            ? String(createRaw)
+            : String(createRaw).trim()
+      campaigns.push({
+        campaignId,
+        campaignName: String(row.campaign_name || campaignId).trim(),
+        createdTime,
+      })
+    }
+    const totalPage = Number(res.json?.page_info?.total_page || 1)
+    if (page >= totalPage || !(res.json?.list || []).length) break
+    page += 1
+  }
+  return { ok: true, campaigns, error: "" }
+}
+
+function mergeTikTokCampaignCatalog(
+  ads: TikTokAdInsightRow[],
+  rows: { campaignId: string; campaignName: string; createdTime?: string }[]
+): number {
+  const byId = new Map(
+    ads.map((a) => [String(a.campaignId || "").trim(), a] as const).filter(([id]) => Boolean(id))
+  )
+  let added = 0
+  for (const c of rows || []) {
+    const id = String(c.campaignId || "").trim()
+    if (!id) continue
+    const name = String(c.campaignName || "").trim() || id
+    const createdTime = String(c.createdTime || "").trim()
+    const existing = byId.get(id)
+    if (existing) {
+      if (!existing.campaignName && name) existing.campaignName = name
+      if (!existing.createdTime && createdTime) existing.createdTime = createdTime
+      continue
+    }
+    const row: TikTokAdInsightRow = {
+      adId: "",
+      adName: "",
+      campaignId: id,
+      campaignName: name,
+      impressions: 0,
+      reach: 0,
+      clicks: 0,
+      ctr: 0,
+      spend: 0,
+      createdTime: createdTime || undefined,
+    }
+    ads.push(row)
+    byId.set(id, row)
+    added += 1
+  }
+  return added
+}
+
 export async function fetchTikTokAdInsights(params: {
   accessToken: string
   advertiserId: string
@@ -278,7 +370,8 @@ export async function fetchTikTokAdInsights(params: {
     }
   }
 
-  const adsTotals = ads.reduce(
+  const insightRows = ads.filter((a) => String(a.adId || "").trim())
+  const adsTotals = insightRows.reduce(
     (acc, a) => {
       acc.ads += 1
       acc.impressions += a.impressions
@@ -291,6 +384,16 @@ export async function fetchTikTokAdInsights(params: {
 
   if (adsTotals.ads > 0 && adsTotals.impressions === 0 && adsTotals.spend === 0) {
     diagnostics.push("ads_insights_all_zero")
+  }
+
+  const catalog = await tiktokListCampaigns(params.accessToken, advertiserId)
+  if (!catalog.ok) {
+    diagnostics.push(`ads_campaigns:${catalog.error || "error"}`)
+  } else {
+    const added = mergeTikTokCampaignCatalog(ads, catalog.campaigns)
+    if (added > 0) diagnostics.push(`ads_campaigns_listed:${catalog.campaigns.length}`)
+    if (!catalog.campaigns.length) diagnostics.push("ads_campaigns_empty")
+    else if (adsTotals.ads === 0) diagnostics.push("ads_insights_empty_campaigns_listed")
   }
 
   return {

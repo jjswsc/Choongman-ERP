@@ -37,6 +37,8 @@ export interface MarketingCampaign {
   collabDetail?: MarketingCollabDetail
   metaCampaignId?: string
   metaCampaignName?: string
+  tiktokCampaignId?: string
+  tiktokCampaignName?: string
 }
 
 export type { MarketingCollabDetail } from '../marketing-collab-detail'
@@ -155,6 +157,8 @@ export async function saveMarketingCampaign(params: {
   phasePeriods?: MarketingCampaignPhasePeriod[]
   metaCampaignId?: string
   metaCampaignName?: string
+  tiktokCampaignId?: string
+  tiktokCampaignName?: string
   userRole?: string
   userStore?: string
 }) {

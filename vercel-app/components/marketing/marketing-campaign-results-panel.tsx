@@ -7,6 +7,7 @@ import { getMarketingCampaign, getMarketingCampaignCosts, getMarketingCampaignRe
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { MarketingMetaInsightsPanel } from "@/components/marketing/marketing-meta-insights-panel"
+import { MarketingTikTokInsightsPanel } from "@/components/marketing/marketing-tiktok-insights-panel"
 
 export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: string }) {
   const { lang } = useLang()
@@ -17,6 +18,8 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
   const [matchTopic, setMatchTopic] = React.useState("")
   const [metaCampaignId, setMetaCampaignId] = React.useState("")
   const [metaCampaignName, setMetaCampaignName] = React.useState("")
+  const [tiktokCampaignId, setTiktokCampaignId] = React.useState("")
+  const [tiktokCampaignName, setTiktokCampaignName] = React.useState("")
   const [cost, setCost] = React.useState<{
     bankCosts: number
     pettyCosts: number
@@ -81,6 +84,8 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
         setMatchTopic(c.topic || "")
         setMetaCampaignId(c.metaCampaignId || "")
         setMetaCampaignName(c.metaCampaignName || "")
+        setTiktokCampaignId(c.tiktokCampaignId || "")
+        setTiktokCampaignName(c.tiktokCampaignName || "")
       }
     } finally {
       setLoading(false)
@@ -146,6 +151,13 @@ export function MarketingCampaignResultsPanel({ campaignId }: { campaignId: stri
         matchTopic={matchTopic}
         metaCampaignId={metaCampaignId}
         metaCampaignName={metaCampaignName}
+      />
+
+      <MarketingTikTokInsightsPanel
+        compact
+        matchTopic={matchTopic}
+        tiktokCampaignId={tiktokCampaignId}
+        tiktokCampaignName={tiktokCampaignName}
       />
     </div>
   )

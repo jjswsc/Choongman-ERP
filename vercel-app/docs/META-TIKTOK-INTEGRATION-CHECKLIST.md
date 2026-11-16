@@ -72,17 +72,19 @@
 
 ### B3. Supabase SQL
 
-[`sql/marketing_tiktok_connections.sql`](../sql/marketing_tiktok_connections.sql) 실행.
+1. [`sql/marketing_tiktok_connections.sql`](../sql/marketing_tiktok_connections.sql)
+2. [`sql/marketing_tiktok_campaign_map.sql`](../sql/marketing_tiktok_campaign_map.sql) — ERP 캠페인 ↔ TikTok Ads 캠페인 매핑 컬럼
 
 ### B4. ERP에서 연결
 
 1. 같은 연동 화면에서 **TikTok 연결**
 2. Advertiser가 여러 개면 선택
-3. **데이터 동기화** (방콕 기준 최근 28일 기본)
+3. **데이터 동기화** (실적: 방콕 최근 28일 + 캠페인 카탈로그)
+4. 캠페인 **개요**에서 TikTok Ads 캠페인 선택 → 저장 → **성과** 탭에서 실비 확인
 
 ### B5. 직원 전달용 한 줄
 
-> TikTok 앱 redirect에 `https://choongman-erp.vercel.app/api/tiktok/oauth/callback` (또는 Omni 도메인) 등록 → Vercel에 `TIKTOK_APP_ID`·`TIKTOK_APP_SECRET` → SQL 실행 → ERP에서 TikTok 연결·동기화.
+> TikTok 앱 redirect에 `https://choongman-erp.vercel.app/api/tiktok/oauth/callback` (또는 Omni 도메인) 등록 → Vercel에 `TIKTOK_APP_ID`·`TIKTOK_APP_SECRET` → SQL 2개 실행 → ERP에서 TikTok 연결·동기화 → 캠페인 개요에서 TikTok 광고 캠페인 매핑.
 
 ---
 

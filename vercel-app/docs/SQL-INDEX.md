@@ -72,7 +72,7 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **860**개 · 접두어 그룹 **102**개
+- `sql/` 최상위: **862**개 · 접두어 그룹 **102**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **76**개
 
@@ -419,6 +419,47 @@
 
 </details>
 
+<details><summary><code>marketing_*</code> (36)</summary>
+
+- [`marketing_ads_content_detail.sql`](../sql/marketing_ads_content_detail.sql)
+- [`marketing_ads_period_end.sql`](../sql/marketing_ads_period_end.sql)
+- [`marketing_campaign_design_tasks.sql`](../sql/marketing_campaign_design_tasks.sql)
+- [`marketing_campaign_hub_extensions.sql`](../sql/marketing_campaign_hub_extensions.sql)
+- [`marketing_campaign_number.sql`](../sql/marketing_campaign_number.sql)
+- [`marketing_campaign_other_cost.sql`](../sql/marketing_campaign_other_cost.sql)
+- [`marketing_campaign_types.sql`](../sql/marketing_campaign_types.sql)
+- [`marketing_campaigns_apply_all.sql`](../sql/marketing_campaigns_apply_all.sql) — apply
+- [`marketing_campaigns_collab_detail.sql`](../sql/marketing_campaigns_collab_detail.sql)
+- [`marketing_campaigns_collab_management.sql`](../sql/marketing_campaigns_collab_management.sql)
+- [`marketing_campaigns_count_check.sql`](../sql/marketing_campaigns_count_check.sql) — verify
+- [`marketing_campaigns_discount_target_audience.sql`](../sql/marketing_campaigns_discount_target_audience.sql)
+- [`marketing_campaigns_phase_periods.sql`](../sql/marketing_campaigns_phase_periods.sql)
+- [`marketing_campaigns_rls_policies.sql`](../sql/marketing_campaigns_rls_policies.sql) — rls
+- [`marketing_campaigns_vercel_api_bootstrap.sql`](../sql/marketing_campaigns_vercel_api_bootstrap.sql)
+- [`marketing_expense_accrual_link.sql`](../sql/marketing_expense_accrual_link.sql)
+- [`marketing_influencer_profiles_01_table.sql`](../sql/marketing_influencer_profiles_01_table.sql)
+- [`marketing_influencer_profiles_02_alter_posts.sql`](../sql/marketing_influencer_profiles_02_alter_posts.sql)
+- [`marketing_influencer_profiles_03_rls.sql`](../sql/marketing_influencer_profiles_03_rls.sql) — rls
+- [`marketing_influencer_profiles_04_backfill_preview.sql`](../sql/marketing_influencer_profiles_04_backfill_preview.sql) — preview, backfill
+- [`marketing_influencer_profiles_05_backfill.sql`](../sql/marketing_influencer_profiles_05_backfill.sql) — backfill
+- [`marketing_influencer_profiles_06_post_job_columns.sql`](../sql/marketing_influencer_profiles_06_post_job_columns.sql)
+- [`marketing_influencers_contact_menus.sql`](../sql/marketing_influencers_contact_menus.sql)
+- [`marketing_material_deployments.sql`](../sql/marketing_material_deployments.sql)
+- [`marketing_material_gifts.sql`](../sql/marketing_material_gifts.sql)
+- [`marketing_material_install_photos_storage_bucket.sql`](../sql/marketing_material_install_photos_storage_bucket.sql)
+- [`marketing_material_store_checks.sql`](../sql/marketing_material_store_checks.sql) — verify
+- [`marketing_material_store_checks_install_photo.sql`](../sql/marketing_material_store_checks_install_photo.sql) — verify
+- [`marketing_material_store_checks_quantity.sql`](../sql/marketing_material_store_checks_quantity.sql) — verify
+- [`marketing_materials.sql`](../sql/marketing_materials.sql)
+- [`marketing_materials_produced_on.sql`](../sql/marketing_materials_produced_on.sql)
+- [`marketing_meta_connections.sql`](../sql/marketing_meta_connections.sql)
+- [`marketing_meta_ig_and_campaign_map.sql`](../sql/marketing_meta_ig_and_campaign_map.sql)
+- [`marketing_tenant_id.sql`](../sql/marketing_tenant_id.sql)
+- [`marketing_tiktok_campaign_map.sql`](../sql/marketing_tiktok_campaign_map.sql) — log
+- [`marketing_tiktok_connections.sql`](../sql/marketing_tiktok_connections.sql)
+
+</details>
+
 <details><summary><code>member_*</code> (36)</summary>
 
 - [`member_coupon_promo_codes.sql`](../sql/member_coupon_promo_codes.sql)
@@ -457,46 +498,6 @@
 - [`member_tier_upgrade_basis.sql`](../sql/member_tier_upgrade_basis.sql)
 - [`member_tiers_portal_benefits.sql`](../sql/member_tiers_portal_benefits.sql)
 - [`member_visit_analysis_rpc.sql`](../sql/member_visit_analysis_rpc.sql) — rpc
-
-</details>
-
-<details><summary><code>marketing_*</code> (35)</summary>
-
-- [`marketing_ads_content_detail.sql`](../sql/marketing_ads_content_detail.sql)
-- [`marketing_ads_period_end.sql`](../sql/marketing_ads_period_end.sql)
-- [`marketing_campaign_design_tasks.sql`](../sql/marketing_campaign_design_tasks.sql)
-- [`marketing_campaign_hub_extensions.sql`](../sql/marketing_campaign_hub_extensions.sql)
-- [`marketing_campaign_number.sql`](../sql/marketing_campaign_number.sql)
-- [`marketing_campaign_other_cost.sql`](../sql/marketing_campaign_other_cost.sql)
-- [`marketing_campaign_types.sql`](../sql/marketing_campaign_types.sql)
-- [`marketing_campaigns_apply_all.sql`](../sql/marketing_campaigns_apply_all.sql) — apply
-- [`marketing_campaigns_collab_detail.sql`](../sql/marketing_campaigns_collab_detail.sql)
-- [`marketing_campaigns_collab_management.sql`](../sql/marketing_campaigns_collab_management.sql)
-- [`marketing_campaigns_count_check.sql`](../sql/marketing_campaigns_count_check.sql) — verify
-- [`marketing_campaigns_discount_target_audience.sql`](../sql/marketing_campaigns_discount_target_audience.sql)
-- [`marketing_campaigns_phase_periods.sql`](../sql/marketing_campaigns_phase_periods.sql)
-- [`marketing_campaigns_rls_policies.sql`](../sql/marketing_campaigns_rls_policies.sql) — rls
-- [`marketing_campaigns_vercel_api_bootstrap.sql`](../sql/marketing_campaigns_vercel_api_bootstrap.sql)
-- [`marketing_expense_accrual_link.sql`](../sql/marketing_expense_accrual_link.sql)
-- [`marketing_influencer_profiles_01_table.sql`](../sql/marketing_influencer_profiles_01_table.sql)
-- [`marketing_influencer_profiles_02_alter_posts.sql`](../sql/marketing_influencer_profiles_02_alter_posts.sql)
-- [`marketing_influencer_profiles_03_rls.sql`](../sql/marketing_influencer_profiles_03_rls.sql) — rls
-- [`marketing_influencer_profiles_04_backfill_preview.sql`](../sql/marketing_influencer_profiles_04_backfill_preview.sql) — preview, backfill
-- [`marketing_influencer_profiles_05_backfill.sql`](../sql/marketing_influencer_profiles_05_backfill.sql) — backfill
-- [`marketing_influencer_profiles_06_post_job_columns.sql`](../sql/marketing_influencer_profiles_06_post_job_columns.sql)
-- [`marketing_influencers_contact_menus.sql`](../sql/marketing_influencers_contact_menus.sql)
-- [`marketing_material_deployments.sql`](../sql/marketing_material_deployments.sql)
-- [`marketing_material_gifts.sql`](../sql/marketing_material_gifts.sql)
-- [`marketing_material_install_photos_storage_bucket.sql`](../sql/marketing_material_install_photos_storage_bucket.sql)
-- [`marketing_material_store_checks.sql`](../sql/marketing_material_store_checks.sql) — verify
-- [`marketing_material_store_checks_install_photo.sql`](../sql/marketing_material_store_checks_install_photo.sql) — verify
-- [`marketing_material_store_checks_quantity.sql`](../sql/marketing_material_store_checks_quantity.sql) — verify
-- [`marketing_materials.sql`](../sql/marketing_materials.sql)
-- [`marketing_materials_produced_on.sql`](../sql/marketing_materials_produced_on.sql)
-- [`marketing_meta_connections.sql`](../sql/marketing_meta_connections.sql)
-- [`marketing_meta_ig_and_campaign_map.sql`](../sql/marketing_meta_ig_and_campaign_map.sql)
-- [`marketing_tenant_id.sql`](../sql/marketing_tenant_id.sql)
-- [`marketing_tiktok_connections.sql`](../sql/marketing_tiktok_connections.sql)
 
 </details>
 
@@ -647,6 +648,25 @@
 
 </details>
 
+<details><summary><code>store_*</code> (14)</summary>
+
+- [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
+- [`store_action_items_v2.sql`](../sql/store_action_items_v2.sql)
+- [`store_action_photos_storage_bucket.sql`](../sql/store_action_photos_storage_bucket.sql)
+- [`store_repair_photos_storage_bucket.sql`](../sql/store_repair_photos_storage_bucket.sql) — apply
+- [`store_repair_progress_logs.sql`](../sql/store_repair_progress_logs.sql) — apply
+- [`store_repair_schema_all.sql`](../sql/store_repair_schema_all.sql) — apply
+- [`store_repair_tickets.sql`](../sql/store_repair_tickets.sql) — apply
+- [`store_repair_tickets_vendor_code.sql`](../sql/store_repair_tickets_vendor_code.sql) — apply
+- [`store_sales_bonus_settings_01_table.sql`](../sql/store_sales_bonus_settings_01_table.sql) — log
+- [`store_sales_bonus_settings_02_seed_choongman_poster.sql`](../sql/store_sales_bonus_settings_02_seed_choongman_poster.sql) — log
+- [`store_sales_bonus_settings_03_designee_payout.sql`](../sql/store_sales_bonus_settings_03_designee_payout.sql) — log
+- [`store_tax_filing_profiles.sql`](../sql/store_tax_filing_profiles.sql)
+- [`store_tax_filing_profiles_sso_columns.sql`](../sql/store_tax_filing_profiles_sso_columns.sql)
+- [`store_tax_filing_profiles_vendor_code.sql`](../sql/store_tax_filing_profiles_vendor_code.sql)
+
+</details>
+
 <details><summary><code>accounting_*</code> (13)</summary>
 
 - [`accounting_compliance_audit_logs.sql`](../sql/accounting_compliance_audit_logs.sql) — diagnose
@@ -698,24 +718,6 @@
 - [`kbank_true_digital_mid_01_preview.sql`](../sql/kbank_true_digital_mid_01_preview.sql) — preview
 - [`kbank_true_digital_mid_02_update.sql`](../sql/kbank_true_digital_mid_02_update.sql) — apply
 - [`kbank_true_digital_mid_03_verify.sql`](../sql/kbank_true_digital_mid_03_verify.sql) — verify
-
-</details>
-
-<details><summary><code>store_*</code> (13)</summary>
-
-- [`store_action_items_schema.sql`](../sql/store_action_items_schema.sql)
-- [`store_action_items_v2.sql`](../sql/store_action_items_v2.sql)
-- [`store_action_photos_storage_bucket.sql`](../sql/store_action_photos_storage_bucket.sql)
-- [`store_repair_photos_storage_bucket.sql`](../sql/store_repair_photos_storage_bucket.sql) — apply
-- [`store_repair_progress_logs.sql`](../sql/store_repair_progress_logs.sql) — apply
-- [`store_repair_schema_all.sql`](../sql/store_repair_schema_all.sql) — apply
-- [`store_repair_tickets.sql`](../sql/store_repair_tickets.sql) — apply
-- [`store_repair_tickets_vendor_code.sql`](../sql/store_repair_tickets_vendor_code.sql) — apply
-- [`store_sales_bonus_settings_01_table.sql`](../sql/store_sales_bonus_settings_01_table.sql) — log
-- [`store_sales_bonus_settings_02_seed_choongman_poster.sql`](../sql/store_sales_bonus_settings_02_seed_choongman_poster.sql) — log
-- [`store_tax_filing_profiles.sql`](../sql/store_tax_filing_profiles.sql)
-- [`store_tax_filing_profiles_sso_columns.sql`](../sql/store_tax_filing_profiles_sso_columns.sql)
-- [`store_tax_filing_profiles_vendor_code.sql`](../sql/store_tax_filing_profiles_vendor_code.sql)
 
 </details>
 

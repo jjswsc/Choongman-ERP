@@ -169,6 +169,8 @@ export async function GET(req: NextRequest) {
         phasePeriods: parsePhasePeriodsFromUnknown(row.phase_periods),
         metaCampaignId: String(row.meta_campaign_id ?? ''),
         metaCampaignName: String(row.meta_campaign_name ?? ''),
+        tiktokCampaignId: String(row.tiktok_campaign_id ?? ''),
+        tiktokCampaignName: String(row.tiktok_campaign_name ?? ''),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }
@@ -205,6 +207,8 @@ export async function GET(req: NextRequest) {
       phasePeriods: parsePhasePeriodsFromUnknown(row.phase_periods),
       metaCampaignId: String(row.meta_campaign_id ?? ''),
       metaCampaignName: String(row.meta_campaign_name ?? ''),
+      tiktokCampaignId: String(row.tiktok_campaign_id ?? ''),
+      tiktokCampaignName: String(row.tiktok_campaign_name ?? ''),
     }))
 
     return NextResponse.json(list, { headers })
@@ -269,6 +273,8 @@ export async function POST(req: NextRequest) {
       user_store?: string
       metaCampaignId?: string
       metaCampaignName?: string
+      tiktokCampaignId?: string
+      tiktokCampaignName?: string
     }
 
     const topic = String(body.topic ?? '').trim()
@@ -344,8 +350,24 @@ export async function POST(req: NextRequest) {
       phase_periods: phasePeriods,
       meta_campaign_id: String(body.metaCampaignId ?? '').trim(),
       meta_campaign_name: String(body.metaCampaignName ?? '').trim(),
+      tiktok_campaign_id: String(body.tiktokCampaignId ?? '').trim(),
+      tiktok_campaign_name: String(body.tiktokCampaignName ?? '').trim(),
       updated_at: new Date().toISOString(),
     }, tenantScope, 'marketing_campaigns')
+
+    const stripMissingCampaignMapCols = (err: unknown, base: Record<string, unknown>) => {
+      let next = { ...base }
+      const msg = String(err)
+      if (msg.includes('meta_campaign')) {
+        const { meta_campaign_id: _id, meta_campaign_name: _name, ...rest } = next
+        next = rest
+      }
+      if (msg.includes('tiktok_campaign')) {
+        const { tiktok_campaign_id: _tid, tiktok_campaign_name: _tname, ...rest } = next
+        next = rest
+      }
+      return next
+    }
 
     if (editingId) {
       const existing = (await supabaseSelectFilter(
@@ -358,9 +380,12 @@ export async function POST(req: NextRequest) {
         try {
           await supabaseUpdateByFilter('marketing_campaigns', filter, row)
         } catch (err) {
-          if (!String(err).includes('meta_campaign')) throw err
-          const { meta_campaign_id: _id, meta_campaign_name: _name, ...rest } = row as Record<string, unknown>
-          await supabaseUpdateByFilter('marketing_campaigns', filter, rest)
+          if (!String(err).includes('meta_campaign') && !String(err).includes('tiktok_campaign')) throw err
+          await supabaseUpdateByFilter(
+            'marketing_campaigns',
+            filter,
+            stripMissingCampaignMapCols(err, row as Record<string, unknown>)
+          )
         }
         return NextResponse.json({ success: true, message: '수정되었습니다.', id: editingId }, { headers })
       }
@@ -370,9 +395,11 @@ export async function POST(req: NextRequest) {
     try {
       inserted = (await supabaseInsert('marketing_campaigns', row)) as { id?: number }[]
     } catch (err) {
-      if (!String(err).includes('meta_campaign')) throw err
-      const { meta_campaign_id: _id, meta_campaign_name: _name, ...rest } = row as Record<string, unknown>
-      inserted = (await supabaseInsert('marketing_campaigns', rest)) as { id?: number }[]
+      if (!String(err).includes('meta_campaign') && !String(err).includes('tiktok_campaign')) throw err
+      inserted = (await supabaseInsert(
+        'marketing_campaigns',
+        stripMissingCampaignMapCols(err, row as Record<string, unknown>)
+      )) as { id?: number }[]
     }
     const created = Array.isArray(inserted) ? inserted[0] : inserted
     const newId = created?.id

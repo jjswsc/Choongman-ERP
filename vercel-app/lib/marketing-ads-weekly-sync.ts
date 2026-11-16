@@ -11,8 +11,10 @@ import {
 } from "@/lib/supabase-server"
 import { suggestMetaCampaignMappings } from "@/lib/marketing-meta-auto-map"
 import { filterAdsForCampaign } from "@/lib/marketing-meta-match"
+import { filterTikTokAdsForCampaign } from "@/lib/marketing-tiktok-match"
 import { loadMetaConnectionRow, syncMetaConnection } from "@/lib/meta-connection-server"
 import { syncTikTokConnection, loadTikTokConnectionRow } from "@/lib/tiktok-connection-server"
+import type { TikTokAdInsightRow } from "@/lib/tiktok-ads"
 import { getAllManagers, sendNoticeToRecipients, type NoticeRecipient } from "@/lib/send-notice-util"
 import { isOfficeRole, isAccountingRole } from "@/lib/permissions"
 import { supabaseSelect } from "@/lib/supabase-server"
@@ -39,6 +41,8 @@ type CampaignRow = {
   budget_total?: number | string | null
   meta_campaign_id?: string | null
   meta_campaign_name?: string | null
+  tiktok_campaign_id?: string | null
+  tiktok_campaign_name?: string | null
   start_date?: string | null
   end_date?: string | null
 }
@@ -46,7 +50,8 @@ type CampaignRow = {
 export async function loadOngoingCampaigns(tenantScope: SaasTenantScope): Promise<CampaignRow[]> {
   const filter = appendSaasTenantFilter("status=eq.ongoing", tenantScope, "marketing_campaigns")
   const rows = (await supabaseSelectFilter("marketing_campaigns", filter, {
-    select: "id,topic,status,budget_total,meta_campaign_id,meta_campaign_name,start_date,end_date",
+    select:
+      "id,topic,status,budget_total,meta_campaign_id,meta_campaign_name,tiktok_campaign_id,tiktok_campaign_name,start_date,end_date",
     order: "id.desc",
     limit: 200,
   })) as CampaignRow[] | null
@@ -148,13 +153,15 @@ export async function runMarketingAdsWeeklySync(tenantScope: SaasTenantScope): P
   let ttAds = 0
   let ttOk = false
   let ttMsg = ""
+  let tiktokAds: TikTokAdInsightRow[] = []
   try {
     const row = await loadTikTokConnectionRow(tenantScope)
     if (row || process.env.TIKTOK_ACCESS_TOKEN) {
       const payload = await syncTikTokConnection(tenantScope)
       ttOk = true
-      ttAds = payload.ads?.length || 0
+      ttAds = payload.adsTotals?.ads || payload.ads?.length || 0
       ttSpend = Number(payload.adsTotals?.spend || 0)
+      tiktokAds = Array.isArray(payload.ads) ? payload.ads : []
     } else {
       ttMsg = "not_connected"
     }
@@ -167,6 +174,11 @@ export async function runMarketingAdsWeeklySync(tenantScope: SaasTenantScope): P
     const row = await loadMetaConnectionRow(tenantScope)
     const last = (row?.last_sync_json || {}) as { ads?: MetaAdInsightRow[] }
     ads = Array.isArray(last.ads) ? last.ads : []
+  }
+  if (!tiktokAds.length) {
+    const row = await loadTikTokConnectionRow(tenantScope)
+    const last = (row?.last_sync_json || {}) as { ads?: TikTokAdInsightRow[] }
+    tiktokAds = Array.isArray(last.ads) ? last.ads : []
   }
 
   const campaigns = await loadOngoingCampaigns(tenantScope)
@@ -212,8 +224,16 @@ export async function runMarketingAdsWeeklySync(tenantScope: SaasTenantScope): P
       metaCampaignName: c.meta_campaign_name || undefined,
       topic: String(c.topic || ""),
     }).reduce((s, a) => s + num(a.spend), 0)
+    const tiktokMappedSpend = filterTikTokAdsForCampaign(tiktokAds, {
+      tiktokCampaignId: c.tiktok_campaign_id || undefined,
+      tiktokCampaignName: c.tiktok_campaign_name || undefined,
+      topic: String(c.topic || ""),
+    }).reduce((s, a) => s + num(a.spend), 0)
     const spend =
-      metaSpend + (erpAdsByCampaign.get(c.id) || 0) + (inflByCampaign.get(c.id) || 0)
+      metaSpend +
+      tiktokMappedSpend +
+      (erpAdsByCampaign.get(c.id) || 0) +
+      (inflByCampaign.get(c.id) || 0)
     if (spend <= 0) continue
     const ratio = spend / budget
     if (ratio >= 0.8) {

@@ -29,8 +29,11 @@ import {
 import { STATUS_OPTIONS, DEFAULT_DELIVERY_APPS, parseCampaignFormat, serializeCampaignFormat, type ChannelState } from "@/app/admin/marketing/campaigns/campaigns-utils"
 import { marketingCampaignWorkspaceHref } from "@/lib/marketing-campaign-create-ui"
 import { getMetaConnectionStatus } from "@/lib/api-client/marketing-meta"
+import { getTikTokConnectionStatus } from "@/lib/api-client/marketing-tiktok"
 import type { MetaAdInsightRow } from "@/lib/meta-graph"
+import type { TikTokAdInsightRow } from "@/lib/tiktok-ads"
 import { MarketingMetaCampaignPicker } from "@/components/marketing/marketing-meta-campaign-picker"
+import { MarketingTikTokCampaignPicker } from "@/components/marketing/marketing-tiktok-campaign-picker"
 
 export function MarketingCampaignOverviewPanel({
   campaignId,
@@ -67,6 +70,9 @@ export function MarketingCampaignOverviewPanel({
   const [metaCampaignName, setMetaCampaignName] = React.useState("")
   const [metaCampaignId, setMetaCampaignId] = React.useState("")
   const [metaAds, setMetaAds] = React.useState<MetaAdInsightRow[]>([])
+  const [tiktokCampaignName, setTiktokCampaignName] = React.useState("")
+  const [tiktokCampaignId, setTiktokCampaignId] = React.useState("")
+  const [tiktokAds, setTiktokAds] = React.useState<TikTokAdInsightRow[]>([])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -94,6 +100,8 @@ export function MarketingCampaignOverviewPanel({
         setCostOther(String(d.costOther ?? ""))
         setMetaCampaignName(d.metaCampaignName || "")
         setMetaCampaignId(d.metaCampaignId || "")
+        setTiktokCampaignName(d.tiktokCampaignName || "")
+        setTiktokCampaignId(d.tiktokCampaignId || "")
         const seen = new Set<string>()
         const next: string[] = []
         for (const b of d.branches || []) {
@@ -113,6 +121,9 @@ export function MarketingCampaignOverviewPanel({
     void getMetaConnectionStatus()
       .then((st) => setMetaAds(st.lastSync?.ads || []))
       .catch(() => setMetaAds([]))
+    void getTikTokConnectionStatus()
+      .then((st) => setTiktokAds((st.lastSync?.ads || []) as TikTokAdInsightRow[]))
+      .catch(() => setTiktokAds([]))
   }, [])
 
   React.useEffect(() => {
@@ -156,6 +167,8 @@ export function MarketingCampaignOverviewPanel({
         kpiUnit,
         metaCampaignId,
         metaCampaignName,
+        tiktokCampaignId,
+        tiktokCampaignName,
         collabManagement: detail?.collabManagement,
         userRole: auth?.role,
         userStore: auth?.store,
@@ -323,6 +336,20 @@ export function MarketingCampaignOverviewPanel({
             onChange={(next) => {
               setMetaCampaignId(next.id)
               setMetaCampaignName(next.name)
+            }}
+          />
+        </div>
+        <div>
+          <Label>{t("marketingTikTokMapLabel")}</Label>
+          <MarketingTikTokCampaignPicker
+            ads={tiktokAds}
+            campaignId={tiktokCampaignId}
+            campaignName={tiktokCampaignName}
+            t={t}
+            onAdsRefresh={setTiktokAds}
+            onChange={(next) => {
+              setTiktokCampaignId(next.id)
+              setTiktokCampaignName(next.name)
             }}
           />
         </div>
