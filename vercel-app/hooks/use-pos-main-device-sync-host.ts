@@ -164,6 +164,10 @@ import {
 } from '@/lib/pos-main-device-grab-cancel-ui'
 import { playPosIncomingOrderBeep } from '@/lib/pos-incoming-order-sound'
 import { playPosPaymentCompleteBeep } from '@/lib/pos-payment-complete-sound'
+import {
+  dispatchPosRemoteOrderPaid,
+  resolveRemoteOrderPaidSource,
+} from '@/lib/pos-remote-order-paid-event'
 import { appAlert, appConfirm } from '@/lib/app-message'
 import { consumePosSelfInitiatedGrabCancel } from '@/lib/pos-grab-cancel-alert-suppress'
 import {
@@ -1255,10 +1259,13 @@ export function usePosMainDeviceSyncHost(): void {
         // 배달 포장완료→paid 등은 shouldAutoprint 가드에서 이미 false.
         // Realtime NEW 필드 누락 대비: 실제 인쇄는 dispatch(가드 재확인)만 사용.
         playPosPaymentCompleteBeep()
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
-        }
         const tableName = String(row.table_name ?? '').trim()
+        dispatchPosRemoteOrderPaid({
+          orderId,
+          tableName: tableName || undefined,
+          amount: Number(row.payment_qr) || Number(row.total) || undefined,
+          source: resolveRemoteOrderPaidSource(String(row.created_by ?? '')),
+        })
         if (tableName) clearTableOrder(storeCode, tableName)
         refetchStores({ scope: 'current' })
         if (wantPayment) {

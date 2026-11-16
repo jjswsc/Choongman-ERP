@@ -398,8 +398,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [orderDoneOpen, setOrderDoneOpen] = React.useState(false)
   const [statusOpen, setStatusOpen] = React.useState(false)
   const [billPayOpen, setBillPayOpen] = React.useState(false)
+  /** 미로그인 시 포인트 유도 → 건너뛰면 할인 안내 → QR */
+  const [billPayMemberNudge, setBillPayMemberNudge] = React.useState(false)
   /** 할인 안내를 먼저 보여 주고, 손님이 계속을 눌러야 QR 발급 */
   const [billPayNotice, setBillPayNotice] = React.useState(false)
+  /** 결제 플로우에서 연 회원 로그인 — 성공 시 할인 안내로 */
+  const [memberLoginFromBillPay, setMemberLoginFromBillPay] = React.useState(false)
   const [billPaidOpen, setBillPaidOpen] = React.useState(false)
   const [billQrPayload, setBillQrPayload] = React.useState('')
   const [billQrAmount, setBillQrAmount] = React.useState(0)
@@ -909,6 +913,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
   }
 
+  function goBillPayDiscountNotice() {
+    setBillPayMemberNudge(false)
+    setBillPayNotice(true)
+  }
+
   async function openBillPay() {
     if (!sessionAuth) return
     if (settings?.guestBillPayEnabled === false) return
@@ -926,7 +935,14 @@ export function QrTableGuestApp({ token }: { token: string }) {
     clearBillPayPoll()
     setBillQrPayload('')
     setBillQrAmount(due)
-    setBillPayNotice(true)
+    setMemberLoginFromBillPay(false)
+    if (member?.id) {
+      setBillPayMemberNudge(false)
+      setBillPayNotice(true)
+    } else {
+      setBillPayMemberNudge(true)
+      setBillPayNotice(false)
+    }
     setBillPayOpen(true)
   }
 
@@ -1097,6 +1113,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
       if (linked) {
         setMemberLoginOpen(false)
         showToast(g('memberLinkedHint'), 4200)
+        if (memberLoginFromBillPay) {
+          setMemberLoginFromBillPay(false)
+          goBillPayDiscountNotice()
+          setBillPayOpen(true)
+        }
       }
     } catch (e) {
       setMemberError(humanizeApiError(e instanceof Error ? e.message : 'memberLoginFailed'))
@@ -2295,10 +2316,21 @@ export function QrTableGuestApp({ token }: { token: string }) {
           clearBillPayPoll()
           setBillPayOpen(false)
           setBillQrPayload('')
+          setBillPayMemberNudge(false)
+          setBillPayNotice(false)
+          setMemberLoginFromBillPay(false)
         }}
         amount={billQrAmount}
         qrPayload={billQrPayload}
         busy={busy}
+        memberNudge={billPayMemberNudge}
+        onLoginForPoints={() => {
+          setMemberLoginFromBillPay(true)
+          setBillPayOpen(false)
+          setMemberError('')
+          setMemberLoginOpen(true)
+        }}
+        onSkipNoPoints={() => goBillPayDiscountNotice()}
         discountNotice={billPayNotice}
         onContinueQr={() => void startBillQr()}
         brandBtn={brandBtn}
@@ -2320,6 +2352,12 @@ export function QrTableGuestApp({ token }: { token: string }) {
         onClose={() => {
           setMemberLoginOpen(false)
           setMemberError('')
+          if (memberLoginFromBillPay) {
+            setMemberLoginFromBillPay(false)
+            setBillPayMemberNudge(true)
+            setBillPayNotice(false)
+            setBillPayOpen(true)
+          }
         }}
         g={g}
         brandBtn={brandBtn}

@@ -250,6 +250,60 @@ describe('shouldAutoprintPaymentReceiptOnRealtimeUpdate', () => {
     ).toBe(true)
   })
 
+  it('skips PK-only OLD when paid_at recent but not remote guest QR', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 200,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          created_by: 'pos',
+          paid_at: new Date().toISOString(),
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('skips PK-only OLD when qr_table but payment_qr is 0', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 200,
+          payment_card: 0,
+          payment_qr: 0,
+          payment_other: 0,
+          created_by: 'qr_table:9',
+          paid_at: new Date().toISOString(),
+        }
+      )
+    ).toBe(false)
+  })
+
+  it('skips PK-only OLD when paid_at older than 60s window', () => {
+    expect(
+      shouldAutoprintPaymentReceiptOnRealtimeUpdate(
+        { id: 1 },
+        {
+          id: 1,
+          status: 'paid',
+          payment_cash: 0,
+          payment_card: 0,
+          payment_qr: 20,
+          payment_other: 0,
+          created_by: 'qr_table:123',
+          paid_at: new Date(Date.now() - 90_000).toISOString(),
+        }
+      )
+    ).toBe(false)
+  })
+
   it('skips PK-only OLD for qr_table when paid_at is old (SQL backfill flood)', () => {
     expect(
       shouldAutoprintPaymentReceiptOnRealtimeUpdate(

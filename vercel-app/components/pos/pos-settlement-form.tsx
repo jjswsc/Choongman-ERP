@@ -318,6 +318,17 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const [systemTotal, setSystemTotal] = React.useState(0)
   /** 완료 주문 `payment_cash` 합계 — 마감 결산에서 현금 줄은 이 값만 사용(수정 불가) */
   const [systemCashFromOrders, setSystemCashFromOrders] = React.useState(0)
+  const [guestQrBillPays, setGuestQrBillPays] = React.useState<
+    Array<{
+      orderId: number
+      orderNo: string
+      tableName: string
+      paidAt: string | null
+      paymentQr: number
+      total: number
+    }>
+  >([])
+  const [guestQrBillPaysOpen, setGuestQrBillPaysOpen] = React.useState(false)
   const [systemDepositCashDelta, setSystemDepositCashDelta] = React.useState(0)
   const [systemCryptoFromOrders, setSystemCryptoFromOrders] = React.useState(0)
   const [cryptoAmt, setCryptoAmt] = React.useState('')
@@ -624,6 +635,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
           systemDepositCashDelta: depositCashRaw,
           systemCryptoFromOrders: cryptoFromOrdersRaw,
           tillNetForSettleDate: tillNetRaw,
+          guestQrBillPays: guestQrPaysRaw,
           cashReconcile,
           linkpos,
           settlement: s,
@@ -632,6 +644,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         const autoCashTotal = Number(cashFromOrdersRaw ?? 0) || 0
         const autoDepositCash = Number(depositCashRaw ?? 0) || 0
         const autoCryptoTotal = Number(cryptoFromOrdersRaw ?? 0) || 0
+        setGuestQrBillPays(Array.isArray(guestQrPaysRaw) ? guestQrPaysRaw : [])
         setSystemCashFromOrders(autoCashTotal)
         setSystemDepositCashDelta(autoDepositCash)
         setSystemCryptoFromOrders(autoCryptoTotal)
@@ -2159,6 +2172,110 @@ ${footerStamp}
                         </label>
                       ))}
                     </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* 손님 테이블 QR 결제 목록 — KBank 대조용 */}
+                <Collapsible open={guestQrBillPaysOpen} onOpenChange={setGuestQrBillPaysOpen}>
+                  <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/40 px-4 py-2.5 hover:bg-emerald-50/70 cursor-pointer dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                      <span className="font-medium flex items-center gap-2">
+                        {t('posSettlementGuestQrPaysTitle') || '손님 테이블 QR 결제'}
+                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-100">
+                          {(t('posSettlementGuestQrPaysCount') || '{n}건').replace(
+                            '{n}',
+                            String(guestQrBillPays.length)
+                          )}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular-nums font-semibold">
+                          {fmtBahtSuffix(
+                            guestQrBillPays.reduce((s, r) => s + (Number(r.paymentQr) || 0), 0)
+                          )}
+                        </span>
+                        {guestQrBillPaysOpen ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </span>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <p className="mt-2 pl-2 text-[10px] leading-snug text-muted-foreground border-t pt-2">
+                      {t('posSettlementGuestQrPaysHint') ||
+                        '당일 K-Bank PromptPay 전표와 이 목록을 맞춰 보세요.'}
+                    </p>
+                    {guestQrBillPays.length === 0 ? (
+                      <p className="pl-2 pt-2 text-xs text-muted-foreground">
+                        {t('posSettlementGuestQrPaysEmpty') || '해당일 손님 테이블 QR 결제가 없습니다.'}
+                      </p>
+                    ) : (
+                      <div className="mt-2 overflow-x-auto border-t pt-2">
+                        <table className="w-full min-w-[28rem] text-left text-xs">
+                          <thead>
+                            <tr className="text-muted-foreground">
+                              <th className="px-2 py-1 font-medium">
+                                {t('posSettlementGuestQrPaysTime') || '시간'}
+                              </th>
+                              <th className="px-2 py-1 font-medium">
+                                {t('posSettlementGuestQrPaysTable') || '테이블'}
+                              </th>
+                              <th className="px-2 py-1 font-medium text-right">
+                                {t('posSettlementGuestQrPaysAmount') || 'QR 금액'}
+                              </th>
+                              <th className="px-2 py-1 font-medium text-right">
+                                {t('posSettlementGuestQrPaysOrder') || '주문'}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {guestQrBillPays.map((row) => {
+                              let timeLabel = '—'
+                              if (row.paidAt) {
+                                try {
+                                  timeLabel = new Date(row.paidAt).toLocaleTimeString('en-GB', {
+                                    timeZone: 'Asia/Bangkok',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false,
+                                  })
+                                } catch {
+                                  timeLabel = '—'
+                                }
+                              }
+                              return (
+                                <tr key={row.orderId} className="border-t border-border/60">
+                                  <td className="px-2 py-1.5 tabular-nums">{timeLabel}</td>
+                                  <td className="px-2 py-1.5 font-medium">{row.tableName}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">
+                                    {fmtBahtSuffix(row.paymentQr)}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">
+                                    #{row.orderNo || row.orderId}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t font-semibold">
+                              <td className="px-2 py-1.5" colSpan={2}>
+                                {t('posSettlementGuestQrPaysTotal') || 'QR 합계'}
+                              </td>
+                              <td className="px-2 py-1.5 text-right tabular-nums">
+                                {fmtBahtSuffix(
+                                  guestQrBillPays.reduce((s, r) => s + (Number(r.paymentQr) || 0), 0)
+                                )}
+                              </td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </CollapsibleContent>
                 </Collapsible>
 

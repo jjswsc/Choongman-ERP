@@ -28,6 +28,7 @@ import {
   buildPosSettlementOrdersDateFilters,
   mergeSettlementOrderRowsById,
 } from '@/lib/pos-settlement-order-window'
+import { buildGuestQrBillPayList } from '@/lib/pos-settlement-guest-qr-bills'
 
 type TenderGroup = 'card' | 'qr'
 type TenderRule = {
@@ -202,6 +203,11 @@ export async function GET(request: NextRequest) {
 
     type PosOrderSettlementRow = {
       id?: number
+      order_no?: string | number
+      table_name?: string | null
+      paid_at?: string | null
+      created_at?: string | null
+      created_by?: string | null
       subtotal?: number
       vat?: number
       total?: number
@@ -225,7 +231,7 @@ export async function GET(request: NextRequest) {
 
     /** 선주문 컬럼(is_advance/scheduled_at)은 충만 미배포 — select에 넣으면 42703/400 재시도 폭주 */
     const orderSelect =
-      'id,subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount'
+      'id,order_no,table_name,paid_at,created_at,created_by,subtotal,vat,total,status,order_type,discount_amt,coupon_discount_amt,payment_cash,payment_card,payment_qr,payment_delivery_app,payment_other,payment_crypto,payment_other_breakdown,delivery_payment_channel,delivery_app_code,linkpos_response_code,linkpos_requested_amount,linkpos_approved_amount'
 
     /** Omni 등 pos_orders 컬럼 미배포 시에도 시재(cash_actual)는 반환 — 영업 시작 게이트가 막히지 않게 */
     let orders: PosOrderSettlementRow[] | null = null
@@ -527,6 +533,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const guestQrBillPays = buildGuestQrBillPayList(orders)
+
     return NextResponse.json(
       {
         systemTotal,
@@ -536,6 +544,7 @@ export async function GET(request: NextRequest) {
         systemDepositCashDelta,
         systemCryptoFromOrders,
         tillNetForSettleDate,
+        guestQrBillPays,
         cashReconcile: {
           ...cashReconcile,
           autoFixed: cashReconcileAutoFixed,

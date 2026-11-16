@@ -501,6 +501,10 @@ export function QrTableGuestBillPaySheet(props: {
   amount: number
   qrPayload: string
   busy?: boolean
+  /** QR 발급 전 회원 로그인 유도 (건너뛰기 가능) */
+  memberNudge?: boolean
+  onLoginForPoints?: () => void
+  onSkipNoPoints?: () => void
   /** true: QR 발급 전 「할인은 카운터 결제」 안내 단계 */
   discountNotice?: boolean
   onContinueQr?: () => void
@@ -508,7 +512,21 @@ export function QrTableGuestBillPaySheet(props: {
   g: (key: string) => string
   renderQr: (payload: string) => React.ReactNode
 }) {
-  const { open, onClose, amount, qrPayload, busy, discountNotice, onContinueQr, brandBtn, g, renderQr } = props
+  const {
+    open,
+    onClose,
+    amount,
+    qrPayload,
+    busy,
+    memberNudge,
+    onLoginForPoints,
+    onSkipNoPoints,
+    discountNotice,
+    onContinueQr,
+    brandBtn,
+    g,
+    renderQr,
+  } = props
   return (
     <QrTableGuestSwipeSheet
       open={open}
@@ -531,7 +549,34 @@ export function QrTableGuestBillPaySheet(props: {
         </div>
       }
     >
-      {discountNotice ? (
+      {memberNudge ? (
+        <div className="space-y-3 px-4 pb-6 pt-1">
+          <p className="text-center text-sm text-stone-600">{g('amount')}</p>
+          <p className="text-center text-3xl font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
+            ฿{Math.round(amount).toLocaleString()}
+          </p>
+          <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-950 ring-1 ring-emerald-300">
+            <p className="text-base font-semibold">{g('payBillMemberNudgeTitle')}</p>
+            <p className="mt-1 leading-relaxed">{g('payBillMemberNudgeBody')}</p>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            className={`w-full rounded-2xl py-3.5 font-semibold disabled:opacity-60 ${brandBtn || 'bg-[var(--qr-brand,#b45309)] text-white'}`}
+            onClick={onLoginForPoints}
+          >
+            {g('payBillLoginForPoints')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            className="w-full rounded-2xl border-2 border-stone-200 bg-white py-3.5 font-semibold text-stone-800 disabled:opacity-60"
+            onClick={onSkipNoPoints}
+          >
+            {g('payBillSkipNoPoints')}
+          </button>
+        </div>
+      ) : discountNotice ? (
         <div className="space-y-3 px-4 pb-6 pt-1">
           <p className="text-center text-sm text-stone-600">{g('amount')}</p>
           <p className="text-center text-3xl font-bold tabular-nums text-[var(--qr-brand,#b45309)]">
@@ -579,7 +624,7 @@ export function QrTableGuestBillPaySheet(props: {
   )
 }
 
-/** 결제 완료 안내 (영수증은 카운터) */
+/** 결제 완료 안내 (영수증은 카운터 출력 · 직원이 전달) */
 export function QrTableGuestBillPaidScreen(props: {
   open: boolean
   g: (key: string) => string

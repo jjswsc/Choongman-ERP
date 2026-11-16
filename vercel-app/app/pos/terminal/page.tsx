@@ -452,6 +452,12 @@ import {
 } from '@/lib/pos-terminal-auto-print'
 import { getPosIncomingWavDataUri } from '@/lib/pos-incoming-order-sound'
 import { playPosPaymentCompleteBeep } from '@/lib/pos-payment-complete-sound'
+import {
+  CM_POS_REMOTE_ORDER_PAID,
+  dispatchPosRemoteOrderPaid,
+  resolveRemoteOrderPaidSource,
+  type CmPosRemoteOrderPaidDetail,
+} from '@/lib/pos-remote-order-paid-event'
 import { extractGrabOrderIdFromMemo } from '@/lib/grab-order-memo'
 
 
@@ -600,6 +606,43 @@ export default function PosTerminalPage() {
     loadingTables,
   } = usePosStore()
   const { getQrSessionMarker } = useQrFloorSessionHints(isPosDemo ? null : currentStoreId)
+  const [remotePaidBanner, setRemotePaidBanner] = useState<CmPosRemoteOrderPaidDetail | null>(null)
+  const [recentPaidUntilByTable, setRecentPaidUntilByTable] = useState<Record<string, number>>({})
+  const getRecentPaidMarker = useCallback(
+    (_id: string, name: string): boolean => {
+      const key = String(name || '').trim()
+      if (!key) return false
+      const until = recentPaidUntilByTable[key]
+      return typeof until === 'number' && until > Date.now()
+    },
+    [recentPaidUntilByTable]
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onRemotePaid = (ev: Event) => {
+      const detail = (ev as CustomEvent<CmPosRemoteOrderPaidDetail>).detail
+      const orderId = Math.trunc(Number(detail?.orderId) || 0)
+      if (!(orderId > 0)) return
+      setRemotePaidBanner({
+        orderId,
+        tableName: String(detail?.tableName || '').trim() || undefined,
+        amount: Math.max(0, Number(detail?.amount) || 0) || undefined,
+        source: detail?.source || 'remote',
+      })
+      const tableName = String(detail?.tableName || '').trim()
+      if (tableName) {
+        const until = Date.now() + 75_000
+        setRecentPaidUntilByTable((prev) => ({ ...prev, [tableName]: until }))
+      }
+    }
+    window.addEventListener(CM_POS_REMOTE_ORDER_PAID, onRemotePaid as EventListener)
+    return () => window.removeEventListener(CM_POS_REMOTE_ORDER_PAID, onRemotePaid as EventListener)
+  }, [])
+  useEffect(() => {
+    if (!remotePaidBanner) return
+    const t = window.setTimeout(() => setRemotePaidBanner(null), 10_000)
+    return () => window.clearTimeout(t)
+  }, [remotePaidBanner])
   /** 카드 결제 저장 실패 시 플로어 PAY/EDC 뱃지 즉시 갱신 */
   const [pendingEdcFloorTick, setPendingEdcFloorTick] = useState(0)
   const getPayWarnMarker = useCallback(
@@ -5730,10 +5773,13 @@ export default function PosTerminalPage() {
       ) {
         playPosPaymentCompleteBeep()
         cartRef.current?.closePaymentModalIfOrderPaid?.(orderId)
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('cm-pos-remote-order-paid', { detail: { orderId } }))
-        }
         const paidTableName = String(row.table_name ?? '').trim()
+        dispatchPosRemoteOrderPaid({
+          orderId,
+          tableName: paidTableName || undefined,
+          amount: Number(row.payment_qr) || Number(row.total) || undefined,
+          source: resolveRemoteOrderPaidSource(String(row.created_by ?? '')),
+        })
         if (paidTableName && currentStoreId) clearTableOrder(currentStoreId, paidTableName)
         refetchCurrentStore()
         void getPosOrders({ orderId, storeCode: currentStoreId })
@@ -12222,6 +12268,24 @@ export default function PosTerminalPage() {
             {t('posDemoBanner')}
           </div>
         )}
+        {remotePaidBanner ? (
+          <div
+            className="shrink-0 border-b border-emerald-700 bg-emerald-600 px-4 py-3 text-center text-base font-bold text-white shadow-md sm:text-lg"
+            role="status"
+            aria-live="assertive"
+          >
+            {(t('posRemoteGuestPaidBanner') ||
+              'Table {table} · PAID ฿{amount} · Payment receipt at counter')
+              .replace(
+                '{table}',
+                remotePaidBanner.tableName || `#${remotePaidBanner.orderId}`
+              )
+              .replace(
+                '{amount}',
+                Math.round(Number(remotePaidBanner.amount) || 0).toLocaleString()
+              )}
+          </div>
+        ) : null}
         <div className="bg-background flex h-full min-h-0 flex-1 flex-col">
       <POSHeader
         dataTour={isPosDemo ? 'pos-tour-header' : undefined}
@@ -12779,6 +12843,7 @@ export default function PosTerminalPage() {
                         delayAlertOverMin={cookingRules.delayAlertOverMin}
                         getQrSessionMarker={getQrSessionMarker}
                         getPayWarnMarker={getPayWarnMarker}
+                        getRecentPaidMarker={getRecentPaidMarker}
                       />
                     </div>
                   )}

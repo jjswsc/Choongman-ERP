@@ -99,6 +99,8 @@ export interface TableFloorViewProps {
   getQrSessionMarker?: (id: string, name: string) => QrFloorMarker
   /** EDC 마감 대기 / 장기 미결제 경고 (우상단) */
   getPayWarnMarker?: (id: string, name: string) => 'edc' | 'pay' | null
+  /** 원격(손님 QR) 결제 직후 잠깐 PAID 표시 */
+  getRecentPaidMarker?: (id: string, name: string) => boolean
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -193,6 +195,7 @@ export function TableFloorView({
   displayScale = 1,
   getQrSessionMarker,
   getPayWarnMarker,
+  getRecentPaidMarker,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const floorLabelFallback = t('posFloorLabel') || 'Floor {n}'
@@ -488,6 +491,7 @@ export function TableFloorView({
         const tableBadgeLabel = floorTableLabel
         const qrMarker = getQrSessionMarker?.(tab.id, tab.name) || null
         const payWarnMarker = getPayWarnMarker?.(tab.id, tab.name) || null
+        const recentPaid = getRecentPaidMarker?.(tab.id, tab.name) === true
 
         return (
           <div
@@ -546,6 +550,14 @@ export function TableFloorView({
                     : qrMarker === 'call'
                       ? t('qrTableSessionStaffCallShort') || '호출'
                       : 'QR'}
+              </span>
+            ) : null}
+            {recentPaid ? (
+              <span
+                className="pointer-events-none absolute -left-1 bottom-0 z-[16] animate-pulse rounded-full bg-emerald-700 px-1.5 py-0.5 text-[9px] font-black tracking-wide text-white shadow-md ring-1 ring-emerald-300/90"
+                title={t('posRemoteGuestPaidFloor') || 'Guest paid · receipt at counter'}
+              >
+                {t('posRemoteGuestPaidShort') || 'PAID'}
               </span>
             ) : null}
             {payWarnMarker ? (

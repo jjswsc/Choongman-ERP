@@ -42,6 +42,11 @@ import { parsePosMenuI18nMap } from '@/lib/pos-menu-guest-i18n'
 import { normalizePromotionCategoryMain, normalizePromotionSubcategory, posMainCategoryTabRank, PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
 import { readPosCategoryTabOrder } from '@/lib/pos-category-tab-order-server'
 import { resolvePosCatalogTenantScope } from '@/lib/pos-catalog-tenant-scope'
+import {
+  isPosMenuScopeCompatibilityModeEnabled,
+  shouldMenuBeVisibleForStore,
+} from '@/lib/pos-menu-store-scope'
+import { loadStoreCodesByMenuIds } from '@/lib/pos-promo-mirror-scope-server'
 import type { PosCategoryTabOrder } from '@/lib/pos-category-tab-order'
 import {
   formatQrBillPayAmountEq,
@@ -1233,22 +1238,28 @@ async function loadPosMenusByIds(menuIds: number[]): Promise<DbMenu[]> {
 async function loadHallMenusForStore(storeCode: string): Promise<DbMenu[]> {
   const code = String(storeCode || '').trim()
   const tenantScope = await resolveSaasTenantScope({ storeCode: code })
-  const scopes = (await selectFilterOptionalTenant(
-    'pos_menu_store_scopes',
-    `store_code=eq.${encodeURIComponent(code)}`,
-    tenantScope,
-    { limit: 20000, select: 'menu_id' }
-  )) as Array<{ menu_id?: number }>
-  const menuIds = [...new Set((scopes || []).map((s) => Number(s.menu_id || 0)).filter(Boolean))]
-  if (!menuIds.length) {
-    // fallback: all active hall menus (compat)
-    return (await supabaseSelectFilter('pos_menus', `is_active=eq.true&sell_hall=eq.true`, {
-      limit: 2000,
-      order: 'sort_order.asc,id.asc',
-    })) as DbMenu[]
-  }
-  const rows = await loadPosMenusByIds(menuIds)
-  return rows.filter((r) => r.sell_hall !== false)
+  /** POS getPosMenus 와 동일: 충만(호환)은 스코프 없는 메뉴도 노출, Omni(enforce)는 엄격 */
+  const compatibilityMode = !tenantScope.enforce && isPosMenuScopeCompatibilityModeEnabled()
+
+  const allHall = (await supabaseSelectFilter('pos_menus', `is_active=eq.true&sell_hall=eq.true`, {
+    limit: 2000,
+    order: 'sort_order.asc,id.asc',
+  })) as DbMenu[]
+  if (!code) return (allHall || []).filter((r) => r.sell_hall !== false)
+
+  const menuIds = [...new Set((allHall || []).map((r) => Number(r.id || 0)).filter(Boolean))]
+  const { byMenuId: storeCodesByMenuId, scopeSchemaReady } = await loadStoreCodesByMenuIds(menuIds)
+
+  return (allHall || []).filter((r) => {
+    if (r.sell_hall === false) return false
+    const menuId = Number(r.id || 0)
+    return shouldMenuBeVisibleForStore({
+      requestedStoreCode: code,
+      scopedStores: storeCodesByMenuId.get(menuId) || [],
+      compatibilityMode,
+      scopeSchemaReady,
+    })
+  })
 }
 
 function parseJsonArray(raw: unknown): unknown[] {
@@ -1450,29 +1461,26 @@ async function loadCartMenusByIdsForStore(
 
   const code = String(storeCode || '').trim()
   const tenantScope = await resolveSaasTenantScope({ storeCode: code })
-  const [menuRows, scopedRows, anyScopeRow] = await Promise.all([
+  const compatibilityMode = !tenantScope.enforce && isPosMenuScopeCompatibilityModeEnabled()
+  const [menuRows, scopeLoad] = await Promise.all([
     loadPosMenusByIds(ids),
-    selectFilterOptionalTenant(
-      'pos_menu_store_scopes',
-      `store_code=eq.${encodeURIComponent(code)}&menu_id=in.(${ids.join(',')})`,
-      tenantScope,
-      { limit: ids.length + 10, select: 'menu_id' }
-    ) as Promise<Array<{ menu_id?: number }>>,
-    selectFilterOptionalTenant('pos_menu_store_scopes', `store_code=eq.${encodeURIComponent(code)}`, tenantScope, {
-      limit: 1,
-      select: 'menu_id',
-    }) as Promise<Array<{ menu_id?: number }>>,
+    loadStoreCodesByMenuIds(ids),
   ])
-
-  const storeUsesScopes = (anyScopeRow || []).length > 0
-  const allowed = storeUsesScopes
-    ? new Set((scopedRows || []).map((r) => Number(r.menu_id || 0)).filter(Boolean))
-    : null
 
   for (const r of menuRows || []) {
     const id = Number(r.id || 0)
     if (!id || r.sell_hall === false) continue
-    if (allowed && !allowed.has(id)) continue
+    if (
+      code &&
+      !shouldMenuBeVisibleForStore({
+        requestedStoreCode: code,
+        scopedStores: scopeLoad.byMenuId.get(id) || [],
+        compatibilityMode,
+        scopeSchemaReady: scopeLoad.scopeSchemaReady,
+      })
+    ) {
+      continue
+    }
     out.set(id, r)
   }
   return out
@@ -3293,7 +3301,8 @@ export async function pollBillPayStatus(
     const next = await getGuestOrderSummary({ ...session })
     return { paid: true, balanceDue: 0, order: next }
   }
-  // 잔액 0인데 status 미결제면 paid로 확정·세션 종료 (테이블 미닫힘 방지)
+  // 잔액 0인데 status 미결제면 paid로 확정·세션 종료 (테이블 미닫힘 방지).
+  // paidAmount=0 → payment_qr 가산 없이, 채널 합이 total을 덮을 때만 markPaid.
   if (summary.balanceDue < 0.005) {
     await finalizeBillPayByQr(session, 0)
     const next = await getGuestOrderSummary({ ...session })

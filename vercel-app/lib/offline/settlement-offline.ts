@@ -218,6 +218,14 @@ export type PosSettlementResponse = {
   systemDepositCashDelta?: number
   systemCryptoFromOrders?: number
   tillNetForSettleDate?: number
+  guestQrBillPays?: Array<{
+    orderId: number
+    orderNo: string
+    tableName: string
+    paidAt: string | null
+    paymentQr: number
+    total: number
+  }>
   cashReconcile?: {
     liveCash: number
     savedCash: number | null

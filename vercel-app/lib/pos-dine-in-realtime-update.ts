@@ -35,6 +35,20 @@ const PAYMENT_AMT_FIELD_KEYS = [
   'payment_delivery_app',
 ] as const
 
+/** PK-only OLD 폴백: 원격 손님 결제만, paid_at 최근창 (백필·메모 UPDATE 오인쇄 방지) */
+const REMOTE_PAY_AUTOPRINT_PK_ONLY_MS = 60_000
+
+function allowsPkOnlyRemotePaymentReceiptFallback(newRow: Record<string, unknown>): boolean {
+  const createdBy = String(newRow.created_by ?? '')
+  const isRemote =
+    createdBy.startsWith('qr_table:') || createdBy.startsWith('member_portal:')
+  if (!isRemote) return false
+  if ((Number(newRow.payment_qr) || 0) <= 0) return false
+  const paidAtMs = Date.parse(String(newRow.paid_at ?? ''))
+  if (!Number.isFinite(paidAtMs)) return false
+  return Date.now() - paidAtMs < REMOTE_PAY_AUTOPRINT_PK_ONLY_MS
+}
+
 function rowItemsJsonSnapshot(row: Record<string, unknown>): string {
   const raw = row.items_json
   if (raw == null) return ''
@@ -206,13 +220,8 @@ export function shouldAutoprintPaymentReceiptOnRealtimeUpdate(
       if (isPosOrderPaidLikeStatus(String(prior.status ?? ''))) return false
       return true
     }
-    // PK-only OLD + prior 없음: 백필·메모 UPDATE가 qr_table 이라고 재인쇄되면 안 됨.
-    // unpaid→paid 원격 결제는 paid_at 이 수 분 이내일 때만 1회 허용.
-    const paidAtMs = Date.parse(String(newRow.paid_at ?? ''))
-    if (Number.isFinite(paidAtMs) && Date.now() - paidAtMs < 3 * 60 * 1000) {
-      return true
-    }
-    return false
+    // PK-only OLD + prior 없음: qr_table/member_portal + payment_qr>0 + paid_at 60초 이내만.
+    return allowsPkOnlyRemotePaymentReceiptFallback(newRow)
   }
 
   // 이미 결제 완료 상태였으면 (협업 backfill·세금계산서 외 필드 등) 재인쇄하지 않음

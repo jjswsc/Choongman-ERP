@@ -95,6 +95,15 @@ export async function getPosSettlement(params: {
     systemCryptoFromOrders?: number
     /** 해당 결산일(trans_date)·매장 시재 거래 순액(입금+, 출금-/매출출금-) — 마감 예상 돈통용 */
     tillNetForSettleDate?: number
+    /** 손님 테이블 QR(PromptPay) 결제 — KBank 대조용 */
+    guestQrBillPays?: Array<{
+      orderId: number
+      orderNo: string
+      tableName: string
+      paidAt: string | null
+      paymentQr: number
+      total: number
+    }>
     /** 저장 결산 현금 vs 실시간 주문 현금 */
     cashReconcile?: {
       liveCash: number
