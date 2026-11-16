@@ -2723,6 +2723,7 @@ export async function submitQrCart(params: {
         }
       }
     }
+    const imageUrl = menuImageUrl(menu)
     newLines.push({
       id: `qr-${session.id}-${menuId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       menuId: String(menuId),
@@ -2731,6 +2732,7 @@ export async function submitQrCart(params: {
       qty,
       quantity: qty,
       ...(guestNote ? { note: guestNote } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
       buffetIncluded: isIncluded,
       buffetTierId: tierId || null,
       source: 'qr_table',

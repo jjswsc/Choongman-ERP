@@ -108,6 +108,20 @@ describe('groupQrGuestHistoryRounds set detail', () => {
     ])
     expect(rounds[0]?.lines[0]?.detail).toBe('Soy Garlic Chicken (S Boneless) · Rice')
   })
+
+  it('keeps menu imageUrl on history lines', () => {
+    const rounds = groupQrGuestHistoryRounds([
+      {
+        name: 'Rosé Tteokbokki',
+        qty: 1,
+        price: 129,
+        addedAt: '2026-11-16 10:13:55',
+        imageUrl: 'https://cdn.example/menu/tteok.jpg',
+        menuId: '42',
+      },
+    ])
+    expect(rounds[0]?.lines[0]?.imageUrl).toBe('https://cdn.example/menu/tteok.jpg')
+  })
 })
 
 describe('qrGuestMenuNeedsOptionPicker', () => {

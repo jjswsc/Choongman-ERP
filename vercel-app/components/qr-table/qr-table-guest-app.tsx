@@ -123,6 +123,7 @@ const QR_GUEST_LINE_NOTE_MAX = 200
 
 type OrderSummaryItem = {
   id?: string
+  menuId?: string | number
   name?: string
   qty?: number
   quantity?: number
@@ -1148,16 +1149,23 @@ export function QrTableGuestApp({ token }: { token: string }) {
     return allMenusForHome.filter((m) => homeCollectionIdSet.has(m.menuId))
   }, [homeCollectionIdSet, listRaw, allMenusForHome])
   const uncategorizedLabel = g('uncategorized')
-  const sentLines = React.useMemo(
-    () => aggregateQrGuestSentLines(orderSummary?.items),
-    [orderSummary]
-  )
   const cartQty = cart.reduce((n, line) => n + line.qty, 0)
   const menuById = React.useMemo(() => {
     const map = new Map<number, MenuItem>()
     for (const m of [...includedMenus, ...extraMenus]) map.set(m.menuId, m)
     return map
   }, [includedMenus, extraMenus])
+  /** 과거 주문 줄에 imageUrl이 없어도 menuId로 메뉴 사진을 붙인다. */
+  const historyItems = React.useMemo(() => {
+    return (orderSummary?.items || []).map((it) => {
+      const existing = String(it.imageUrl || '').trim()
+      if (existing) return it
+      const mid = Math.floor(Number(it.menuId) || 0)
+      const url = mid > 0 ? String(menuById.get(mid)?.imageUrl || '').trim() : ''
+      return url ? { ...it, imageUrl: url } : it
+    })
+  }, [orderSummary?.items, menuById])
+  const sentLines = React.useMemo(() => aggregateQrGuestSentLines(historyItems), [historyItems])
 
   const cartTotal = React.useMemo(() => {
     return cart.reduce((sum, line) => {
@@ -1641,7 +1649,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       <QrTableGuestOrderHistorySheet
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        items={orderSummary?.items || []}
+        items={historyItems}
         sessionCreatedAt={session?.createdAt}
         tableName={tableName}
         orderId={orderSummary?.orderId ?? null}
@@ -2251,7 +2259,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         open={orderDoneOpen}
         tableName={tableName}
         orderId={orderSummary?.orderId ?? null}
-        timeLabel={latestOrderTimeLabel(orderSummary?.items || [], session?.createdAt)}
+        timeLabel={latestOrderTimeLabel(historyItems, session?.createdAt)}
         balanceDue={Number(orderSummary?.balanceDue || 0)}
         g={g}
         brandBtn={brandBtn}
@@ -2269,9 +2277,9 @@ export function QrTableGuestApp({ token }: { token: string }) {
       <QrTableGuestOrderStatusSheet
         open={statusOpen}
         onClose={() => setStatusOpen(false)}
-        items={orderSummary?.items || []}
+        items={historyItems}
         orderId={orderSummary?.orderId ?? null}
-        timeLabel={latestOrderTimeLabel(orderSummary?.items || [], session?.createdAt)}
+        timeLabel={latestOrderTimeLabel(historyItems, session?.createdAt)}
         g={g}
         brandBtn={brandBtn}
         onMoreMenu={() => {

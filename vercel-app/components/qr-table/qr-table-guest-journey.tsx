@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { QrGuestMenuThumb } from '@/components/qr-table/qr-guest-menu-thumb'
 import { QrTableGuestSwipeSheet } from '@/components/qr-table/qr-table-guest-swipe-sheet'
 import {
   buildQrGuestOrderTimeline,
@@ -275,8 +276,10 @@ function OrderRoundCard(props: {
         {round.lines.map((line, i) => (
           <li key={`${round.key}-${line.name}-${line.detail || ''}-${i}`} className="flex items-start gap-2.5 py-2">
             {line.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={line.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover bg-stone-100" />
+              <QrGuestMenuThumb
+                src={line.imageUrl}
+                className="h-11 w-11 shrink-0 rounded-lg object-cover bg-stone-100"
+              />
             ) : (
               <div className="h-11 w-11 shrink-0 rounded-lg bg-stone-200/70" />
             )}

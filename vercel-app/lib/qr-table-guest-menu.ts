@@ -22,6 +22,7 @@ export type QrGuestSentLine = {
 
 export type QrGuestSentLineInput = {
   id?: unknown
+  menuId?: unknown
   name?: string
   qty?: number
   quantity?: number
