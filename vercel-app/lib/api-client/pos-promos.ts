@@ -143,6 +143,8 @@ export async function savePosPromo(params: {
   userRole?: string
   userName?: string
   composePricingBasis?: 'hall' | 'delivery'
+  /** 미러 메뉴 노출 매장(QR/POS). 배열로 보내면 서버가 스코프 동기화 */
+  storeCodes?: string[]
 }) {
   const res = await apiFetchWithOffline('/api/savePosPromo', {
     method: 'POST',

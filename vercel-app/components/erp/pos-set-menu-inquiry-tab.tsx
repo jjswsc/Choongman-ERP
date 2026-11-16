@@ -317,7 +317,16 @@ export function PosSetMenuInquiryTab({
 
   const handleCopy = (p: PosPromo) =>
     runBusy(p.id, async () => {
-      const items = await getPosPromoItems({ promoId: p.id }).catch(() => [])
+      const [items, menus] = await Promise.all([
+        getPosPromoItems({ promoId: p.id }).catch(() => []),
+        getPosMenus().catch(() => []),
+      ])
+      const sourceMirror = (menus || []).find(
+        (m) => String(m.promoId ?? "").trim() === String(p.id).trim()
+      )
+      const sourceStoreCodes = Array.isArray(sourceMirror?.storeCodes)
+        ? sourceMirror!.storeCodes.map((x) => String(x || "").trim()).filter(Boolean)
+        : []
       const standalone = !p.marketingCampaignId?.trim()
       const res = await savePosPromo({
         name: p.name,
@@ -344,6 +353,7 @@ export function PosSetMenuInquiryTab({
         standaloneSetMenu: standalone,
         userRole: auth?.role,
         userName: auth?.user,
+        ...(sourceStoreCodes.length > 0 ? { storeCodes: sourceStoreCodes } : {}),
       })
       if (!res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))

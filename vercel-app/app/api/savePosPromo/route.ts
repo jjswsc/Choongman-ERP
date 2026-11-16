@@ -7,6 +7,10 @@ import {
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionSubcategory } from '@/lib/pos-promo-constants'
 import { upsertPromoMirrorMenu } from '@/lib/pos-promo-mirror-menu'
 import {
+  resolvePromoMirrorStoreCodesForSave,
+  syncPromoMirrorMenuStoreScopes,
+} from '@/lib/pos-promo-mirror-scope-server'
+import {
   allocateNextPromoCodeForCampaign,
   allocateNextStandaloneSetPromoCode,
 } from '@/lib/marketing-promo-code'
@@ -89,6 +93,8 @@ export async function POST(req: NextRequest) {
       /** 세트 구성 Step 1 가격 기준: hall | delivery */
       composePricingBasis?: string
       compose_pricing_basis?: string
+      /** 미러 메뉴 노출 매장 — 있으면 QR/POS 스코프에 동기화 */
+      storeCodes?: string[] | null
     }
 
     let code = String(body.code ?? '').trim()
@@ -326,6 +332,47 @@ export async function POST(req: NextRequest) {
         { success: false, message: mirror.message || '미러 메뉴 동기화 실패' },
         { headers }
       )
+    }
+
+    const scopePlan = await resolvePromoMirrorStoreCodesForSave({
+      hasExplicitStoreCodes: Array.isArray(body.storeCodes),
+      explicitStoreCodes: body.storeCodes,
+      promoId: promoId!,
+    })
+    if (scopePlan.shouldSync) {
+      let mirrorMenuId = mirror.menuId
+      if (!mirrorMenuId) {
+        try {
+          const linked = (await supabaseSelectFilter(
+            'pos_menus',
+            `promo_id=eq.${Number(promoId)}`,
+            { limit: 1, select: 'id' }
+          )) as { id?: number }[] | null
+          mirrorMenuId = Number(linked?.[0]?.id || 0) || undefined
+        } catch {
+          mirrorMenuId = undefined
+        }
+      }
+      if (!mirrorMenuId) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: '미러 메뉴 저장은 완료되었지만 매장 노출 범위를 저장하지 못했습니다. 다시 저장해 주세요.',
+          },
+          { headers }
+        )
+      }
+      const scopeSync = await syncPromoMirrorMenuStoreScopes({
+        menuId: mirrorMenuId,
+        storeCodes: scopePlan.storeCodes,
+        catalogScope,
+      })
+      if (!scopeSync.ok) {
+        return NextResponse.json(
+          { success: false, message: scopeSync.message || '매장 노출 범위 저장 실패' },
+          { headers }
+        )
+      }
     }
 
     const channelDelivery = body.channelDelivery !== false

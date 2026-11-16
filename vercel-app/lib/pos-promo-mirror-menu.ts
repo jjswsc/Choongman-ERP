@@ -24,6 +24,7 @@ export interface PromoMirrorPayload {
 /** 프로모션과 동일 코드·가격의 미러 메뉴 upsert (promo_id 컬럼 없으면 스킵) */
 export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
   ok: boolean
+  menuId?: number
   message?: string
 }> {
   const promoIdNum = Number(p.promoId)
@@ -61,9 +62,10 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
     )) as { id?: number; code?: string }[] | null
 
     if (linked && linked.length > 0) {
-      const menuId = String(linked[0].id ?? '')
+      const menuId = Number(linked[0].id || 0)
+      if (!menuId) return { ok: false, message: '미러 메뉴 id 없음' }
       await supabaseUpdateByFilter('pos_menus', `id=eq.${menuId}`, mirrorFieldsSansImage)
-      return { ok: true }
+      return { ok: true, menuId }
     }
 
     const codeRows = (await supabaseSelectFilter(
@@ -79,7 +81,13 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
     }
 
     await supabaseInsert('pos_menus', insertMenuRow)
-    return { ok: true }
+    const created = (await supabaseSelectFilter(
+      'pos_menus',
+      `promo_id=eq.${promoIdNum}`,
+      { limit: 1, select: 'id' }
+    )) as { id?: number }[] | null
+    const menuId = Number(created?.[0]?.id || 0)
+    return menuId ? { ok: true, menuId } : { ok: true }
   } catch (e) {
     const msg = String(e)
     if (msg.includes('promo_id') || msg.includes('42703') || msg.includes('column')) {

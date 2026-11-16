@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { shouldMenuBeVisibleForStore } from '@/lib/pos-menu-store-scope'
 
 /**
- * submitQrCart 메뉴 스코프 판정과 동일한 순수 로직 — DB 없이 회귀 방지.
- * (서버 loadCartMenusByIdsForStore 의 allowed 필터 미러)
+ * QR 카트/목록 — POS getPosMenus 와 같은 shouldMenuBeVisibleForStore 규칙.
+ * (빈 스코프 + 호환 모드면 매장에 스코프가 있어도 노출)
  */
 function filterCartMenusByStoreScope(opts: {
   menuIds: number[]
-  storeUsesScopes: boolean
-  scopedMenuIds: number[]
+  requestedStoreCode: string
+  /** menuId → 그 메뉴에 저장된 매장 스코프 */
+  scopesByMenuId: Record<number, string[]>
+  compatibilityMode: boolean
 }): number[] {
-  const allowed = opts.storeUsesScopes ? new Set(opts.scopedMenuIds) : null
-  return opts.menuIds.filter((id) => (allowed ? allowed.has(id) : true))
+  return opts.menuIds.filter((id) =>
+    shouldMenuBeVisibleForStore({
+      requestedStoreCode: opts.requestedStoreCode,
+      scopedStores: opts.scopesByMenuId[id] || [],
+      compatibilityMode: opts.compatibilityMode,
+      scopeSchemaReady: true,
+    })
+  )
 }
 
 function isQrExtraMenuAllowed(opts: {
@@ -25,24 +34,49 @@ function isQrExtraMenuAllowed(opts: {
 }
 
 describe('qr cart menu scope filter', () => {
-  it('allows all requested ids when store has no scopes', () => {
+  it('allows unscoped menus in compatibility mode even when other menus are scoped', () => {
     expect(
       filterCartMenusByStoreScope({
         menuIds: [1, 2, 3],
-        storeUsesScopes: false,
-        scopedMenuIds: [],
+        requestedStoreCode: 'Jayle',
+        scopesByMenuId: {
+          1: ['Jayle'],
+          // 2: empty → Kimchi Day 미러처럼 스코프 미저장
+          3: ['Other'],
+        },
+        compatibilityMode: true,
       })
-    ).toEqual([1, 2, 3])
+    ).toEqual([1, 2])
   })
 
-  it('keeps only scoped ids when store uses scopes', () => {
+  it('hides unscoped menus when compatibility mode is off (Omni)', () => {
     expect(
       filterCartMenusByStoreScope({
         menuIds: [1, 2, 3],
-        storeUsesScopes: true,
-        scopedMenuIds: [2],
+        requestedStoreCode: 'Jayle',
+        scopesByMenuId: {
+          1: ['Jayle'],
+          2: [],
+          3: ['Other'],
+        },
+        compatibilityMode: false,
       })
-    ).toEqual([2])
+    ).toEqual([1])
+  })
+
+  it('keeps only menus scoped to the requested store when they have scopes', () => {
+    expect(
+      filterCartMenusByStoreScope({
+        menuIds: [1, 2, 3],
+        requestedStoreCode: 'Jayle',
+        scopesByMenuId: {
+          1: ['Rama9'],
+          2: ['Jayle'],
+          3: ['Jayle', 'Asoke'],
+        },
+        compatibilityMode: true,
+      })
+    ).toEqual([2, 3])
   })
 })
 

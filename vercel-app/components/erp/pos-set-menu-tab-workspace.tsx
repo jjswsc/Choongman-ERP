@@ -20,6 +20,15 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
+import { useStoreList } from "@/lib/use-store-list"
+import { useAppBrandConfig } from "@/components/app-brand-provider"
+import { isOfficeRole } from "@/lib/permissions"
+import {
+  isPosMenuStoreScopeCompatibilityModeForBrand,
+  menuHasPersistedStoreScope,
+  normalizeMenuScopeStoreCodes,
+  resolveEffectiveMenuScopeStoreCodes,
+} from "@/lib/pos-menu-store-scope"
 import {
   deletePosPromoItem,
   getMenuCost,
@@ -225,10 +234,40 @@ export function PosSetMenuTabWorkspace({
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
+  const brand = useAppBrandConfig()
+  const { posStores: stores } = useStoreList()
   const fixedCid = (fixedMarketingCampaignId ?? "").trim()
+  const canSearchAllStores = isOfficeRole(auth?.role || "", brand.key)
+  const storeScopeCompatMode = isPosMenuStoreScopeCompatibilityModeForBrand(brand.key)
+  const availableScopeStores = React.useMemo(() => {
+    const out: string[] = []
+    const push = (raw: unknown) => {
+      const v = String(raw || "").trim()
+      if (!v) return
+      if (!out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v)
+    }
+    if (canSearchAllStores) {
+      for (const s of stores) push(s)
+    } else {
+      push(auth?.store)
+      for (const s of auth?.allowedStores || []) push(s)
+      if (out.length === 0) {
+        for (const s of stores) push(s)
+      }
+    }
+    return out.sort((a, b) => a.localeCompare(b))
+  }, [canSearchAllStores, stores, auth?.store, auth?.allowedStores])
+  const defaultScopeStoreCodes = React.useMemo(() => {
+    if (canSearchAllStores) return [...availableScopeStores]
+    if (auth?.store) return [String(auth.store).trim()].filter(Boolean)
+    if (availableScopeStores.length > 0) return [availableScopeStores[0]]
+    return []
+  }, [canSearchAllStores, auth?.store, availableScopeStores])
 
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [editPromoId, setEditPromoId] = React.useState<string | null>(null)
+  const [selectedStoreCodes, setSelectedStoreCodes] = React.useState<string[]>([])
+  const [storeScopeDirty, setStoreScopeDirty] = React.useState(false)
   /** 신규 초안 세션(캠페인 고정 시 다음 코드 재채번) */
   const [promoDraftGen, setPromoDraftGen] = React.useState(0)
   const [form, setForm] = React.useState(emptyForm)
@@ -282,6 +321,62 @@ export function PosSetMenuTabWorkspace({
       ),
     [menus]
   )
+
+  const resolveEditorScopeStoreCodes = React.useCallback(
+    (promoId: string | null | undefined): string[] => {
+      const pid = String(promoId || "").trim()
+      const mirror = pid
+        ? menus.find((m) => String(m.promoId ?? "").trim() === pid)
+        : null
+      const persisted = normalizeMenuScopeStoreCodes(mirror?.storeCodes)
+      const effective = resolveEffectiveMenuScopeStoreCodes(
+        persisted,
+        availableScopeStores,
+        storeScopeCompatMode
+      )
+      if (effective.length > 0) return effective
+      if (!menuHasPersistedStoreScope(persisted) && !storeScopeCompatMode) {
+        return [...defaultScopeStoreCodes]
+      }
+      return effective.length > 0 ? effective : [...defaultScopeStoreCodes]
+    },
+    [menus, availableScopeStores, storeScopeCompatMode, defaultScopeStoreCodes]
+  )
+
+  const toggleStoreScopeCode = React.useCallback((storeCode: string, checked: boolean) => {
+    const normalized = String(storeCode || "").trim()
+    if (!normalized) return
+    setStoreScopeDirty(true)
+    setSelectedStoreCodes((prev) => {
+      const has = prev.some((x) => x.toLowerCase() === normalized.toLowerCase())
+      if (checked) return has ? prev : [...prev, normalized]
+      return prev.filter((x) => x.toLowerCase() !== normalized.toLowerCase())
+    })
+  }, [])
+
+  const allStoreScopeSelected =
+    availableScopeStores.length > 0 &&
+    availableScopeStores.every((sc) =>
+      selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
+    )
+  const someStoreScopeSelected =
+    !allStoreScopeSelected &&
+    availableScopeStores.some((sc) =>
+      selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
+    )
+  const toggleAllStoreScope = React.useCallback(
+    (checked: boolean) => {
+      setStoreScopeDirty(true)
+      setSelectedStoreCodes(checked ? [...availableScopeStores] : [])
+    },
+    [availableScopeStores]
+  )
+
+  const showStoreScopeUnscopedHint = React.useMemo(() => {
+    if (!editPromoId) return false
+    const mirror = menus.find((m) => String(m.promoId ?? "").trim() === String(editPromoId))
+    return !!mirror && !menuHasPersistedStoreScope(mirror.storeCodes)
+  }, [editPromoId, menus])
 
   React.useEffect(() => {
     void getPosMenuOptions()
@@ -726,6 +821,8 @@ export function PosSetMenuTabWorkspace({
         setDiscountBahtStr("")
         setPickPricingBasis("hall")
         setPriceAnalysisChannel("hall")
+        setSelectedStoreCodes([...defaultScopeStoreCodes])
+        setStoreScopeDirty(false)
       }
       setLoadingEdit(false)
       return
@@ -764,6 +861,8 @@ export function PosSetMenuTabWorkspace({
           grabCampaignStartTimeBkk: promoRow.grabCampaignStartTimeBkk ?? "",
           grabCampaignEndTimeBkk: promoRow.grabCampaignEndTimeBkk ?? "",
         })
+        setSelectedStoreCodes(resolveEditorScopeStoreCodes(editPromoId))
+        setStoreScopeDirty(false)
         const basis = promoRow.composePricingBasis === "delivery" ? "delivery" : "hall"
         setPickPricingBasis(basis)
         setPriceAnalysisChannel(basis)
@@ -812,7 +911,15 @@ export function PosSetMenuTabWorkspace({
     return () => {
       cancelled = true
     }
-  }, [editPromoId, promos, menus, allOptions, fixedCid])
+  }, [editPromoId, promos, menus, allOptions, fixedCid, defaultScopeStoreCodes, resolveEditorScopeStoreCodes])
+
+  React.useEffect(() => {
+    if (editPromoId) return
+    if (storeScopeDirty) return
+    if (selectedStoreCodes.length > 0) return
+    if (defaultScopeStoreCodes.length === 0) return
+    setSelectedStoreCodes([...defaultScopeStoreCodes])
+  }, [editPromoId, storeScopeDirty, selectedStoreCodes.length, defaultScopeStoreCodes])
 
   React.useEffect(() => {
     if (!fixedCid || editPromoId) return
@@ -1063,6 +1170,8 @@ export function PosSetMenuTabWorkspace({
     setPriceAnalysisSubsidyStr("")
     setPickPricingBasis("hall")
     setPriceAnalysisChannel("hall")
+    setSelectedStoreCodes([...defaultScopeStoreCodes])
+    setStoreScopeDirty(false)
     setPromoDraftGen((n) => n + 1)
   }
 
@@ -1448,6 +1557,7 @@ export function PosSetMenuTabWorkspace({
         userRole: auth?.role,
         userName: auth?.user,
         composePricingBasis: pickPricingBasis,
+        storeCodes: normalizeMenuScopeStoreCodes(selectedStoreCodes),
       },
     }
   }
@@ -1462,6 +1572,10 @@ export function PosSetMenuTabWorkspace({
     }
     if (!form.channelHall && !form.channelTakeout && !form.channelDelivery) {
       await appAlert(t("posSetTabChannelsRequired"))
+      return
+    }
+    if (normalizeMenuScopeStoreCodes(selectedStoreCodes).length === 0) {
+      await appAlert(t("posMenuVisibleStoresPickAtLeastOne"))
       return
     }
     if (editPromoId && !codeTrim) {
@@ -1908,6 +2022,45 @@ export function PosSetMenuTabWorkspace({
                   <p className="mt-1 rounded-md border bg-muted/30 px-2 py-1.5 font-mono text-xs">{form.code.trim()}</p>
                 </div>
               ) : null}
+              <div className="sm:col-span-2 rounded-md border border-dashed p-3">
+                <label className="text-xs font-semibold">{t("store") || "매장"}</label>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {t("posMenuVisibleStoresRequiredToSave")}
+                </p>
+                {showStoreScopeUnscopedHint && (
+                  <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                    {storeScopeCompatMode
+                      ? t("posMenuVisibleStoresCompatHint")
+                      : t("posMenuVisibleStoresUnscopedStrictHint")}
+                  </p>
+                )}
+                <div className="mt-2 grid max-h-32 grid-cols-2 gap-2 overflow-y-auto">
+                  {availableScopeStores.length > 1 && (
+                    <label
+                      className={`col-span-2 flex items-center gap-2 border-b border-dashed pb-2 text-xs font-medium ${someStoreScopeSelected ? "text-muted-foreground" : ""}`}
+                    >
+                      <Checkbox
+                        checked={allStoreScopeSelected}
+                        // indeterminate는 네이티브 input에서만 안정적 — Checkbox에 ref 대신 상태만
+                        onCheckedChange={(v) => toggleAllStoreScope(v === true)}
+                      />
+                      <span>{t("store_all_stores") || "전체 매장"}</span>
+                    </label>
+                  )}
+                  {availableScopeStores.map((sc) => {
+                    const checked = selectedStoreCodes.some((x) => x.toLowerCase() === sc.toLowerCase())
+                    return (
+                      <label key={`set-scope-${sc}`} className="flex items-center gap-2 text-xs">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => toggleStoreScopeCode(sc, v === true)}
+                        />
+                        <span>{sc}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
               <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/10 px-3 py-3">
                 <p className="text-xs font-semibold">{t("posPromoChannels")}</p>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
