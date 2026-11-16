@@ -22,7 +22,9 @@ export function projectOutstandingAfterDelete(params: {
     const deleting = Number(params.deletingReceivableByStore?.[store] || 0)
     const projected = current - deleting
     projectedByStore[store] = projected
-    if (projected < -Math.abs(eps)) {
+    // 미수 차감액이 없으면 잔액 불변 → 기존 수금 초과만으로 취소/삭제를 막지 않음.
+    // (예: 출고·Order 미수 0원인 승인 주문 취소)
+    if (deleting > Math.abs(eps) && projected < -Math.abs(eps)) {
       overReceivedStores.push({ store, projected })
     }
   }
