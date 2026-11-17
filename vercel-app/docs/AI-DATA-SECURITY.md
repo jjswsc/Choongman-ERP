@@ -41,6 +41,7 @@ OpenAI 정책 URL/버전 메모: __________
 |------|------|
 | `OPENAI_API_KEY` Vercel only | 설정 필요 (0-2) |
 | `/api/ai/ask` 서버 집계 | advisor·RAG 확장 예정 |
+| `/api/translate` UGC 자동번역 | 키 있으면 `gpt-4o-mini`(또는 `OPENAI_TRANSLATE_MODEL`) 우선, 실패·미설정 시 Google/MyMemory |
 | `ai_usage_logs` | 사용 추적 (민감 본문은 note에 넣지 않기) |
 | `GET /api/ai/health` | 테이블·키 설정 여부 |
 
@@ -65,11 +66,13 @@ OpenAI 정책 URL/버전 메모: __________
 3. 추가:
    - **Name:** `OPENAI_API_KEY` · **Value:** `sk-...` · **Environment:** Production (Preview/Development도 쓰면 동일 추가)
    - (선택) **Name:** `OPENAI_ERP_AI_MODEL` · **Value:** `gpt-4o-mini`
+   - (선택) **Name:** `OPENAI_TRANSLATE_MODEL` · **Value:** `gpt-4o-mini` (직원 입력 자동번역 전용)
 4. **Deployments** → 최신 배포 → **⋯ → Redeploy** (환경 변수만 저장하면 반영 안 됨)
 5. 확인:
    - ERP **AI 센터** 상단: **「AI 모델 연결됨」** 초록 안내
    - 또는 로그인 후 `GET /api/ai/health` → `"openaiConfigured": true`
    - 질문 생성 시 답변에 **「모델 키 미설정」** 문구 없음 · `model` 필드에 예: `gpt-4o-mini`
+   - 직원 공지·업무일지 등: UI 언어를 th/en으로 두고 자동번역 ON → GPT 품질 번역(키 없으면 기존 Google/MyMemory)
 
 **로컬:** `vercel-app/.env.example` → `.env.local` 복사 후 `OPENAI_API_KEY` 입력 → `npm run dev`
 

@@ -2,6 +2,8 @@
  * 사용자 입력 텍스트 번역 API (내용/memo·공지 등)
  * POST body: { texts: string[], targetLang: string } → { translated: string[] }
  *
+ * 엔진: 캐시 → OpenAI(OPENAI_API_KEY) → Google gtx → MyMemory (`lib/translate-runtime`)
+ *
  * 인증: Bearer/쿠키 있으면 검증하되, 공지 화면처럼 세션만 남은 경우에도 번역은 허용
  * (getMyNotices는 JWT 없이도 동작 — 번역만 401이면 태국어 원문이 그대로 보임)
  */
