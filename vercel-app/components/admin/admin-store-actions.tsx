@@ -32,6 +32,7 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { useAuth } from "@/lib/auth-context"
 import {
   hasOfficeStaffScope,
@@ -213,6 +214,26 @@ export function AdminStoreActions() {
       })
     }
   }, [searchParams, t])
+
+  const actionTexts = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const push = (s: string | null | undefined) => {
+      const t0 = String(s || "").trim()
+      if (!t0 || seen.has(t0)) return
+      seen.add(t0)
+      out.push(t0)
+    }
+    for (const r of [...listData, ...openData]) {
+      push(r.title)
+      push(r.description)
+      push(r.actionPlan)
+      push(r.resolutionNote)
+      push(r.verificationNote)
+    }
+    return out
+  }, [listData, openData])
+  const trAction = useTranslatedTextMap(actionTexts, lang, { force: true })
 
   const loadList = useCallback(async () => {
     setListLoading(true)
@@ -638,7 +659,7 @@ export function AdminStoreActions() {
                       onClick={() => openProcessById(row.id)}
                     >
                       <td className="p-2">{row.store}</td>
-                      <td className="p-2 font-medium">{row.title}</td>
+                      <td className="p-2 font-medium">{trAction(row.title)}</td>
                       <td className="p-2">{row.ownerName}</td>
                       <td className="p-2">{row.verifierName}</td>
                       <td className={cn("p-2 tabular-nums", row.overdue && "font-semibold text-red-600")}>
@@ -670,7 +691,7 @@ export function AdminStoreActions() {
                   onClick={() => openProcessById(row.id)}
                 >
                   <div className="flex justify-between gap-2">
-                    <span className="font-semibold">{row.title}</span>
+                    <span className="font-semibold">{trAction(row.title)}</span>
                     <span className={row.overdue ? "text-red-600 font-semibold" : ""}>{row.dueDate || "—"}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
@@ -692,7 +713,7 @@ export function AdminStoreActions() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="font-semibold text-sm">{edit.title}</span>
+                  <span className="font-semibold text-sm">{trAction(edit.title)}</span>
                   {edit.overdue ? (
                     <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-900 dark:text-red-100">
                       {t("action_overdue_badge")}

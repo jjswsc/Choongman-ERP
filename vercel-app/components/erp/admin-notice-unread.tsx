@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { cn } from "@/lib/utils"
 
 function empKey(store: string, name: string) {
@@ -83,6 +84,21 @@ export function AdminNoticeUnread() {
   const [detailByKey, setDetailByKey] = React.useState<
     Record<string, { loading: boolean; items: NoticeUnreadDetailItem[]; error?: string }>
   >({})
+
+  const noticeTitles = React.useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const d of Object.values(detailByKey)) {
+      for (const n of d.items || []) {
+        const t0 = String(n.title || "").trim()
+        if (!t0 || seen.has(t0)) continue
+        seen.add(t0)
+        out.push(t0)
+      }
+    }
+    return out
+  }, [detailByKey])
+  const trNotice = useTranslatedTextMap(noticeTitles, lang, { force: true })
 
   const [payrollMonth, setPayrollMonth] = React.useState(defaultPayrollMonth)
   const [excludedKeys, setExcludedKeys] = React.useState<Set<string>>(() => new Set())
@@ -589,7 +605,9 @@ export function AdminNoticeUnread() {
                                     "flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] border-l-2 border-warning/60 pl-2"
                                   )}
                                 >
-                                  <span className="font-medium text-foreground">{n.title}</span>
+                                  <span className="font-medium text-foreground">
+                                    {trNotice(n.title)}
+                                  </span>
                                   <span className="text-muted-foreground">
                                     {n.createdAt ? n.createdAt.slice(0, 16).replace("T", " ") : ""}
                                   </span>

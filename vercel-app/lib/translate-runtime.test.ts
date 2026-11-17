@@ -16,6 +16,8 @@ describe('translate-runtime openai helpers', () => {
   it('maps target lang labels for prompts', () => {
     expect(targetLangLabel('th')).toBe('Thai')
     expect(targetLangLabel('my')).toContain('Myanmar')
+    expect(targetLangLabel('lo')).toContain('Lao')
+    expect(targetLangLabel('km')).toContain('Khmer')
   })
 
   it('parses plain JSON array', () => {

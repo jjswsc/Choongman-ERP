@@ -228,8 +228,20 @@ export function AdminStoreRepairs() {
     loadList()
   }, [loadList])
 
-  const listTitles = useMemo(() => listData.map((r) => r.title || ""), [listData])
-  const translateTitle = useTranslatedTextMap(listTitles, lang)
+  const listTexts = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const r of listData) {
+      for (const s of [r.title, r.description, r.resolutionNote]) {
+        const t0 = String(s || "").trim()
+        if (!t0 || seen.has(t0)) continue
+        seen.add(t0)
+        out.push(t0)
+      }
+    }
+    return out
+  }, [listData])
+  const translateText = useTranslatedTextMap(listTexts, lang, { force: true })
   const newTitleTrans = useDebouncedTranslatedText(form.title, lang)
   const editTitleTrans = useDebouncedTranslatedText(editItem?.title || "", lang)
 
@@ -643,7 +655,7 @@ export function AdminStoreRepairs() {
                             <td className="px-3 py-2 font-mono">{row.ticketNumber}</td>
                             <td className="px-3 py-2">{row.store}</td>
                             <td className="px-3 py-2 max-w-[200px] truncate" title={row.title || undefined}>
-                              {translateTitle(row.title || "")}
+                              {translateText(row.title || "")}
                             </td>
                             <td className="px-3 py-2">{t(labelSt(row.status))}</td>
                             <td className="px-3 py-2">{t(labelPri(row.priority))}</td>
@@ -724,7 +736,7 @@ export function AdminStoreRepairs() {
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold leading-snug">
-                                  {translateTitle(row.title || "") || "—"}
+                                  {translateText(row.title || "") || "—"}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground">
                                   {row.ticketNumber} · {row.store}

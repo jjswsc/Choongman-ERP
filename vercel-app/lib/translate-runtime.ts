@@ -54,9 +54,9 @@ const LANG_LABEL: Record<string, string> = {
   ko: 'Korean',
   en: 'English',
   th: 'Thai',
-  my: 'Burmese (Myanmar)',
-  lo: 'Lao',
-  km: 'Khmer',
+  my: 'Burmese / Myanmar (Unicode script)',
+  lo: 'Lao (Laos, Unicode script)',
+  km: 'Khmer (Cambodian, Unicode script)',
   vi: 'Vietnamese',
   ms: 'Malay',
   zh: 'Chinese',
@@ -177,13 +177,18 @@ export function targetLangLabel(tl: string): string {
 }
 
 function alreadyTargetLang(text: string, tl: string): boolean {
+  // 목표 언어 스크립트만 있고 다른 SE 스크립트·한글이 섞이지 않을 때만 “이미 번역됨”으로 스킵
   if (tl === 'ko') return hasHangul(text) && !hasThai(text) && !hasMyanmar(text) && !hasLao(text) && !hasKhmer(text)
-  if (tl === 'th') return hasThai(text)
-  if (tl === 'en') return hasLatinLetters(text) && !hasHangul(text) && !hasThai(text)
-  if (tl === 'my') return hasMyanmar(text)
-  if (tl === 'lo') return hasLao(text)
-  if (tl === 'km') return hasKhmer(text)
-  if (tl === 'vi' || tl === 'ms') return hasLatinLetters(text) && !hasHangul(text) && !hasThai(text)
+  if (tl === 'th') return hasThai(text) && !hasHangul(text) && !hasMyanmar(text) && !hasLao(text) && !hasKhmer(text)
+  if (tl === 'en') {
+    return hasLatinLetters(text) && !hasHangul(text) && !hasThai(text) && !hasMyanmar(text) && !hasLao(text) && !hasKhmer(text)
+  }
+  if (tl === 'my') return hasMyanmar(text) && !hasHangul(text) && !hasThai(text) && !hasLao(text) && !hasKhmer(text)
+  if (tl === 'lo') return hasLao(text) && !hasHangul(text) && !hasThai(text) && !hasMyanmar(text) && !hasKhmer(text)
+  if (tl === 'km') return hasKhmer(text) && !hasHangul(text) && !hasThai(text) && !hasMyanmar(text) && !hasLao(text)
+  if (tl === 'vi' || tl === 'ms') {
+    return hasLatinLetters(text) && !hasHangul(text) && !hasThai(text) && !hasMyanmar(text) && !hasLao(text) && !hasKhmer(text)
+  }
   return false
 }
 
@@ -194,17 +199,19 @@ function translationLooksFailed(src: string, out: string, tl: string): boolean {
   if (alreadyTargetLang(a, tl)) return false
   if (b !== a) {
     if (tl === 'ko' && !hasHangul(b) && (hasThai(b) || hasMyanmar(b) || hasLao(b) || hasKhmer(b))) return true
-    if (tl === 'my' && !hasMyanmar(b) && (hasThai(b) || hasHangul(b))) return true
-    if (tl === 'th' && !hasThai(b) && (hasHangul(b) || hasMyanmar(b))) return true
-    if (tl === 'lo' && !hasLao(b) && (hasThai(b) || hasHangul(b))) return true
+    if (tl === 'my' && !hasMyanmar(b) && (hasThai(b) || hasHangul(b) || hasLao(b) || hasKhmer(b))) return true
+    if (tl === 'th' && !hasThai(b) && (hasHangul(b) || hasMyanmar(b) || hasLao(b) || hasKhmer(b))) return true
+    if (tl === 'lo' && !hasLao(b) && (hasThai(b) || hasHangul(b) || hasMyanmar(b) || hasKhmer(b))) return true
+    if (tl === 'km' && !hasKhmer(b) && (hasThai(b) || hasHangul(b) || hasMyanmar(b) || hasLao(b))) return true
     return false
   }
   if (tl === 'ko') return hasThai(a) || hasMyanmar(a) || hasLao(a) || hasKhmer(a)
   if (tl === 'my') return hasThai(a) || hasHangul(a) || hasLao(a) || hasKhmer(a)
-  if (tl === 'lo') return hasThai(a) || hasHangul(a) || hasMyanmar(a)
-  if (tl === 'th') return hasHangul(a) || hasMyanmar(a)
-  if (tl === 'en') return hasHangul(a) || hasThai(a) || hasMyanmar(a)
-  return hasHangul(a) || hasThai(a)
+  if (tl === 'lo') return hasThai(a) || hasHangul(a) || hasMyanmar(a) || hasKhmer(a)
+  if (tl === 'km') return hasThai(a) || hasHangul(a) || hasMyanmar(a) || hasLao(a)
+  if (tl === 'th') return hasHangul(a) || hasMyanmar(a) || hasLao(a) || hasKhmer(a)
+  if (tl === 'en') return hasHangul(a) || hasThai(a) || hasMyanmar(a) || hasLao(a) || hasKhmer(a)
+  return hasHangul(a) || hasThai(a) || hasMyanmar(a) || hasLao(a) || hasKhmer(a)
 }
 
 function chunkText(text: string, size: number): string[] {

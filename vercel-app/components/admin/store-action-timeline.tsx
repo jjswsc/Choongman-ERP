@@ -1,8 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { getStoreActionLogs, type StoreActionLog } from "@/lib/api-client"
+import { useLang } from "@/lib/lang-context"
 import { storeActionLabelers } from "@/lib/store-action-i18n"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 
 function fmtBangkok(iso: string): string {
   if (!iso) return ""
@@ -22,9 +24,15 @@ function fmtBangkok(iso: string): string {
 /** 과제 변경 이력 — 누가·언제·무엇을 */
 export function StoreActionTimeline(props: { actionId: number; refreshKey?: number; t: (k: string) => string }) {
   const { actionId, refreshKey, t } = props
+  const { lang } = useLang()
   const [logs, setLogs] = useState<StoreActionLog[]>([])
   const [loading, setLoading] = useState(false)
   const label = storeActionLabelers(t)
+  const noteTexts = useMemo(
+    () => [...new Set(logs.map((l) => String(l.note || "").trim()).filter(Boolean))],
+    [logs]
+  )
+  const tr = useTranslatedTextMap(noteTexts, lang, { force: true })
 
   useEffect(() => {
     let alive = true
@@ -63,7 +71,9 @@ export function StoreActionTimeline(props: { actionId: number; refreshKey?: numb
                   ({label.status(l.fromStatus)} → {label.status(l.toStatus)})
                 </span>
               ) : null}
-              {l.note ? <div className="whitespace-pre-wrap text-muted-foreground">{l.note}</div> : null}
+              {l.note ? (
+                <div className="whitespace-pre-wrap text-muted-foreground">{tr(l.note)}</div>
+              ) : null}
             </li>
           ))}
         </ol>

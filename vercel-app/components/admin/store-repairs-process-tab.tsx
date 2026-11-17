@@ -86,8 +86,24 @@ export function StoreRepairsProcessTab({
   const [draftVendor, setDraftVendor] = useState("")
   const [draftActualCost, setDraftActualCost] = useState("")
 
-  const ticketTitles = useMemo(() => tickets.map((x) => x.title || ""), [tickets])
-  const translateTitle = useTranslatedTextMap(ticketTitles, lang)
+  const ticketTexts = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const push = (s: string | null | undefined) => {
+      const t0 = String(s || "").trim()
+      if (!t0 || seen.has(t0)) return
+      seen.add(t0)
+      out.push(t0)
+    }
+    for (const x of tickets) {
+      push(x.title)
+      push(x.description)
+      push(x.resolutionNote)
+    }
+    for (const l of logs) push(l.note)
+    return out
+  }, [tickets, logs])
+  const translateText = useTranslatedTextMap(ticketTexts, lang, { force: true })
   const progressTrans = useDebouncedTranslatedText(progressNote, lang)
 
   const filteredTickets = useMemo(() => {
@@ -328,7 +344,7 @@ export function StoreRepairsProcessTab({
                 >
                   <div className="font-mono text-[10px] text-muted-foreground">{row.ticketNumber}</div>
                   <div className="font-medium line-clamp-2" title={row.title || undefined}>
-                    {translateTitle(row.title || "")}
+                    {translateText(row.title || "")}
                   </div>
                   <div className="text-muted-foreground mt-0.5">
                     {row.store} · {t(labelSt(row.status))}
@@ -352,7 +368,7 @@ export function StoreRepairsProcessTab({
                     <div>
                       <span className="font-mono text-muted-foreground">{selected.ticketNumber}</span>
                       <h3 className="text-sm font-semibold mt-1" title={selected.title || undefined}>
-                        {translateTitle(selected.title || "")}
+                        {translateText(selected.title || "")}
                       </h3>
                       <p className="text-muted-foreground mt-1">
                         {selected.store} · {t("repair_field_category")}: {selected.category}
@@ -360,7 +376,9 @@ export function StoreRepairsProcessTab({
                     </div>
                   </div>
                   {selected.description ? (
-                    <p className="text-muted-foreground border-l-2 border-border pl-2 whitespace-pre-wrap">{selected.description}</p>
+                    <p className="text-muted-foreground border-l-2 border-border pl-2 whitespace-pre-wrap">
+                      {translateText(selected.description)}
+                    </p>
                   ) : null}
 
                   <div className="grid sm:grid-cols-2 gap-3 pt-2 border-t">
@@ -425,7 +443,7 @@ export function StoreRepairsProcessTab({
                         <li key={log.id} className="relative text-xs">
                           <div className="text-[10px] text-muted-foreground">{formatWhen(log.createdAt)}</div>
                           <div className="text-[10px] text-muted-foreground">{log.author || "—"}</div>
-                          <p className="mt-1 whitespace-pre-wrap">{log.note}</p>
+                          <p className="mt-1 whitespace-pre-wrap">{translateText(log.note)}</p>
                           {log.photoUrls?.length ? (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {log.photoUrls.map((url) => (

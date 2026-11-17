@@ -248,9 +248,12 @@ export function WorklogApproval({ onPendingChange }: Props) {
     const shouldRetryUnchanged = (src: string, out: string) => {
       if (out !== src) return false
       const tl = String(lang || "ko").toLowerCase().slice(0, 2)
-      // UI가 한국어인데 태/미얀마/라오/크메르 원문이 그대로면 미번역으로 보고 재시도
+      // UI 언어와 다른 스크립트 원문이 그대로면 미번역으로 보고 재시도 (mm/la/kh 포함)
       if ((tl === "ko" || tl === "en") && foreignScriptRe.test(src)) return true
-      if (tl === "th" && /[가-힣\u1000-\u109F]/.test(src)) return true
+      if (tl === "th" && (/[가-힣]/.test(src) || /[\u1000-\u109F\u0E80-\u0EFF\u1780-\u17FF]/.test(src))) return true
+      if ((tl === "mm" || tl === "my") && /[가-힣\u0E00-\u0E7F\u0E80-\u0EFF\u1780-\u17FF]/.test(src)) return true
+      if ((tl === "la" || tl === "lo") && /[가-힣\u0E00-\u0E7F\u1000-\u109F\u1780-\u17FF]/.test(src)) return true
+      if ((tl === "kh" || tl === "km") && /[가-힣\u0E00-\u0E7F\u1000-\u109F\u0E80-\u0EFF]/.test(src)) return true
       return false
     }
     const handle = setTimeout(() => {

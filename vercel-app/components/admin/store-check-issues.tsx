@@ -28,7 +28,9 @@ import {
 } from "@/lib/store-action-items"
 import { STORE_ACTION_CAT_TEMPLATE_I18N, addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { useLang } from "@/lib/lang-context"
 import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { cn } from "@/lib/utils"
 
 type T = (k: string) => string
@@ -99,6 +101,7 @@ export function StoreCheckIssueCard(props: {
   onSelect?: (on: boolean) => void
 }) {
   const { item, canVerify, me, t, onChanged, selected, onSelect } = props
+  const { lang } = useLang()
   const label = storeActionLabelers(t)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState("")
@@ -107,6 +110,15 @@ export function StoreCheckIssueCard(props: {
   const [showHistory, setShowHistory] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const issueTexts = useMemo(
+    () =>
+      [item.title, item.actionPlan, item.resolutionNote, item.verificationNote]
+        .map((s) => String(s || "").trim())
+        .filter(Boolean),
+    [item.title, item.actionPlan, item.resolutionNote, item.verificationNote]
+  )
+  const tr = useTranslatedTextMap(issueTexts, lang, { force: true })
 
   const open = isStoreActionOpenStatus(item.status)
   const isOwner = !!me && item.ownerName.trim().toLowerCase() === me
@@ -176,7 +188,7 @@ export function StoreCheckIssueCard(props: {
           />
         ) : null}
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-snug">{item.title}</p>
+          <p className="text-sm font-semibold leading-snug">{tr(item.title)}</p>
           <div className="mt-1 flex flex-wrap gap-1">
             <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
               {label.status(item.status)}
@@ -224,17 +236,17 @@ export function StoreCheckIssueCard(props: {
 
       {item.actionPlan && !item.resolutionNote ? (
         <p className="line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-          {t("action_field_plan")}: {item.actionPlan}
+          {t("action_field_plan")}: {tr(item.actionPlan)}
         </p>
       ) : null}
       {item.resolutionNote ? (
         <p className="line-clamp-3 whitespace-pre-wrap">
-          {t("action_field_resolution")}: {item.resolutionNote}
+          {t("action_field_resolution")}: {tr(item.resolutionNote)}
         </p>
       ) : null}
       {item.verificationNote ? (
         <p className="line-clamp-2 whitespace-pre-wrap text-muted-foreground">
-          {t("action_field_verify_note")}: {item.verificationNote}
+          {t("action_field_verify_note")}: {tr(item.verificationNote)}
         </p>
       ) : null}
       <Thumbs urls={item.photoUrls || []} label={t("action_photo_before")} />
