@@ -71,8 +71,10 @@ const CONCURRENCY = 4
 const CACHE_MAX = 800
 const GOOGLE_CHUNK = 4500
 const MYMEMORY_CHUNK = 450
-const OPENAI_BATCH_MAX = 15
-const OPENAI_BATCH_CHARS = 3500
+const OPENAI_BATCH_MAX = 12
+const OPENAI_BATCH_CHARS = 2800
+/** 이보다 긴 단건은 OpenAI 배치에 섞지 않고 단독 처리 */
+const OPENAI_SOLO_CHARS = 700
 
 type PendingTranslate = {
   index: number
@@ -268,19 +270,28 @@ function splitOpenAiBatches(texts: string[]): string[][] {
   const batches: string[][] = []
   let cur: string[] = []
   let chars = 0
-  for (const text of texts) {
-    const len = text.length
-    const wouldExceed =
-      cur.length > 0 && (cur.length >= OPENAI_BATCH_MAX || chars + len > OPENAI_BATCH_CHARS)
-    if (wouldExceed) {
+  const flush = () => {
+    if (cur.length) {
       batches.push(cur)
       cur = []
       chars = 0
     }
+  }
+  for (const text of texts) {
+    const len = text.length
+    // 긴 업무일지·점검 메모는 단독 배치 (타임아웃·JSON 절단 방지)
+    if (len >= OPENAI_SOLO_CHARS) {
+      flush()
+      batches.push([text])
+      continue
+    }
+    const wouldExceed =
+      cur.length > 0 && (cur.length >= OPENAI_BATCH_MAX || chars + len > OPENAI_BATCH_CHARS)
+    if (wouldExceed) flush()
     cur.push(text)
     chars += len
   }
-  if (cur.length) batches.push(cur)
+  flush()
   return batches
 }
 
@@ -290,7 +301,8 @@ async function translateOpenAiBatch(texts: string[], tl: string): Promise<(strin
 
   const model = openaiTranslateModel()
   const langName = targetLangLabel(tl)
-  const maxTokens = Math.min(4000, Math.max(256, Math.ceil(texts.join('\n').length * 1.2) + 64))
+  // 태/미얀마/라오/크메르 → 한국어 등은 출력·JSON 오버헤드가 커서 여유를 둠
+  const maxTokens = Math.min(8000, Math.max(512, Math.ceil(texts.join('\n').length * 2.2) + 160))
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {

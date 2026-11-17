@@ -235,35 +235,71 @@ export function WorklogApproval({ onPendingChange }: Props) {
     return Array.from(new Set([...contents, ...comments]))
   }, [list])
 
+  const translateFailCountRef = React.useRef<Record<string, number>>({})
+
+  React.useEffect(() => {
+    translateFailCountRef.current = {}
+  }, [lang])
+
   React.useEffect(() => {
     if (texts.length === 0) return
     let cancelled = false
-    const CHUNK = 8
+    const foreignScriptRe = /[\u0E00-\u0E7F\u1000-\u109F\u0E80-\u0EFF\u1780-\u17FF]/
+    const shouldRetryUnchanged = (src: string, out: string) => {
+      if (out !== src) return false
+      const tl = String(lang || "ko").toLowerCase().slice(0, 2)
+      // UI가 한국어인데 태/미얀마/라오/크메르 원문이 그대로면 미번역으로 보고 재시도
+      if ((tl === "ko" || tl === "en") && foreignScriptRe.test(src)) return true
+      if (tl === "th" && /[가-힣\u1000-\u109F]/.test(src)) return true
+      return false
+    }
     const handle = setTimeout(() => {
       void (async () => {
         // contentTransMap을 deps에 넣지 않음 → 청크 반영 중 effect가 재실행되어 취소되지 않음
-        while (!cancelled) {
+        let guard = 0
+        while (!cancelled && guard < texts.length * 4 + 8) {
+          guard += 1
           const missing = texts.filter((txt) => !(txt in contentTransMapRef.current))
           if (missing.length === 0) return
-          const chunk = missing.slice(0, CHUNK)
+          // 긴 업무일지(태/미얀마 등)는 1건씩 — 배치 타임아웃·부분실패로 원문 고정되는 것 방지
+          const first = missing[0]!
+          const chunk = first.length >= 700 ? [first] : missing.slice(0, 4)
           try {
             const translated = await translateTexts(chunk, lang)
             if (cancelled) return
             const patch: Record<string, string> = {}
             chunk.forEach((txt, i) => {
-              patch[txt] = translated[i] ?? txt
+              const out = (translated[i] ?? "").trim() || txt
+              if (shouldRetryUnchanged(txt, out)) {
+                const n = (translateFailCountRef.current[txt] || 0) + 1
+                translateFailCountRef.current[txt] = n
+                if (n >= 2) patch[txt] = txt
+                return
+              }
+              delete translateFailCountRef.current[txt]
+              patch[txt] = out
             })
-            contentTransMapRef.current = { ...contentTransMapRef.current, ...patch }
-            setContentTransMap((prev) => ({ ...prev, ...patch }))
+            if (Object.keys(patch).length > 0) {
+              contentTransMapRef.current = { ...contentTransMapRef.current, ...patch }
+              setContentTransMap((prev) => ({ ...prev, ...patch }))
+            } else {
+              await new Promise((r) => setTimeout(r, 400))
+            }
           } catch {
             if (cancelled) return
-            // 실패해도 같은 청크 재시도 루프에 빠지지 않도록 원문으로 채움
+            // 일시 실패는 원문으로 "완료" 처리하지 않음(재시도). 2회 초과 시만 원문 고정.
             const patch: Record<string, string> = {}
             chunk.forEach((txt) => {
-              patch[txt] = txt
+              const n = (translateFailCountRef.current[txt] || 0) + 1
+              translateFailCountRef.current[txt] = n
+              if (n >= 2) patch[txt] = txt
             })
-            contentTransMapRef.current = { ...contentTransMapRef.current, ...patch }
-            setContentTransMap((prev) => ({ ...prev, ...patch }))
+            if (Object.keys(patch).length > 0) {
+              contentTransMapRef.current = { ...contentTransMapRef.current, ...patch }
+              setContentTransMap((prev) => ({ ...prev, ...patch }))
+            } else {
+              await new Promise((r) => setTimeout(r, 400))
+            }
           }
         }
       })()
@@ -274,8 +310,10 @@ export function WorklogApproval({ onPendingChange }: Props) {
     }
   }, [texts, lang])
 
-  const getTransContent = (content: string) =>
-    (content && contentTransMap[content]) || content || "-"
+  const getTransContent = (content: string) => {
+    const key = (content || "").trim()
+    return (key && contentTransMap[key]) || content || "-"
+  }
 
   const formatManagerComment = (comment: string) => {
     if (!comment) return ""

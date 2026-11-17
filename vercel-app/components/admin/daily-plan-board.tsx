@@ -25,12 +25,15 @@ import {
   minutesLabel,
 } from "@/lib/daily-plan-i18n"
 import { DailyPlanItems } from "@/components/daily-plan/daily-plan-items"
+import { useLang } from "@/lib/lang-context"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 
 type T = (k: string) => string
 
 const ROLE_ORDER: Record<string, number> = { supervisor: 0, manager: 1, staff: 2 }
 
 export function DailyPlanBoard({ t }: { t: T }) {
+  const { lang } = useLang()
   const label = dailyPlanLabelers(t)
   const [date, setDate] = useState(getBangkokTodayDateString)
   const [rows, setRows] = useState<DailyPlanBoardRow[]>([])
@@ -71,6 +74,28 @@ export function DailyPlanBoard({ t }: { t: T }) {
       })
       .sort((a, b) => (ROLE_ORDER[a.role_scope] ?? 9) - (ROLE_ORDER[b.role_scope] ?? 9) || a.store_name.localeCompare(b.store_name) || a.employee_name.localeCompare(b.employee_name))
   }, [rows, role, q])
+
+  const titlesToTranslate = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const push = (raw: string | null | undefined) => {
+      const s = String(raw || "").trim()
+      if (!s) return
+      const labeled = dailyPlanItemTitle(s, t).trim()
+      for (const x of [s, labeled]) {
+        if (!x || seen.has(x)) continue
+        seen.add(x)
+        out.push(x)
+      }
+    }
+    for (const r of filtered) {
+      push(r.doingTitle)
+      push(r.nextTitle)
+    }
+    if (detail?.plan.briefing_note) push(detail.plan.briefing_note)
+    return out
+  }, [filtered, detail, t])
+  const tr = useTranslatedTextMap(titlesToTranslate, lang, { force: true })
 
   const kpi = useMemo(() => {
     const total = filtered.reduce((s, r) => s + r.total, 0)
@@ -191,9 +216,9 @@ export function DailyPlanBoard({ t }: { t: T }) {
                         </td>
                         <td className="max-w-[220px] truncate p-1.5">
                           {r.doingTitle
-                            ? `▶ ${dailyPlanItemTitle(r.doingTitle, t)}`
+                            ? `▶ ${tr(dailyPlanItemTitle(r.doingTitle, t))}`
                             : r.nextTitle
-                              ? `… ${dailyPlanItemTitle(r.nextTitle, t)}`
+                              ? `… ${tr(dailyPlanItemTitle(r.nextTitle, t))}`
                               : "—"}
                         </td>
                         <td className="p-1.5 text-right tabular-nums">
@@ -237,7 +262,9 @@ export function DailyPlanBoard({ t }: { t: T }) {
                 {minutesLabel(detail.summary.estTotal, t)}
               </p>
               {detail.plan.briefing_note ? (
-                <p className="rounded bg-muted p-2 text-xs whitespace-pre-wrap">{detail.plan.briefing_note}</p>
+                <p className="rounded bg-muted p-2 text-xs whitespace-pre-wrap">
+                  {tr(detail.plan.briefing_note)}
+                </p>
               ) : null}
               <Button
                 size="sm"

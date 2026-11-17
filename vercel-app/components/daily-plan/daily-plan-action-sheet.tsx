@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Camera, CheckCircle2, ExternalLink, Send, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ADMIN_DIALOG_SCROLL_CN } from "@/lib/admin-ui-standards"
 import { appAlert, appPrompt } from "@/lib/app-message"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
 import { hasOfficeStaffScope, isSupervisorRole } from "@/lib/permissions"
 import {
   getStoreActionItems,
@@ -18,6 +19,7 @@ import {
 import { storeActionLabelers } from "@/lib/store-action-i18n"
 import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { cn } from "@/lib/utils"
 
 type T = (k: string) => string
@@ -31,6 +33,7 @@ export function DailyPlanActionSheet(props: {
 }) {
   const { actionId, t, onClose, onChanged } = props
   const { auth } = useAuth()
+  const { lang } = useLang()
   const label = storeActionLabelers(t)
   const fileRef = useRef<HTMLInputElement>(null)
   const [item, setItem] = useState<StoreActionItem | null>(null)
@@ -42,6 +45,14 @@ export function DailyPlanActionSheet(props: {
   const canVerify =
     hasOfficeStaffScope(auth?.role || "", auth?.store || "") || isSupervisorRole(auth?.role || "")
   const me = String(auth?.user || "").trim().toLowerCase()
+
+  const textsToTranslate = useMemo(() => {
+    if (!item) return [] as string[]
+    return [item.title, item.description, item.actionPlan]
+      .map((s) => String(s || "").trim())
+      .filter(Boolean)
+  }, [item])
+  const tr = useTranslatedTextMap(textsToTranslate, lang, { force: true })
 
   useEffect(() => {
     if (actionId == null) {
@@ -119,7 +130,9 @@ export function DailyPlanActionSheet(props: {
     <Dialog open={actionId != null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className={ADMIN_DIALOG_SCROLL_CN}>
         <DialogHeader>
-          <DialogTitle>{item ? `${item.store} · ${item.title}` : t("dp_src_action")}</DialogTitle>
+          <DialogTitle>
+            {item ? `${item.store} · ${tr(item.title) || item.title}` : t("dp_src_action")}
+          </DialogTitle>
         </DialogHeader>
         {loading ? (
           <p className="p-4 text-center text-sm text-muted-foreground">{t("loading")}</p>
@@ -139,9 +152,11 @@ export function DailyPlanActionSheet(props: {
                 {t("dp_act_verifier")} {item.verifierName || "—"}
               </span>
             </div>
-            {item.description ? <p className="whitespace-pre-wrap text-xs">{item.description}</p> : null}
+            {item.description ? (
+              <p className="whitespace-pre-wrap text-xs">{tr(item.description)}</p>
+            ) : null}
             {item.actionPlan ? (
-              <p className="whitespace-pre-wrap rounded bg-muted p-2 text-xs">{item.actionPlan}</p>
+              <p className="whitespace-pre-wrap rounded bg-muted p-2 text-xs">{tr(item.actionPlan)}</p>
             ) : null}
             {item.photoUrls.length > 0 ? (
               <div>

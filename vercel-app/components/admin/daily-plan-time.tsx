@@ -11,7 +11,9 @@ import { applyRoutineEstimate, getDailyPlanTimeSummary, type DailyPlanTimeRow } 
 import { appAlert, appConfirm } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { addBangkokCalendarDays, getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
+import { dailyPlanItemTitle, dailyPlanLabelers, minutesLabel } from "@/lib/daily-plan-i18n"
+import { useLang } from "@/lib/lang-context"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 
 type T = (k: string) => string
 
@@ -19,6 +21,7 @@ type T = (k: string) => string
 const DRIFT_RATIO = 0.3
 
 export function DailyPlanTime({ t }: { t: T }) {
+  const { lang } = useLang()
   const label = dailyPlanLabelers(t)
   const today = getBangkokTodayDateString()
   const [start, setStart] = useState(() => addBangkokCalendarDays(today, -13))
@@ -43,6 +46,23 @@ export function DailyPlanTime({ t }: { t: T }) {
   }, [load])
 
   const filtered = useMemo(() => rows.filter((r) => role === "all" || r.roleScope === role), [rows, role])
+
+  const titlesToTranslate = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const r of filtered) {
+      const raw = String(r.title || "").trim()
+      if (!raw) continue
+      const labeled = dailyPlanItemTitle(raw, t).trim()
+      for (const x of [raw, labeled]) {
+        if (!x || seen.has(x)) continue
+        seen.add(x)
+        out.push(x)
+      }
+    }
+    return out
+  }, [filtered, t])
+  const tr = useTranslatedTextMap(titlesToTranslate, lang, { force: true })
 
   const totals = useMemo(() => {
     const count = filtered.reduce((s, r) => s + r.count, 0)
@@ -187,8 +207,11 @@ export function DailyPlanTime({ t }: { t: T }) {
                       <tr key={`${r.roleScope}|${r.category}|${r.title}`} className="border-b">
                         <td className="p-1.5">{label.role(r.roleScope)}</td>
                         <td className="p-1.5">{label.category(r.category)}</td>
-                        <td className="max-w-[260px] truncate p-1.5" title={r.title}>
-                          {r.title}
+                        <td
+                          className="max-w-[260px] truncate p-1.5"
+                          title={tr(dailyPlanItemTitle(r.title, t))}
+                        >
+                          {tr(dailyPlanItemTitle(r.title, t))}
                         </td>
                         <td className="p-1.5 text-right tabular-nums">{r.count}</td>
                         <td className="p-1.5 text-right tabular-nums">{r.done}</td>

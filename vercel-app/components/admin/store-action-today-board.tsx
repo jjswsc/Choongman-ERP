@@ -14,7 +14,9 @@ import {
   type StoreVisitCoverage,
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
+import { useLang } from "@/lib/lang-context"
 import { addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
+import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { cn } from "@/lib/utils"
 import { StoreActionVisitAddDialog } from "@/components/admin/store-action-visit-add-dialog"
 
@@ -28,6 +30,7 @@ export function StoreActionTodayBoard(props: {
   refreshKey?: number
 }) {
   const { t, canVerify, onOpen, refreshKey } = props
+  const { lang } = useLang()
   const [mineOnly, setMineOnly] = useState(true)
   const [rows, setRows] = useState<StoreActionItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -71,6 +74,13 @@ export function StoreActionTodayBoard(props: {
       { key: "week", title: t("action_today_due_week"), tone: "border-slate-400/50", rows: week },
     ]
   }, [rows, today, weekEnd, t])
+
+  const titlesToTranslate = useMemo(
+    () =>
+      [...new Set(rows.map((r) => String(r.title || "").trim()).filter(Boolean))],
+    [rows]
+  )
+  const tr = useTranslatedTextMap(titlesToTranslate, lang, { force: true })
 
   const visitRank = useMemo(() => {
     const score = new Map<string, { overdue: number; pending: number; today: number }>()
@@ -229,7 +239,7 @@ export function StoreActionTodayBoard(props: {
                     onClick={() => onOpen(r.id)}
                   >
                     <div className="flex justify-between gap-2">
-                      <span className="font-medium">{r.title}</span>
+                      <span className="font-medium">{tr(r.title) || r.title}</span>
                       <span className={cn("tabular-nums", r.overdue && "font-semibold text-red-600")}>
                         {r.dueDate || "—"}
                       </span>
