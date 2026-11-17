@@ -314,6 +314,18 @@ async function translateOpenAiBatch(texts: string[], tl: string): Promise<(strin
               `- Preserve placeholders like __CMTERM_0__ exactly.\n` +
               `- Preserve numbers, currency amounts, dates, and codes.\n` +
               `- Do not add explanations or labels.\n` +
+              (tl === 'my'
+                ? `- Use Myanmar Unicode script only (not Zawgyi, not Latin romanization).\n`
+                : '') +
+              (tl === 'lo'
+                ? `- Use Lao Unicode script only (not Thai look-alikes as a substitute, not Latin romanization).\n`
+                : '') +
+              (tl === 'km'
+                ? `- Use Khmer Unicode script only (not Latin romanization).\n`
+                : '') +
+              (tl === 'th'
+                ? `- For Thai polite endings use ครับ only (never ค่ะ/คะ).\n`
+                : '') +
               `- Reply with ONLY a JSON array of strings, same length and order as the input.`,
           },
           {
