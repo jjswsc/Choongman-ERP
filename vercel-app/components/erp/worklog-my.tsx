@@ -513,7 +513,7 @@ export function WorklogMy({ userName, employeeId }: WorklogMyProps) {
     if (missing.length === 0) return
     let cancelled = false
     const handle = setTimeout(() => {
-      translateTexts(missing, lang)
+      translateTexts(missing, lang, { force: true })
         .then((translated) => {
           if (cancelled) return
           setContentTransMap((prev) => {

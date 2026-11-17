@@ -15,14 +15,14 @@ function stableKey(texts: string[]) {
 
 /**
  * 고정 문자열 목록을 UI 언어로 번역해 lookup (제목·메모 목록 등)
- * @param opts.force 공지·규정 등: 자동번역 OFF / 모바일 토글 없어도 선택 언어로 번역
+ * 회사 기본 ON — opts.force === false 일 때만 스킵
  */
 export function useTranslatedTextMap(
   texts: string[],
   lang: string,
   opts?: { force?: boolean }
 ) {
-  const force = opts?.force === true
+  const force = opts?.force !== false
   const key = stableKey(texts)
   const [map, setMap] = useState<Record<string, string>>({})
   const { enabled } = useAutoTranslate()
@@ -45,7 +45,7 @@ export function useTranslatedTextMap(
       return
     }
     let cancelled = false
-    translateTexts(unique, lang, force ? { force: true } : undefined)
+    translateTexts(unique, lang, { force: true })
       .then((translated) => {
         if (cancelled) return
         const m: Record<string, string> = {}
@@ -60,7 +60,7 @@ export function useTranslatedTextMap(
     return () => {
       cancelled = true
     }
-  }, [shouldTranslate, force, key, lang])
+  }, [shouldTranslate, key, lang])
 
   return useCallback(
     (s: string) => {
@@ -74,22 +74,22 @@ export function useTranslatedTextMap(
 
 /**
  * 입력 중 텍스트를 디바운스 후 선택 언어로 번역 (미리보기용)
+ * 회사 기본 ON — 항상 번역
  */
 export function useDebouncedTranslatedText(text: string, lang: string, debounceMs = 450) {
   const [translated, setTranslated] = useState("")
   const [pending, setPending] = useState(false)
-  const { enabled } = useAutoTranslate()
 
   useEffect(() => {
     const raw = String(text || "").trim()
-    if (!enabled || !raw) {
+    if (!raw) {
       setTranslated("")
       setPending(false)
       return
     }
     setPending(true)
     const id = setTimeout(() => {
-      translateTexts([raw], lang)
+      translateTexts([raw], lang, { force: true })
         .then(([tr]) => {
           setTranslated((tr || raw).trim())
         })
@@ -97,7 +97,7 @@ export function useDebouncedTranslatedText(text: string, lang: string, debounceM
         .finally(() => setPending(false))
     }, debounceMs)
     return () => clearTimeout(id)
-  }, [enabled, text, lang, debounceMs])
+  }, [text, lang, debounceMs])
 
   return { translated, pending }
 }

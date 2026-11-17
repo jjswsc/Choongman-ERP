@@ -5,7 +5,6 @@ import { apiFetchWithOffline } from '../api/fetch-offline'
 import { apiFetch } from '../api/fetch'
 import { jsonAsArray } from '../safe-api-json'
 import { getPettyCashListWithCache } from '../offline/erp-offline'
-import { readAutoTranslateEnabled } from '../auto-translate'
 import type { PaginatedList } from './types'
 
 export interface PettyCashItem {
@@ -157,7 +156,8 @@ export async function translateTexts(
 ): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim()).map((s) => String(s).trim())
   if (filtered.length === 0) return []
-  if (!opts?.force && !readAutoTranslateEnabled()) return filtered
+  // 회사 기본 ON: force:false 명시 시에만 스킵 (토글 OFF여도 표시 번역 유지)
+  if (opts?.force === false) return filtered
   const tl = String(targetLang || 'ko').toLowerCase().slice(0, 2)
 
   const results = new Array<string>(filtered.length)

@@ -268,7 +268,7 @@ export function WorklogApproval({ onPendingChange }: Props) {
           const first = missing[0]!
           const chunk = first.length >= 700 ? [first] : missing.slice(0, 4)
           try {
-            const translated = await translateTexts(chunk, lang)
+            const translated = await translateTexts(chunk, lang, { force: true })
             if (cancelled) return
             const patch: Record<string, string> = {}
             chunk.forEach((txt, i) => {

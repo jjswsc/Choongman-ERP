@@ -126,7 +126,8 @@ export function ErpHeader() {
           variant={autoTranslateEnabled ? "default" : "outline"}
           size="sm"
           className={cn(
-            "hidden gap-1 px-1.5 text-xs sm:inline-flex sm:gap-1.5 sm:px-2",
+            // 모바일에서도 ON 보이게 (기본 ON 정책)
+            "inline-flex gap-0.5 px-1.5 text-xs sm:gap-1.5 sm:px-2",
             pointerCoarse ? "h-10" : "h-8"
           )}
           onClick={() => setAutoTranslateEnabled(!autoTranslateEnabled)}
