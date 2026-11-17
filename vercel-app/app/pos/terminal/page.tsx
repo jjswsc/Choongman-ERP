@@ -295,6 +295,7 @@ import { posOrderHasServerId } from '@/lib/pos-order-server-id'
 import { buildPosPaymentReceiptDocumentHtmlAsync } from '@/lib/pos-payment-receipt-document-html'
 import {
   mergeMemberReceiptFields,
+  hasCompleteMemberReceiptLoyaltyFields,
   pickMemberReceiptFieldsFromApi,
   type PosReceiptMemberSnapshot,
 } from '@/lib/pos-receipt-member-block'
@@ -1191,7 +1192,21 @@ export default function PosTerminalPage() {
         memberPointBalance?: number
       }
     ) => {
-      pendingPaymentReceiptMemberRef.current = pickMemberReceiptFieldsFromApi(res, fallback)
+      const memberId = Math.max(
+        0,
+        Math.trunc(Number(res?.memberId ?? fallback?.memberId ?? 0) || 0)
+      )
+      const apiTier = String(res?.memberTierCode ?? '').trim()
+      const fallbackTier = String(fallback?.memberTierCode ?? '').trim()
+      /** API·카트 모두 등급이 비면 BRONZE — 첫 멤버 연결 직후 빈 등급 줄 방지 */
+      const tierFallback =
+        !apiTier && !fallbackTier && (memberId > 0 || String(fallback?.memberNo ?? res?.memberNo ?? '').trim())
+          ? { memberTierCode: 'BRONZE' }
+          : {}
+      pendingPaymentReceiptMemberRef.current = pickMemberReceiptFieldsFromApi(res, {
+        ...fallback,
+        ...tierFallback,
+      })
       pendingSplitLoyaltyRef.current = Array.isArray(res?.splitLoyalty) ? res.splitLoyalty : []
     },
     []
@@ -4639,8 +4654,14 @@ export default function PosTerminalPage() {
       const { enrichReceiptModalPaymentLabels } = await import('@/lib/pos-receipt-payment-labels')
       const hybridShell =
         typeof window !== 'undefined' && typeof window.cmPosShell?.printHtml === 'function'
-      /** 하이브리드: 회원 API enrich(최대 250ms) 생략 — 결제 직후 스냅샷이면 이미 충분 */
-      const enrichedWithMember = hybridShell ? enriched : await enrichReceiptModalDataWithMember(enriched)
+      /**
+       * 하이브리드: 결제 API 스냅샷에 등급·잔액이 이미 있으면 enrich 생략(인쇄 지연 방지).
+       * 회원번호·적립예정만 있고 등급/잔액이 비면(첫 멤버 연결·콜드 조회) enrich 필수.
+       */
+      const enrichedWithMember =
+        hybridShell && hasCompleteMemberReceiptLoyaltyFields(enriched)
+          ? enriched
+          : await enrichReceiptModalDataWithMember(enriched)
       const enrichedWithPayLabels = await enrichReceiptModalPaymentLabels(enrichedWithMember)
       const receiptHtml = await buildPosPaymentReceiptDocumentHtmlAsync({
         receiptData: enrichedWithPayLabels,

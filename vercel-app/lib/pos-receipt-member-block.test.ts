@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildPaymentReceiptMemberFooterHtml,
   formatMemberTierForReceipt,
+  hasCompleteMemberReceiptLoyaltyFields,
   maskMemberPhoneForReceipt,
   memberReceiptFieldsFromMemberRow,
   pickMemberReceiptFieldsFromApi,
@@ -78,5 +79,27 @@ describe('pos-receipt-member-block', () => {
       memberPointEarned: 1.3,
       memberPointBalance: 42,
     })
+  })
+
+  it('treats member-linked receipt without tier/balance as incomplete (needs enrich)', () => {
+    expect(
+      hasCompleteMemberReceiptLoyaltyFields({
+        memberNo: 'M011733',
+        memberPointEarned: 0.89,
+      })
+    ).toBe(false)
+    expect(
+      hasCompleteMemberReceiptLoyaltyFields({
+        memberNo: 'M011733',
+        memberTierCode: 'BRONZE',
+        memberPointBalance: 41.38,
+        memberPointEarned: 0.89,
+      })
+    ).toBe(true)
+    expect(
+      hasCompleteMemberReceiptLoyaltyFields({
+        memberPointEarned: 0,
+      })
+    ).toBe(true)
   })
 })

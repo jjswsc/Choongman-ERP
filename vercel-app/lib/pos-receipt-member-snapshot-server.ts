@@ -32,11 +32,13 @@ export async function loadPosOrderMemberReceiptSnapshot(params: {
       return { pointEarned, memberId }
     }
     const bal = normalizeMemberPoints(m.point_balance)
+    /** DB tier_code 비어 있어도 영수증에는 BRONZE 표기(첫 연결·미재계산 회원) */
+    const tierCode = String(m.tier_code ?? '').trim().toUpperCase() || 'BRONZE'
     return {
       memberId,
       memberNo: String(m.member_no ?? '').trim() || undefined,
       memberPhone: String(m.phone ?? '').trim() || undefined,
-      memberTierCode: String(m.tier_code ?? '').trim() || undefined,
+      memberTierCode: tierCode === 'MEMBER' ? 'BRONZE' : tierCode,
       pointEarned,
       memberPointBalance: Math.max(0, normalizeMemberPoints(bal - pointEarned)),
     }

@@ -110,6 +110,26 @@ export function hasReceiptMemberDetails(receiptData: ReceiptModalData): boolean 
   )
 }
 
+/**
+ * 결제 영수증에 등급·잔여포인트가 이미 채워졌는지.
+ * 하이브리드가 enrich를 생략해도 되는지 판별할 때 사용.
+ * (회원번호·적립예정만 있고 등급/잔액이 비면 false — 첫 멤버 연결 직후 레이스 대비)
+ */
+export function hasCompleteMemberReceiptLoyaltyFields(
+  receiptData: Pick<
+    ReceiptModalData,
+    'memberId' | 'memberNo' | 'memberTierCode' | 'memberPointBalance' | 'memberPointEarned'
+  >
+): boolean {
+  const hasMemberLink =
+    (Number(receiptData.memberId) || 0) > 0 || Boolean(String(receiptData.memberNo ?? '').trim())
+  if (!hasMemberLink) return true
+  const hasTier = Boolean(String(receiptData.memberTierCode ?? '').trim())
+  const bal = receiptData.memberPointBalance
+  const hasBalance = bal != null && typeof bal === 'number' && Number.isFinite(bal)
+  return hasTier && hasBalance
+}
+
 type TrFn = (key: string, fallback: string) => string
 
 /**

@@ -2,6 +2,7 @@ import type { ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import type { PosOrder } from '@/lib/api-client'
 import { getMembers, getPosOrders, apiFetch } from '@/lib/api-client'
 import {
+  hasCompleteMemberReceiptLoyaltyFields,
   memberReceiptFieldsFromMemberRow,
   mergeMemberReceiptFields,
 } from '@/lib/pos-receipt-member-block'
@@ -15,9 +16,15 @@ type MemberRowLite = {
   pointBalance?: number
 }
 
-const MEMBER_ENRICH_TIMEOUT_MS = 250
+/** 주문 point_earned 재조회 — 짧게 (이미 있으면 스킵) */
+const POINT_EARNED_ENRICH_TIMEOUT_MS = 250
 /** Realtime 결제 직후 point_earned 미반영 레이스 완화 */
 const POINT_EARNED_REFETCH_GAP_MS = 180
+/**
+ * 회원 등급·잔액 조회.
+ * 250ms는 콜드/매장망에서 자주 타임아웃 → 첫 멤버 연결 직후 영수증에 등급·잔액이 비는 원인.
+ */
+const MEMBER_PROFILE_ENRICH_TIMEOUT_MS = 1200
 
 async function withTimeout<T>(job: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
   const ms = Math.max(1, Math.trunc(Number(timeoutMs) || 0))
@@ -81,20 +88,28 @@ async function resolveOrderPointEarnedForReceipt(
     }
   }
 
-  const first = await withTimeout<PointEarnedFetchResult>(fetchEarned(), MEMBER_ENRICH_TIMEOUT_MS, {
-    earned: 0,
-    found: false,
-  })
+  const first = await withTimeout<PointEarnedFetchResult>(
+    fetchEarned(),
+    POINT_EARNED_ENRICH_TIMEOUT_MS,
+    {
+      earned: 0,
+      found: false,
+    }
+  )
   if (first.earned > 0) return first.earned
   /** 주문을 읽었고 적립이 0이면 레이스가 아님 — 재시도로 인쇄를 늦추지 않음 */
   if (first.found) return 0
 
   /** 타임아웃·미조회: 결제 Realtime → 적립 반영 직전 인쇄 레이스 완화 */
   await sleep(POINT_EARNED_REFETCH_GAP_MS)
-  const second = await withTimeout<PointEarnedFetchResult>(fetchEarned(), MEMBER_ENRICH_TIMEOUT_MS, {
-    earned: 0,
-    found: false,
-  })
+  const second = await withTimeout<PointEarnedFetchResult>(
+    fetchEarned(),
+    POINT_EARNED_ENRICH_TIMEOUT_MS,
+    {
+      earned: 0,
+      found: false,
+    }
+  )
   return second.earned
 }
 
@@ -115,20 +130,23 @@ export async function enrichReceiptModalDataWithMember(
   if (!memberId && !memberNo) {
     return pointEarned > 0 ? { ...data, memberPointEarned: pointEarned } : data
   }
-  const hasDetail =
-    String(data.memberNo ?? '').trim() &&
-    String(data.memberTierCode ?? '').trim() &&
-    data.memberPointBalance != null &&
-    roundMemberPointsEarn(data.memberPointEarned) > 0
-  if (hasDetail) return withIds
+  if (hasCompleteMemberReceiptLoyaltyFields(withIds)) return withIds
 
   try {
     let match: MemberRowLite | null = null
     if (memberId > 0) {
-      match = await withTimeout(fetchMemberById(memberId), MEMBER_ENRICH_TIMEOUT_MS, null)
+      match = await withTimeout(
+        fetchMemberById(memberId),
+        MEMBER_PROFILE_ENRICH_TIMEOUT_MS,
+        null
+      )
     }
     if (!match && memberNo) {
-      const list = await withTimeout(getMembers({ q: memberNo, limit: 30 }), MEMBER_ENRICH_TIMEOUT_MS, [])
+      const list = await withTimeout(
+        getMembers({ q: memberNo, limit: 30 }),
+        MEMBER_PROFILE_ENRICH_TIMEOUT_MS,
+        []
+      )
       match =
         (memberId > 0 ? list.find((row) => Number(row.id) === memberId) : undefined) ||
         list.find((row) => String(row.memberNo || '').trim() === memberNo) ||
