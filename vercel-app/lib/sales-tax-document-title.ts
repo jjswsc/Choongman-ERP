@@ -2,6 +2,9 @@
  * 미수금 Tax Invoice 인쇄 제목.
  * 미수(미수금) → Tax Invoice/Receipt, 수금 완료 → Receipt.
  * 문서번호(IV.YYYYMMDD-NNN)·override 종류(tax)는 제목과 별개로 유지한다.
+ *
+ * 회계 청구 PO도 동일하게 수금 완료 시 Receipt
+ * (미수·승인만 = Invoice/Tax invoice).
  */
 
 export const SALES_TAX_INVOICE_TITLE = "Tax Invoice/Receipt"
@@ -13,11 +16,12 @@ export type SalesTaxPrintRow = {
   id?: number
   receive_checked?: boolean
   bank_transaction_id?: number | null
+  amount?: number | null
   ref_type?: string
   ref_id?: number
 }
 
-/** 수금확인 또는 통장 미수 연결이면 수금 완료 */
+/** 수금확인 또는 통장·선수금 Receive 연결이면 수금 완료 */
 export function isReceivableAccrualCollected(
   row: SalesTaxPrintRow,
   siblings: SalesTaxPrintRow[] = []
@@ -26,16 +30,22 @@ export function isReceivableAccrualCollected(
   if (Number(row.bank_transaction_id || 0) > 0) return true
   const accrualId = Number(row.id || 0)
   if (!(accrualId > 0)) return false
-  return siblings.some(
-    (s) =>
-      String(s.ref_type || "") === "Receive" &&
-      Number(s.ref_id || 0) === accrualId &&
-      Number(s.bank_transaction_id || 0) > 0
-  )
+  return siblings.some((s) => {
+    if (String(s.ref_type || "") !== "Receive") return false
+    if (Number(s.ref_id || 0) !== accrualId) return false
+    // 통장 연결 Receive, 또는 선수금·차액 상계(bank_transaction_id 없음) Receive
+    if (Number(s.bank_transaction_id || 0) > 0) return true
+    return Number(s.amount || 0) < 0
+  })
 }
 
 export function salesTaxPrintDocumentType(collected: boolean): string {
   return collected ? SALES_RECEIPT_TITLE : SALES_TAX_INVOICE_TITLE
+}
+
+/** 회계 청구 PO 인쇄·엑셀 제목 — 수금 완료 시 Receipt (물류 미수금과 동일) */
+export function poAccountingPrintDocumentType(collected: boolean): string {
+  return collected ? SALES_RECEIPT_TITLE : SALES_OUTBOUND_INVOICE_TITLE
 }
 
 /** invoice-print override·순번 예약 — 제목이 Receipt여도 tax 문서로 본다 */

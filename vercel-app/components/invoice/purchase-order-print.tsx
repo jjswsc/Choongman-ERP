@@ -79,7 +79,10 @@ export function isPoApprovedStatus(status?: string): boolean {
   return s === "approved"
 }
 
-/** 회계 청구 PO: 승인 + 수금(인보이스) 확인 시 인쇄 제목을 Tax Invoice/Receipt 로 (물류 미수금과 동일) */
+/**
+ * 회계 청구 PO: 승인 + 수금(인보이스) 확인 시 인쇄 제목을 Receipt 로
+ * (물류 미수금 수금 완료와 동일 — poAccountingPrintDocumentType).
+ */
 export function isPoAccountingTaxInvoiceMode(
   accountingBillToStyle?: boolean,
   status?: string,
@@ -140,7 +143,7 @@ export function PurchaseOrderPrint({
     poFormatBadgeExternal?: string
     /** 회계 PO 인쇄: 법인명 보조 라벨 */
     poPrintLegalEntity?: string
-    /** 회계 청구: Draft / Approved / Tax Invoice/Receipt 뱃지 (외부 양식 없을 때) */
+    /** 회계 청구: Draft / Approved / Receipt 뱃지 (외부 양식 없을 때) */
     poHeaderBadge?: string
     poWht3LineLabel?: string
     poNetAfterWht?: string

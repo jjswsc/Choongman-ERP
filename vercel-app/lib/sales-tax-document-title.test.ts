@@ -5,6 +5,7 @@ import {
   SALES_TAX_INVOICE_TITLE,
   isReceivableAccrualCollected,
   isSalesTaxInvoicePrintDoc,
+  poAccountingPrintDocumentType,
   salesTaxPrintDocumentType,
 } from "./sales-tax-document-title"
 
@@ -25,6 +26,14 @@ describe("isReceivableAccrualCollected", () => {
     ).toBe(true)
   })
 
+  it("treats store-credit Receive sibling (no bank tx) as collected", () => {
+    expect(
+      isReceivableAccrualCollected({ id: 10, receive_checked: false }, [
+        { id: 22, ref_type: "Receive", ref_id: 10, bank_transaction_id: null, amount: -500 },
+      ])
+    ).toBe(true)
+  })
+
   it("does not treat unpaid accrual as collected", () => {
     expect(
       isReceivableAccrualCollected({ id: 10, receive_checked: false }, [
@@ -38,6 +47,13 @@ describe("salesTaxPrintDocumentType", () => {
   it("uses Receipt after collection and Tax Invoice/Receipt while unpaid", () => {
     expect(salesTaxPrintDocumentType(true)).toBe(SALES_RECEIPT_TITLE)
     expect(salesTaxPrintDocumentType(false)).toBe(SALES_TAX_INVOICE_TITLE)
+  })
+})
+
+describe("poAccountingPrintDocumentType", () => {
+  it("uses Receipt after collection and Invoice/Tax invoice while unpaid", () => {
+    expect(poAccountingPrintDocumentType(true)).toBe(SALES_RECEIPT_TITLE)
+    expect(poAccountingPrintDocumentType(false)).toBe(SALES_OUTBOUND_INVOICE_TITLE)
   })
 })
 
