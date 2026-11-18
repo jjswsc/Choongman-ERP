@@ -40,6 +40,7 @@ import {
   purchaseTaxReviewIsProblem,
   thaiTinChecksumOk,
   type ExtractedPurchaseTaxInvoiceFields,
+  type PurchaseTaxInvoiceSource,
   type PurchaseTaxReviewFlag,
 } from "@/lib/purchase-tax-invoice-core"
 import {
@@ -138,6 +139,8 @@ type FormState = {
   vatAmount: string
   /** 수기: 발행 월 ≠ 조회 월일 때 조회 월로 ยื่นข้ามเดือน */
   claimInFilingMonth?: boolean
+  /** 등록함 수정 시 기존 출처(PDF 등) 유지 */
+  source?: PurchaseTaxInvoiceSource
 }
 
 type ReviewRow = FormState & {
@@ -358,6 +361,9 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   const [previewBusy, setPreviewBusy] = React.useState(false)
   const [pp30Vat, setPp30Vat] = React.useState<{ outputVat: number; inputVat: number } | null>(null)
   const [saveNotice, setSaveNotice] = React.useState("")
+  const formCardRef = React.useRef<HTMLDivElement>(null)
+  const [formFlash, setFormFlash] = React.useState(false)
+  const formFlashTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const storeSelectOptions = React.useMemo(() => {
     const extra = [form.storeName, fallbackStore].map((s) => String(s || "").trim()).filter(Boolean)
@@ -367,6 +373,12 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   React.useEffect(() => {
     writeReviewDraft(reviewRows)
   }, [reviewRows])
+
+  React.useEffect(() => {
+    return () => {
+      if (formFlashTimerRef.current) clearTimeout(formFlashTimerRef.current)
+    }
+  }, [])
 
   React.useEffect(() => {
     if (reviewRows.length) return
@@ -582,6 +594,7 @@ export function TaxFilingPurchaseTaxInvoicesTab({
   )
 
   const fillFromRow = (r: PurchaseTaxInvoiceDto) => {
+    const src = String(r.source || "").trim()
     setForm({
       id: r.id,
       storeName: r.storeName,
@@ -595,6 +608,17 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       claimInFilingMonth:
         purchaseTaxDocMonthMismatch(r.docDate, r.taxMonth) &&
         String(r.taxMonth || "").slice(0, 7) === String(filingYearMonth || "").slice(0, 7),
+      source:
+        src === "pdf" || src === "inbound_batch" || src === "manual"
+          ? (src as PurchaseTaxInvoiceSource)
+          : "manual",
+    })
+    // 검수·PP.30 카드가 폼 아래에 길면 「แก้ไข」만 누르고 반응이 없어 보임 → 상단 폼으로 이동
+    if (formFlashTimerRef.current) clearTimeout(formFlashTimerRef.current)
+    setFormFlash(true)
+    formFlashTimerRef.current = setTimeout(() => setFormFlash(false), 1800)
+    requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
     })
   }
 
@@ -616,7 +640,8 @@ export function TaxFilingPurchaseTaxInvoicesTab({
         sellerBranch: formatSellerBranch(form.sellerBranch),
         netAmount: Number(form.netAmount) || 0,
         vatAmount: Number(form.vatAmount) || 0,
-        source: "manual",
+        // 등록함에서 고칠 때는 PDF/입고 출처를 유지. 신규 수기만 manual.
+        source: form.id ? form.source || "manual" : "manual",
       })
       if (!res.success) {
         setError(
@@ -1505,7 +1530,14 @@ export function TaxFilingPurchaseTaxInvoicesTab({
       {saveNotice ? <div className="text-sm text-emerald-700 dark:text-emerald-400">{saveNotice}</div> : null}
 
       {canWrite ? (
-        <Card>
+        <Card
+          ref={formCardRef}
+          id="pti-edit-form"
+          className={cn(
+            "scroll-mt-24 transition-[box-shadow,ring-color] duration-300",
+            formFlash && "ring-2 ring-primary shadow-md"
+          )}
+        >
           <CardContent className="pt-4 pb-4 space-y-3">
             <div className="text-sm font-medium">{form.id ? t("ptiEdit") : t("ptiAdd")}</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1818,13 +1850,23 @@ export function TaxFilingPurchaseTaxInvoicesTab({
                   <td className="p-2 text-xs text-muted-foreground">
                     {r.source === "inbound_batch" ? t("ptiSourceInbound") : r.source === "pdf" ? t("ptiSourcePdf") : t("ptiSourceManual")}
                   </td>
-                  <td className="p-2 whitespace-nowrap">
+                  <td className="relative z-10 p-2 whitespace-nowrap">
                     {canWrite ? (
                       <>
-                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => fillFromRow(r)}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="relative z-10 h-7 px-2"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            fillFromRow(r)
+                          }}
+                        >
                           {t("ptiEdit")}
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => void onDelete(r.id)}>
+                        <Button type="button" variant="ghost" size="sm" className="relative z-10 h-7 px-2 text-destructive" onClick={() => void onDelete(r.id)}>
                           {t("ptiDelete")}
                         </Button>
                       </>
