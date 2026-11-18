@@ -20,10 +20,12 @@ import {
   getMyHrPolicies,
   confirmNoticeRead,
   confirmHrPolicyRead,
+  translateTexts,
   type NoticeItem,
   type HrPolicyListItem,
 } from "@/lib/api-client"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
+import { parseHrPolicyContent } from "@/lib/hr-policy-doc-format"
 import { bangkokInclusivePeriod, bangkokTodayYmd } from "@/lib/bangkok-date"
 import { MY_NOTICES_DB_FETCH_LIMIT } from "@/lib/my-notices-query"
 import { isNoticeReadStatus } from "@/lib/notice-read-status"
@@ -84,13 +86,39 @@ export function HomeTab() {
     () => notices.flatMap((n) => [n.title, n.content]),
     [notices]
   )
-  const hrTexts = useMemo(
-    () => hrPolicies.flatMap((h) => [h.title, h.content]),
-    [hrPolicies]
-  )
+  /** 목록은 제목만 선번역 — 긴 규정 본문까지 일괄 요청하면 잘림·타임아웃으로 원문이 남음 */
+  const hrTitleTexts = useMemo(() => hrPolicies.map((h) => h.title), [hrPolicies])
   /** 공지·규정은 선택 언어로 항상 번역 (모바일엔 자동번역 토글이 없음) */
   const getTrans = useTranslatedTextMap(noticeTexts, lang, { force: true })
-  const getHrTrans = useTranslatedTextMap(hrTexts, lang, { force: true })
+  const getHrTitleTrans = useTranslatedTextMap(hrTitleTexts, lang, { force: true })
+  const [hrBodyTransMap, setHrBodyTransMap] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    if (hrExpandedId == null) return
+    const expandedId = hrExpandedId
+    const row = hrPolicies.find((h) => h.id === expandedId)
+    if (!row) return
+    const body = parseHrPolicyContent(String(row.content || "")).body.trim()
+    if (!body) {
+      setHrBodyTransMap((m) => ({ ...m, [expandedId]: "" }))
+      return
+    }
+    // 이전 언어 잔상 제거 후 로딩(빈 문자열 ≠ 미요청: undefined만 로딩)
+    setHrBodyTransMap((m) => {
+      const next = { ...m }
+      delete next[expandedId]
+      return next
+    })
+    let cancelled = false
+    void translateTexts([body], lang, { force: true }).then((outs) => {
+      if (cancelled) return
+      const out = (outs[0] || body).trim() || body
+      setHrBodyTransMap((m) => ({ ...m, [expandedId]: out }))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [hrExpandedId, hrPolicies, lang])
 
   const statusParam = statusFilter === 'Unread' ? 'unread' : statusFilter === 'Read' ? 'read' : 'all'
   const hrStatusParam = hrStatusFilter === 'Unread' ? 'unread' : hrStatusFilter === 'Read' ? 'read' : 'all'
@@ -610,6 +638,8 @@ export function HomeTab() {
               {hrPolicies.map((h) => {
                 const isExpanded = hrExpandedId === h.id
                 const isUnread = !isNoticeReadStatus(h.status) || h.needsReconfirm
+                const hrParts = parseHrPolicyContent(String(h.content || ""))
+                const bodyTranslated = hrBodyTransMap[h.id]
                 return (
                   <div
                     key={h.id}
@@ -629,7 +659,7 @@ export function HomeTab() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">
-                          {getHrTrans(h.title)}
+                          {getHrTitleTrans(h.title)}
                           {h.effectiveAt ? (
                             <span className="ml-1 text-xs text-muted-foreground">· {h.effectiveAt}</span>
                           ) : null}
@@ -645,8 +675,22 @@ export function HomeTab() {
                     </button>
                     {isExpanded && (
                       <div className="border-t border-border/60 bg-muted/20 px-3 py-3">
+                        {hrParts.docRef ? (
+                          <p className="mb-1 text-[11px] text-muted-foreground font-mono">
+                            {t("hrPolicyDocRef")}: {hrParts.docRef}
+                          </p>
+                        ) : null}
+                        {hrParts.recipientTo ? (
+                          <p className="mb-2 text-[11px] text-muted-foreground">
+                            {t("hrPolicyDocRecipientLine")}: {hrParts.recipientTo}
+                          </p>
+                        ) : null}
                         <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
-                          {h.content ? getHrTrans(h.content) : "—"}
+                          {hrParts.body.trim()
+                            ? bodyTranslated != null
+                              ? bodyTranslated || "—"
+                              : t("loading")
+                            : "—"}
                         </p>
                         {Array.isArray(h.attachments) && h.attachments.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-2">

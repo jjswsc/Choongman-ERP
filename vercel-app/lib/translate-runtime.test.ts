@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  chunkTextByParagraphs,
   normalizeTranslateTargetLang,
   parseOpenAiTranslatedArray,
   targetLangLabel,
@@ -33,5 +34,15 @@ describe('translate-runtime openai helpers', () => {
   it('extracts JSON array from surrounding prose', () => {
     const raw = 'Here you go:\n["ok","done"]\nThanks'
     expect(parseOpenAiTranslatedArray(raw, 2)).toEqual(['ok', 'done'])
+  })
+
+  it('chunks long HR-style text on paragraph boundaries', () => {
+    const short = 'hello'
+    expect(chunkTextByParagraphs(short, 100)).toEqual(['hello'])
+    const para = `${'가나다라마바사'.repeat(50)}\n\n${'ABC DEF '.repeat(80)}`
+    const parts = chunkTextByParagraphs(para, 300)
+    expect(parts.length).toBeGreaterThan(1)
+    expect(parts.every((p) => p.length > 0)).toBe(true)
+    expect(parts.join('').replace(/\s+/g, '')).toBe(para.replace(/\s+/g, ''))
   })
 })

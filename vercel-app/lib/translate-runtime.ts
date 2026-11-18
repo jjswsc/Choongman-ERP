@@ -75,6 +75,8 @@ const OPENAI_BATCH_MAX = 12
 const OPENAI_BATCH_CHARS = 2800
 /** 이보다 긴 단건은 OpenAI 배치에 섞지 않고 단독 처리 */
 const OPENAI_SOLO_CHARS = 700
+/** 단독 장문(규정·공지)은 문단 단위로 나눠 OpenAI 호출 — JSON·max_tokens 절단 방지 */
+const OPENAI_CHUNK_CHARS = 2200
 
 type PendingTranslate = {
   index: number
@@ -225,6 +227,24 @@ function chunkText(text: string, size: number): string[] {
   return parts
 }
 
+/** 문단·줄 경계를 우선해 장문을 나눔 (규정·공지 OpenAI용) */
+export function chunkTextByParagraphs(text: string, size: number): string[] {
+  const src = String(text || '')
+  if (!src) return []
+  if (src.length <= size) return [src]
+  const parts: string[] = []
+  let rest = src
+  while (rest.length > size) {
+    const window = rest.slice(0, size)
+    let cut = Math.max(window.lastIndexOf('\n\n'), window.lastIndexOf('\n'), window.lastIndexOf(' '))
+    if (cut < Math.floor(size * 0.4)) cut = size
+    parts.push(rest.slice(0, cut))
+    rest = rest.slice(cut).replace(/^\n+/, '')
+  }
+  if (rest) parts.push(rest)
+  return parts
+}
+
 function openaiConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim())
 }
@@ -302,14 +322,14 @@ function splitOpenAiBatches(texts: string[]): string[][] {
   return batches
 }
 
-async function translateOpenAiBatch(texts: string[], tl: string): Promise<(string | null)[]> {
+async function translateOpenAiBatchOnce(texts: string[], tl: string): Promise<(string | null)[]> {
   const apiKey = process.env.OPENAI_API_KEY?.trim()
   if (!apiKey || texts.length === 0) return texts.map(() => null)
 
   const model = openaiTranslateModel()
   const langName = targetLangLabel(tl)
   // 태/미얀마/라오/크메르 → 한국어 등은 출력·JSON 오버헤드가 커서 여유를 둠
-  const maxTokens = Math.min(8000, Math.max(512, Math.ceil(texts.join('\n').length * 2.2) + 160))
+  const maxTokens = Math.min(12000, Math.max(512, Math.ceil(texts.join('\n').length * 2.4) + 200))
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -326,12 +346,13 @@ async function translateOpenAiBatch(texts: string[], tl: string): Promise<(strin
           {
             role: 'system',
             content:
-              `You translate short staff notes for a Thailand restaurant franchise ERP.\n` +
+              `You translate staff notes and HR policy / company notice text for a Thailand restaurant franchise ERP.\n` +
               `Translate each string into ${langName}.\n` +
               `Rules:\n` +
-              `- Keep meaning natural for store employees.\n` +
+              `- Keep meaning accurate and natural for store employees.\n` +
+              `- For formal HR rules, keep article structure (e.g. 제1조 / ข้อ 1 / Article 1) and markdown headings.\n` +
               `- Preserve placeholders like __CMTERM_0__ exactly.\n` +
-              `- Preserve numbers, currency amounts, dates, and codes.\n` +
+              `- Preserve numbers, currency amounts, dates, codes, and person names when unclear.\n` +
               `- Do not add explanations or labels.\n` +
               (tl === 'my'
                 ? `- Use Myanmar Unicode script only (not Zawgyi, not Latin romanization).\n`
@@ -374,6 +395,31 @@ async function translateOpenAiBatch(texts: string[], tl: string): Promise<(strin
     console.warn('translate openai:', e)
     return texts.map(() => null)
   }
+}
+
+async function translateOpenAiLongSolo(text: string, tl: string): Promise<string | null> {
+  const chunks = chunkTextByParagraphs(text, OPENAI_CHUNK_CHARS)
+  if (chunks.length <= 1) {
+    const [one] = await translateOpenAiBatchOnce([text], tl)
+    return one
+  }
+  const outs: string[] = []
+  for (const chunk of chunks) {
+    const [part] = await translateOpenAiBatchOnce([chunk], tl)
+    if (part == null) return null
+    outs.push(part)
+  }
+  const joined = outs.join('\n\n').replace(/\n{3,}/g, '\n\n')
+  if (translationLooksFailed(text, joined, tl)) return null
+  return joined
+}
+
+async function translateOpenAiBatch(texts: string[], tl: string): Promise<(string | null)[]> {
+  if (texts.length === 1 && (texts[0] || '').length > OPENAI_CHUNK_CHARS) {
+    const solo = await translateOpenAiLongSolo(texts[0]!, tl)
+    return [solo]
+  }
+  return translateOpenAiBatchOnce(texts, tl)
 }
 
 async function translateGoogleChunk(text: string, tl: string): Promise<string | null> {

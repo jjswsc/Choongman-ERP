@@ -12,7 +12,8 @@ import { getVerifiedAuth } from '@/lib/verify-auth'
 import { translateTextsRuntime } from '@/lib/translate-runtime'
 
 const MAX_TEXTS = 40
-const MAX_CHARS = 5000
+/** 인사 규정·공지 본문이 5천자를 넘는 경우가 있음(잘리면 번역이 중간에 끊김) */
+const MAX_CHARS = 25000
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
