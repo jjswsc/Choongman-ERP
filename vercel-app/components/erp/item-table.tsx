@@ -59,6 +59,8 @@ export interface ItemTableProps {
   setCategoryFilter: (v: string) => void
   outboundFilter: string
   setOutboundFilter: (v: string) => void
+  usageFilter: "active" | "unused" | "all"
+  setUsageFilter: (v: "active" | "unused" | "all") => void
   onSearch: () => void
   onEdit: (product: Product) => void
   onToggleOrderDisabled?: (product: Product) => void | Promise<void>
@@ -76,6 +78,8 @@ export function ItemTable({
   setCategoryFilter,
   outboundFilter,
   setOutboundFilter,
+  usageFilter,
+  setUsageFilter,
   onSearch,
   onEdit,
   onToggleOrderDisabled,
@@ -126,6 +130,19 @@ export function ItemTable({
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={usageFilter}
+          onValueChange={(v) => setUsageFilter(v as "active" | "unused" | "all")}
+        >
+          <SelectTrigger className="h-9 w-36 text-xs" title={t("itemsUsageFilter")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">{t("itemsUsageActive")}</SelectItem>
+            <SelectItem value="unused">{t("itemsUsageSuspended")}</SelectItem>
+            <SelectItem value="all">{t("itemsUsageAll")}</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="relative flex-1 min-w-[120px]">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
@@ -161,12 +178,27 @@ export function ItemTable({
                   <p className="font-mono text-[10px] text-primary">{product.code}</p>
                   <p className={cn("truncate text-sm font-medium", product.orderDisabled && "line-through text-muted-foreground")}>
                     {product.name}
+                    {product.orderDisabled ? (
+                      <span className="ml-1.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground align-middle">
+                        {t("itemsUnusedBadge")}
+                      </span>
+                    ) : null}
                   </p>
                   {product.spec ? <p className="truncate text-[11px] text-muted-foreground">{product.spec}</p> : null}
                 </div>
-                <p className={cn("shrink-0 text-sm font-semibold", ADMIN_NUMERIC_CN)}>
-                  {product.price > 0 ? product.price.toLocaleString() : "-"}
-                </p>
+                <div className="shrink-0 text-right">
+                  <p className={cn("text-sm font-semibold", ADMIN_NUMERIC_CN)}>
+                    {product.price > 0 ? product.price.toLocaleString() : "-"}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">{t("itemsPriceVatExclShort") || "VAT제외"}</p>
+                  <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+                    {product.taxType === "exempt"
+                      ? t("itemsExempt")
+                      : product.taxType === "zero"
+                        ? t("itemsZero")
+                        : t("itemsTaxable")}
+                  </p>
+                </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {onToggleOrderDisabled != null && (
@@ -198,7 +230,9 @@ export function ItemTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[160px] text-center">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center" title={t("itemsListPriceCostBasis")}>{t("itemsColPrice")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center" title={t("itemsListPriceCostBasis")}>
+                {t("itemsColPriceVatExcl") || "판매가(VAT제외)"}
+              </th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
           </thead>
@@ -276,9 +310,26 @@ export function ItemTable({
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <span className={cn("text-xs text-foreground", ADMIN_NUMERIC_CN)}>
-                      {product.price > 0 ? product.price.toLocaleString() : "-"}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={cn("text-xs text-foreground", ADMIN_NUMERIC_CN)}>
+                        {product.price > 0 ? product.price.toLocaleString() : "-"}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground">{t("itemsPriceVatExclShort") || "VAT제외"}</span>
+                      <span
+                        className={cn(
+                          "inline-flex rounded px-1 py-0.5 text-[9px] font-semibold",
+                          product.taxType === "exempt" || product.taxType === "zero"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                            : "bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+                        )}
+                      >
+                        {product.taxType === "exempt"
+                          ? t("itemsExempt")
+                          : product.taxType === "zero"
+                            ? t("itemsZero")
+                            : t("itemsTaxable")}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-center gap-1">

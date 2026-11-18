@@ -8172,7 +8172,7 @@ orderItemQty: 'Qty',
   helpSum_admin_items:
     'Manage item basics and item price/cost, and review or register future price schedules from the price-history area.',
   helpHow_admin_items:
-    '① Use the list tab to query, add, and edit items. Do not delete items; mark them Unused (pause order) instead.\n② Use Price history to review past changes.\n③ In Price history > Price schedule, set Bangkok-time effective datetime and target price.\n④ Monitor pending/applied/cancelled status and cancel pending records when needed.\n⑤ Use Category Settings (top right) to add or edit stock item categories. Item registration uses this list.\n⑥ Use Outbound Settings (top right) to add or edit company warehouses. Item outbound location uses this list and is not limited to Choongman defaults (Jidubang / S&J).',
+    '① Use the list tab to query, add, and edit items. Do not delete items; mark them Suspended (pause order) instead. The usage filter defaults to In use (hides suspended); choose Suspended or All to see them again.\n② Use Price history to review past changes.\n③ In Price history > Price schedule, set Bangkok-time effective datetime and target price.\n④ Monitor pending/applied/cancelled status and cancel pending records when needed.\n⑤ Use Category Settings (top right) to add or edit stock item categories. Item registration uses this list.\n⑥ Use Outbound Settings (top right) to add or edit company warehouses. Item outbound location uses this list and is not limited to Choongman defaults (Jidubang / S&J).',
   helpSum_admin_vendors:
     'Master for suppliers, customers, and related parties. It is the source for inbound, purchase orders, expenses, and store legal-entity links. How each list column is used is in the steps below. On Omni, Manager has the same access as Officer.',
   helpHow_admin_vendors:
@@ -8493,7 +8493,11 @@ orderItemQty: 'Qty',
   itemsBtnDelete: 'Delete',
   itemsOrderDisabled: 'Pause order',
   itemsOrderResume: 'Resume',
-  itemsUnusedBadge: 'Unused',
+  itemsUnusedBadge: 'Suspended',
+  itemsUsageFilter: 'Usage status',
+  itemsUsageActive: 'In use',
+  itemsUsageSuspended: 'Suspended',
+  itemsUsageAll: 'All',
   itemsBtnClose: 'Close',
   itemsTotal: 'Total',
   itemsTotalCount: 'items',

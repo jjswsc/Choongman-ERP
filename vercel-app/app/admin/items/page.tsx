@@ -77,6 +77,8 @@ export default function ItemsPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [outboundFilter, setOutboundFilter] = React.useState("all")
+  /** 기본: 사용중만. 사용중지·전체는 필터에서 선택 */
+  const [usageFilter, setUsageFilter] = React.useState<"active" | "unused" | "all">("active")
   const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
   const [categorySettingsOpen, setCategorySettingsOpen] = React.useState(false)
@@ -464,7 +466,10 @@ export default function ItemsPage() {
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter
       const pLoc = (p.outboundLocation || "").trim() || "(미지정)"
       const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter
-      return matchTerm && matchCategory && matchOutbound
+      const matchUsage =
+        usageFilter === "all" ||
+        (usageFilter === "unused" ? !!p.orderDisabled : !p.orderDisabled)
+      return matchTerm && matchCategory && matchOutbound && matchUsage
     })
     // 엑셀(ไฟล์เช็คสต๊อก) 엑셀에 나온 카테고리 순 → 같은 카테고리 안에서는 품목 sort_order → 코드 순
     return [...filtered].sort((a, b) => {
@@ -480,7 +485,7 @@ export default function ItemsPage() {
       if (oa !== ob) return oa - ob
       return compareByCode(a.code, b.code)
     })
-  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter, allCategories])
+  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter, usageFilter, allCategories])
 
   const categories = React.useMemo(() => {
     const fromProducts = new Set(products.map((p) => p.category).filter(Boolean))
@@ -616,6 +621,8 @@ export default function ItemsPage() {
             setCategoryFilter={setCategoryFilter}
             outboundFilter={outboundFilter}
             setOutboundFilter={setOutboundFilter}
+            usageFilter={usageFilter}
+            setUsageFilter={setUsageFilter}
             onSearch={handleSearch}
             onEdit={handleEdit}
             onToggleOrderDisabled={canToggleOrderPaused ? handleToggleOrderDisabled : undefined}
