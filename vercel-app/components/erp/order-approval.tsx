@@ -325,14 +325,10 @@ export function OrderApproval() {
 
   const handleDecision = async (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => {
     const idStr = String(orderId)
-    const baseForSubmit = editedItemsRef.current[idStr] ?? getDisplayItems(order)
-    const displayItems = !detailSortByCode ? baseForSubmit : [...baseForSubmit].sort((a, b) => {
-      const ca = (a.code || "").toLowerCase()
-      const cb = (b.code || "").toLowerCase()
-      const cmp = ca.localeCompare(cb)
-      return detailSortByCode === "asc" ? cmp : -cmp
-    })
-    const approvedItems = decision === "Approved" ? displayItems.filter((it) => it.checked && it.qty > 0) : []
+    // cart_json 인덱스와 맞추려면 코드순 정렬된 표시용이 아니라 원본 행 순서를 써야 함
+    const baseForSubmit =
+      editedItemsRef.current[idStr] ?? editedItemsByOrderId[idStr] ?? order.items
+    const approvedItems = decision === "Approved" ? baseForSubmit.filter((it) => it.checked && it.qty > 0) : []
     const outboundLocsInApproved = [...new Set(approvedItems.map((it) => it.outboundLocation || "(미지정)"))]
     const datesByOutbound = deliveryDatesByOutboundByOrder[idStr] || {}
     const missingOutbound = outboundLocsInApproved.filter((loc) => !(datesByOutbound[loc] || "").trim())
@@ -352,7 +348,7 @@ export function OrderApproval() {
       await appAlert(t("orderApproveNeedItems"))
       return
     }
-    const updatedCart = displayItems.map((it) => ({
+    const updatedCart = baseForSubmit.map((it) => ({
       code: it.code,
       name: it.name,
       spec: it.spec,
@@ -385,8 +381,15 @@ export function OrderApproval() {
         const sub = selectedItems.reduce((s, it) => s + it.unitPrice * it.qty, 0)
         const vat = Math.round(sub * 0.07)
         const newTotal = sub + vat
+        // 승인 후 edited 캐시를 지우더라도 화면 Qty가 원본으로 되돌아가지 않도록 items에 반영
+        const nextItems = baseForSubmit.map((it) => ({
+          ...it,
+          total: it.unitPrice * it.qty,
+        }))
         return prev.map((o) =>
-          o.orderId === orderId ? { ...o, status: decision, totalAmount: newTotal } : o
+          o.orderId === orderId
+            ? { ...o, status: decision, totalAmount: newTotal, items: nextItems }
+            : o
         )
       })
       if (decision === "Approved") {
