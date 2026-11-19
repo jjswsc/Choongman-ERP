@@ -1,11 +1,6 @@
-import { toSupabaseStorageRenderHref } from '@/lib/pos-menu-image-url'
-
 /** 현장 사진 — Cached Egress·업로드 용량 절감 (긴 변·목표 바이트) */
 export const STORE_ACTION_PHOTO_MAX_EDGE_PX = 1280
 export const STORE_ACTION_PHOTO_TARGET_MAX_BYTES = 450 * 1024
-/** 목록·썸네일 표시용 Transform (원본 object URL은 DB에 유지) — Cached Egress 절감 */
-export const STORE_ACTION_PHOTO_THUMB_WIDTH = 320
-export const STORE_ACTION_PHOTO_THUMB_QUALITY = 55
 
 function stripExtension(name: string): string {
   const i = name.lastIndexOf('.')
@@ -79,14 +74,12 @@ export async function prepareStoreActionPhotoForUpload(file: File): Promise<File
   }
 }
 
-/** 목록·카드용 — Transform URL (미지원·비 Storage면 원본) */
+/**
+ * 목록·카드·미리보기용 URL.
+ * Supabase Image Transformation을 쓰지 않음(원본 object URL) —
+ * 열어봐도 Storage Image Transformations 사용량에 잡히지 않게 함.
+ * 용량은 업로드 시 prepareStoreActionPhotoForUpload로 이미 줄여 둠.
+ */
 export function storeActionPhotoThumbUrl(raw: string): string {
-  const u = String(raw || '').trim()
-  if (!u) return ''
-  return (
-    toSupabaseStorageRenderHref(u, {
-      width: STORE_ACTION_PHOTO_THUMB_WIDTH,
-      quality: STORE_ACTION_PHOTO_THUMB_QUALITY,
-    }) || u
-  )
+  return String(raw || '').trim()
 }
