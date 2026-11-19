@@ -699,7 +699,17 @@ Only matters the employee must handle personally on a working day:
   noticeAutoCustomLastRun: 'Last send key: {key}',
   noticeAutoCustomNeedTitleBody: 'Each recurring notice needs a title and body.',
   noticeUnreadTabDesc:
-    'List staff with notices still unread after the selected grace period (days since send). Expand a row for those notices, then confirm allowance exclusion for a payroll month.',
+    'List staff with notices still unread after the selected grace period. Choose auto or manual allowance+bonus exclusion (default: auto). Excluded staff appear with a red row highlight in search results.',
+  noticeUnreadModeLabel: 'Allowance & bonus exclusion',
+  noticeUnreadModeAuto: 'Auto exclude allowance & bonus',
+  noticeUnreadModeManual: 'Manual confirm only',
+  noticeUnreadModeHintAuto:
+    'Default. Staff unread past the grace period (default 3 days) lose position/hazard/diligence allowances and sales/birthday bonuses on payroll calc, daily 06:00 Bangkok, and “Sync now”. Clearing blocks auto re-apply.',
+  noticeUnreadModeHintManual:
+    'List only; apply “Confirm allowance & bonus exclusion” for selected staff. Payroll calc does not auto-apply.',
+  noticeUnreadModeSaved: 'Exclusion mode saved.',
+  noticeUnreadAutoSyncBtn: 'Sync now',
+  noticeUnreadAutoSyncDone: 'Auto applied {applied} · cleared {removed}',
   noticeUnreadMinDaysLabel: 'Unread after send',
   noticeUnreadMinDaysNone: 'No wait (any unread)',
   noticeUnreadMinDays1: '1+ days',
@@ -708,17 +718,19 @@ Only matters the employee must handle personally on a working day:
   noticeUnreadMinDays7: '7+ days',
   noticeUnreadMinDays14: '14+ days',
   noticeUnreadPayrollMonth: 'Payroll month (exclusion)',
-  noticeUnreadPenaltyApply: 'Confirm allowance exclusion',
-  noticeUnreadPenaltyRemove: 'Clear allowance exclusion',
+  noticeUnreadPenaltyApply: 'Confirm allowance & bonus exclusion',
+  noticeUnreadPenaltyRemove: 'Clear allowance & bonus exclusion',
   noticeUnreadPenaltyConfirmApply:
-    'Exclude position, hazard, and diligence allowances for {n} selected staff in {month} payroll. Applied on payroll calculate/recalculate.',
+    'Exclude position, hazard, diligence allowances and sales/birthday bonuses for {n} selected staff in {month} payroll. Applied on payroll calculate/recalculate.',
   noticeUnreadPenaltyConfirmRemove:
-    'Clear allowance exclusion for {n} selected staff in {month} payroll.',
+    'Clear allowance & bonus exclusion for {n} selected staff in {month} payroll.',
   noticeUnreadPenaltyDone: 'Done.',
   noticeUnreadPenaltyFail: 'Failed.',
   noticeUnreadPenaltyConfirmOk: 'Confirm',
   noticeUnreadExcludedCol: 'Excluded',
   noticeUnreadExcludedBadge: 'Excluded',
+  noticeUnreadExcludedRowLegend:
+    'Red row = staff who will not receive allowance/bonus this payroll month (unread-notice exclusion)',
   noticeUnreadDetailEmpty: 'No unread notices.',
   noticeUnreadSelectedCount: 'Selected',
   labelSubject: 'Subject',
@@ -1321,9 +1333,9 @@ Only matters the employee must handle personally on a working day:
   helpHow_admin_outbound:
     '① Outbound Entry: set dates, destination, and required Reference No., add items, then Confirm. Matching date/destination/reference print as one invoice.\n② History: search the period, then print Invoice, delete, or export Excel. Excel is one row per invoice (bill total), not per line item. The green total is billable (delivered) VAT; the gray line is all warehouse outbound including in transit. In-transit rows cannot print tax invoices or e-Tax. Expand a Force row to see grouped items.\n③ Invoice Settings: Payment Terms is Cash / Credit 7·14·30 Days. On the tax invoice print screen, choosing terms fills Due Date from Issue Date; you can still edit Due Date by hand.\n④ Some tabs may be hidden by role.',
   helpSum_admin_notices:
-    'Compose and send staff notices, review history and unread lists, and manage auto alerts (work log, month-end stock take).',
+    'Compose and send staff notices, review history and unread lists, and manage auto alerts. Unread allowance+bonus exclusion is auto or manual (default auto, 3 days); excluded staff show as red rows in search.',
   helpHow_admin_notices:
-    '① New notice: pick targets, preview, then send.\n② Sent history: read rates, reminders, limited edits.\n③ Unread: aggregate misses and allowance exclusion.\n④ Auto alerts: work log and month-end stock take (due start + day after month-end, missing stores only), plus “Add recurring notice”.',
+    '① New notice: pick targets, preview, then send.\n② Sent history: read rates, reminders, limited edits.\n③ Unread: pick auto/manual allowance+bonus exclusion (default auto). Auto zeros position/hazard/diligence allowances and sales/birthday bonuses on payroll calc, daily 06:00 Bangkok, and Sync now; excluded rows are red. Manual confirm/clear still available (clear blocks auto re-apply).\n④ Auto alerts: work log and month-end stock take (due start + day after month-end, missing stores only), plus “Add recurring notice”.',
   stockReorderIntro:
     'HQ (Office / inbound warehouse): sums Outbound + ForceOutbound from HQ. Stores: Usage (manual usage confirm) only. Suggested reorder = max(0, period consumption + safety stock − on hand). Does not create purchase orders automatically.',
   stockReorderDays: 'Usage window (days)',

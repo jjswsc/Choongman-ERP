@@ -553,7 +553,7 @@ export const I18N_BASE_KO = {
   adminNoticeSend: '공지사항 발송',
   noticeNewTitle: '새 공지 보내기',
   noticeNewSub: '매장/직급별로 공지를 작성하여 발송합니다.',
-  adminNoticesSubEnhanced: '대상 선택·미리보기·재알림·미확인자·자동 알림·수당 제외로 공지를 운영합니다.',
+  adminNoticesSubEnhanced: '대상 선택·미리보기·재알림·미확인자·자동 알림·수당·보너스 제외로 공지를 운영합니다.',
   noticePreviewSendTitle: '발송 전 미리보기',
   noticePreviewRecipientCount: '예상 수신자',
   noticePreviewBeforeSend: '미리보기·발송',
@@ -706,7 +706,17 @@ export const I18N_BASE_KO = {
   noticeAutoCustomLastRun: '최근 발송 키: {key}',
   noticeAutoCustomNeedTitleBody: '반복 공지마다 제목과 본문을 입력해 주세요.',
   noticeUnreadTabDesc:
-    '기간 내 발송 공지 중, 선택한「발송 후 N일」이상 지나도 미확인인 직원을 집계합니다. 행을 펼치면 해당 미확인 공지를 보고, 선택 후 급여월 수당 제외를 확정할 수 있습니다.',
+    '기간 내 발송 공지 중, 선택한「발송 후 N일」이상 지나도 미확인인 직원을 집계합니다. 수당·보너스 제외는 자동/수동을 선택할 수 있으며(기본 자동), 행 선택 후 수동 확정·해제도 가능합니다. 제외 대상은 검색 결과에서 붉은 배경으로 표시됩니다.',
+  noticeUnreadModeLabel: '수당·보너스 제외 방식',
+  noticeUnreadModeAuto: '자동 수당·보너스 제외',
+  noticeUnreadModeManual: '수동 확정만',
+  noticeUnreadModeHintAuto:
+    '기본값입니다. 발송 후 기준일(기본 3일) 초과 미확인 직원의 직책·위험·근면수당과 매출·생일 보너스를 급여 계산·매일 06시(방콕)·「지금 동기화」에 자동 반영합니다. 해제는 자동 재적용에서 제외됩니다.',
+  noticeUnreadModeHintManual:
+    '목록만 보고, 선택한 직원만 「수당·보너스 제외 확정」으로 반영합니다. 급여 계산 시 자동 반영하지 않습니다.',
+  noticeUnreadModeSaved: '수당·보너스 제외 방식을 저장했습니다.',
+  noticeUnreadAutoSyncBtn: '지금 동기화',
+  noticeUnreadAutoSyncDone: '자동 반영 {applied}명 · 해제 {removed}명',
   noticeUnreadMinDaysLabel: '발송 후 미확인 기준',
   noticeUnreadMinDaysNone: '제한 없음(즉시)',
   noticeUnreadMinDays1: '1일 이상',
@@ -714,18 +724,20 @@ export const I18N_BASE_KO = {
   noticeUnreadMinDays5: '5일 이상',
   noticeUnreadMinDays7: '7일 이상',
   noticeUnreadMinDays14: '14일 이상',
-  noticeUnreadPayrollMonth: '급여월(수당 제외)',
-  noticeUnreadPenaltyApply: '수당 제외 확정',
-  noticeUnreadPenaltyRemove: '수당 제외 해제',
+  noticeUnreadPayrollMonth: '급여월(수당·보너스 제외)',
+  noticeUnreadPenaltyApply: '수당·보너스 제외 확정',
+  noticeUnreadPenaltyRemove: '수당·보너스 제외 해제',
   noticeUnreadPenaltyConfirmApply:
-    '{month} 급여에서 선택한 {n}명의 직책·위험·근면수당을 제외합니다. 급여 계산/재계산 시 반영됩니다.',
+    '{month} 급여에서 선택한 {n}명의 직책·위험·근면수당과 매출·생일 보너스를 제외합니다. 급여 계산/재계산 시 반영됩니다.',
   noticeUnreadPenaltyConfirmRemove:
-    '{month} 급여에서 선택한 {n}명의 수당 제외를 해제합니다.',
+    '{month} 급여에서 선택한 {n}명의 수당·보너스 제외를 해제합니다.',
   noticeUnreadPenaltyDone: '처리되었습니다.',
   noticeUnreadPenaltyFail: '처리에 실패했습니다.',
   noticeUnreadPenaltyConfirmOk: '확정',
-  noticeUnreadExcludedCol: '수당제외',
+  noticeUnreadExcludedCol: '수당·보너스제외',
   noticeUnreadExcludedBadge: '제외확정',
+  noticeUnreadExcludedRowLegend:
+    '붉은 행 = 해당 급여월에 수당·보너스를 받지 못하는 인원(공지 미확인 제외)',
   noticeUnreadDetailEmpty: '미확인 공지가 없습니다.',
   noticeUnreadSelectedCount: '선택',
   labelSubject: '제목',
@@ -1326,9 +1338,9 @@ export const I18N_BASE_KO = {
   helpHow_admin_outbound:
     '① 출고 입력: 날짜·배송일·출고처·참조번호(필수)를 넣고 품목을 담은 뒤 확정합니다. 같은 참조번호·출고처·날짜는 Invoice 인쇄 시 한 장입니다.\n② 이력: 기간 조회 후 Invoice 인쇄·삭제·엑셀을 사용합니다. 엑셀은 청구서(빌) 1건당 1행(품목별 분해 없음)입니다. 우상단 초록 합계는 청구(배송완료) VAT이고, 아래 회색은 출고 전체(배송중 포함)입니다. 배송중 건은 ใบกำกับ/e-Tax가 막힙니다. 강제출고 행을 펼치면 묶인 품목을 볼 수 있습니다.\n③ 인보이스 설정: Payment Terms는 Cash / Credit 7·14·30 Days입니다. 세금계산서 인쇄 화면에서 조건을 고르면 Issue Date 기준으로 Due Date가 채워지며, Due Date는 직접 수정도 가능합니다.\n④ 권한에 따라 일부 탭이 보이지 않을 수 있습니다.',
   helpSum_admin_notices:
-    '직원·매장 공지를 작성·발송하고, 발송 내역·미확인자·자동 알림(업무일지·월말 재고조사 등)을 관리합니다.',
+    '직원·매장 공지를 작성·발송하고, 발송 내역·미확인자·자동 알림(업무일지·월말 재고조사 등)을 관리합니다. 미확인 시 수당·보너스 제외는 자동/수동(기본 자동·3일)이며, 제외 대상은 검색 결과에 붉은 행으로 표시됩니다.',
   helpHow_admin_notices:
-    '① 새 공지: 대상·미리보기 확인 후 발송합니다.\n② 발송 내역: 확인율·재알림·수정을 씁니다.\n③ 미확인자: 미확인 집계·수당 제외를 처리합니다.\n④ 자동 알림: 업무일지와 월말 실사(기한 시작일·말일 다음날, 미완료 매장 매니저만)를 켜고,「반복 공지 추가」로 규칙을 저장합니다.',
+    '① 새 공지: 대상·미리보기 확인 후 발송합니다.\n② 발송 내역: 확인율·재알림·수정을 씁니다.\n③ 미확인자: 미확인 집계 후 수당·보너스 제외 방식(자동/수동, 기본 자동)을 고릅니다. 자동이면 급여 계산·매일 06시(방콕)·「지금 동기화」로 직책·위험·근면수당과 매출·생일 보너스가 0이 되고, 제외 확정 행은 붉은 배경으로 보입니다. 수동 확정·해제도 가능합니다(해제는 자동 재적용 제외).\n④ 자동 알림: 업무일지와 월말 실사(기한 시작일·말일 다음날, 미완료 매장 매니저만)를 켜고,「반복 공지 추가」로 규칙을 저장합니다.',
   stockReorderIntro:
     '본사(Office·입고등록)를 고르면 기간 출고(Outbound·강제출고) 합계, 매장을 고르면 사용 확정(Usage)만 집계합니다. 보충 제안 = max(0, 기간 소모 + 안전재고 − 현재고)이며, 자동으로 발주서를 만들지는 않습니다.',
   stockReorderDays: '사용 집계(일)',

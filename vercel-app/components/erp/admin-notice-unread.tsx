@@ -12,8 +12,10 @@ import {
   applyNoticeUnreadAllowanceExclusion,
   getNoticeOptions,
   getNoticeReaderStats,
+  getNoticeUnreadAllowanceSettings,
   getNoticeUnreadForEmployee,
   listNoticeUnreadAllowanceExclusions,
+  saveNoticeUnreadAllowanceSettings,
   type NoticeReaderStatsRow,
   type NoticeUnreadDetailItem,
 } from "@/lib/api-client"
@@ -72,12 +74,22 @@ export function AdminNoticeUnread() {
   const [statsStore, setStatsStore] = React.useState<string>("")
   const [statsStoreList, setStatsStoreList] = React.useState<string[]>([])
   const [statsMinMissed, setStatsMinMissed] = React.useState(1)
-  /** 발송 후 N일 이상 미확인만 (0=제한 없음, 기본 3일) */
+  /** 발송 후 N일 이상 미확인만 (0=제한 없음, 기본 3일) — 정책 로드 후 동기화 */
   const [minUnreadDays, setMinUnreadDays] = React.useState(3)
+  const [penaltyMode, setPenaltyMode] = React.useState<"manual" | "auto">("auto")
+  const [policyLoading, setPolicyLoading] = React.useState(false)
+  const [policySaving, setPolicySaving] = React.useState(false)
   const [statsItems, setStatsItems] = React.useState<NoticeReaderStatsRow[]>([])
   const [statsLoading, setStatsLoading] = React.useState(false)
   const [statsTruncated, setStatsTruncated] = React.useState(false)
   const [statsNoticeCount, setStatsNoticeCount] = React.useState(0)
+  const roleLower = String(auth?.role || "").toLowerCase()
+  const isOffice =
+    roleLower.includes("director") ||
+    roleLower.includes("secretary") ||
+    roleLower.includes("officer") ||
+    roleLower.includes("accounting") ||
+    roleLower.includes("회계")
 
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set())
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
@@ -129,6 +141,26 @@ export function AdminNoticeUnread() {
   React.useEffect(() => {
     loadStores()
   }, [loadStores])
+
+  const loadPolicy = React.useCallback(async () => {
+    setPolicyLoading(true)
+    try {
+      const res = await getNoticeUnreadAllowanceSettings()
+      if (res.settings) {
+        setPenaltyMode(res.settings.mode === "manual" ? "manual" : "auto")
+        setMinUnreadDays(Math.max(0, Math.min(90, Number(res.settings.minUnreadDays) || 3)))
+        setStatsMinMissed(Math.max(1, Math.min(100, Number(res.settings.minMissed) || 1)))
+      }
+    } catch {
+      /* keep defaults: auto / 3일 */
+    } finally {
+      setPolicyLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void loadPolicy()
+  }, [loadPolicy])
 
   const loadExclusions = React.useCallback(async (month: string) => {
     try {
@@ -257,6 +289,74 @@ export function AdminNoticeUnread() {
     setConfirmOpen(true)
   }
 
+  const savePenaltyMode = async (next: "manual" | "auto") => {
+    if (!isOffice) {
+      setPenaltyMode(next)
+      return
+    }
+    setPolicySaving(true)
+    setActionMsg("")
+    try {
+      const res = await saveNoticeUnreadAllowanceSettings({
+        mode: next,
+        minUnreadDays,
+        minMissed: statsMinMissed,
+        syncMonth: next === "auto" ? payrollMonth : undefined,
+      })
+      if (!res.success) {
+        setActionMsg(res.message || t("noticeUnreadPenaltyFail"))
+        return
+      }
+      setPenaltyMode(res.settings?.mode === "manual" ? "manual" : "auto")
+      let msg = t("noticeUnreadModeSaved")
+      if (res.sync && !res.sync.skipped) {
+        msg += ` (${t("noticeUnreadAutoSyncDone")
+          .replace("{applied}", String(res.sync.applied ?? 0))
+          .replace("{removed}", String(res.sync.removed ?? 0))})`
+        await loadExclusions(payrollMonth)
+      }
+      setActionMsg(msg)
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPolicySaving(false)
+    }
+  }
+
+  const runAutoSync = async () => {
+    setPolicySaving(true)
+    setActionMsg("")
+    try {
+      const res = await saveNoticeUnreadAllowanceSettings({
+        syncOnly: true,
+        syncMonth: payrollMonth,
+      })
+      if (!res.success) {
+        setActionMsg(res.message || t("noticeUnreadPenaltyFail"))
+        return
+      }
+      const sync = res.sync
+      if (sync?.skipped) {
+        setActionMsg(
+          sync.reason === "manual_mode"
+            ? t("noticeUnreadModeHintManual")
+            : `${t("noticeUnreadPenaltyFail")} (${sync.reason || ""})`
+        )
+      } else {
+        setActionMsg(
+          t("noticeUnreadAutoSyncDone")
+            .replace("{applied}", String(sync?.applied ?? 0))
+            .replace("{removed}", String(sync?.removed ?? 0))
+        )
+        await loadExclusions(payrollMonth)
+      }
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPolicySaving(false)
+    }
+  }
+
   const runExclusion = async () => {
     setApplying(true)
     setActionMsg("")
@@ -340,6 +440,27 @@ export function AdminNoticeUnread() {
           <p className="text-xs text-muted-foreground mt-1">{t("noticeUnreadTabDesc")}</p>
         </div>
 
+        <div className="flex flex-col gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
+          <UnreadFilterField label={t("noticeUnreadModeLabel")} className="w-full sm:w-64">
+            <Select
+              value={penaltyMode}
+              onValueChange={(v) => void savePenaltyMode(v === "manual" ? "manual" : "auto")}
+              disabled={policyLoading || policySaving || !isOffice}
+            >
+              <SelectTrigger className="h-9 w-full text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">{t("noticeUnreadModeAuto")}</SelectItem>
+                <SelectItem value="manual">{t("noticeUnreadModeManual")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </UnreadFilterField>
+          <p className="text-[11px] leading-snug text-muted-foreground sm:max-w-md sm:text-right">
+            {penaltyMode === "auto" ? t("noticeUnreadModeHintAuto") : t("noticeUnreadModeHintManual")}
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-12">
           <UnreadFilterField
             label={t("noticeReaderStatsRangeHint")}
@@ -395,7 +516,13 @@ export function AdminNoticeUnread() {
           <UnreadFilterField label={t("noticeUnreadMinDaysLabel")} className="xl:col-span-2">
             <Select
               value={String(minUnreadDays)}
-              onValueChange={(v) => setMinUnreadDays(Math.max(0, Math.floor(Number(v) || 0)))}
+              onValueChange={(v) => {
+                const next = Math.max(0, Math.floor(Number(v) || 0))
+                setMinUnreadDays(next)
+                if (isOffice) {
+                  void saveNoticeUnreadAllowanceSettings({ minUnreadDays: next }).catch(() => {})
+                }
+              }}
             >
               <SelectTrigger className="h-9 w-full text-xs">
                 <SelectValue />
@@ -457,6 +584,17 @@ export function AdminNoticeUnread() {
             <span className="text-xs tabular-nums text-muted-foreground">
               {t("noticeUnreadSelectedCount")} {selectedRows.length}
             </span>
+            {penaltyMode === "auto" && isOffice ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9"
+                disabled={policySaving || applying}
+                onClick={() => void runAutoSync()}
+              >
+                {policySaving ? t("loading") : t("noticeUnreadAutoSyncBtn")}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="destructive"
@@ -482,6 +620,16 @@ export function AdminNoticeUnread() {
         {statsTruncated ? (
           <p className="text-xs text-amber-600 dark:text-amber-500">
             {t("noticeReaderStatsTruncated")}
+          </p>
+        ) : null}
+        {excludedKeys.size > 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            <span
+              className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm align-middle"
+              style={{ background: "hsl(0 72% 51% / 0.35)" }}
+              aria-hidden
+            />
+            {t("noticeUnreadExcludedRowLegend")}
           </p>
         ) : null}
       </div>
@@ -533,7 +681,14 @@ export function AdminNoticeUnread() {
                 const isExcluded = excludedKeys.has(key)
                 return (
                   <React.Fragment key={key}>
-                    <tr className="border-b border-border/60 hover:bg-muted/40">
+                    <tr
+                      className={cn(
+                        "border-b border-border/60",
+                        isExcluded
+                          ? "bg-[hsl(0_72%_96%)] text-[hsl(0_55%_28%)] hover:bg-[hsl(0_72%_93%)] dark:bg-[hsl(0_40%_16%)] dark:text-[hsl(0_70%_88%)] dark:hover:bg-[hsl(0_40%_20%)]"
+                          : "hover:bg-muted/40"
+                      )}
+                    >
                       <td className="p-2">
                         <Checkbox
                           checked={selected.has(key)}
@@ -562,12 +717,20 @@ export function AdminNoticeUnread() {
                         {row.name}
                       </td>
                       <td
-                        className="p-2 text-muted-foreground hidden sm:table-cell max-w-[5rem] truncate"
+                        className={cn(
+                          "p-2 hidden sm:table-cell max-w-[5rem] truncate",
+                          isExcluded ? "opacity-90" : "text-muted-foreground"
+                        )}
                         title={row.job}
                       >
                         {row.job}
                       </td>
-                      <td className="p-2 text-right tabular-nums text-muted-foreground">
+                      <td
+                        className={cn(
+                          "p-2 text-right tabular-nums",
+                          isExcluded ? "opacity-90" : "text-muted-foreground"
+                        )}
+                      >
                         {row.targeted}
                       </td>
                       <td className="p-2 text-right tabular-nums text-[hsl(152,60%,42%)]">
@@ -579,7 +742,7 @@ export function AdminNoticeUnread() {
                       <td className="p-2 text-right tabular-nums w-16">{row.missRate}%</td>
                       <td className="p-2">
                         {isExcluded ? (
-                          <span className="inline-flex rounded bg-destructive/10 text-destructive px-1.5 py-0.5 text-[10px] font-medium">
+                          <span className="inline-flex rounded bg-destructive text-destructive-foreground px-1.5 py-0.5 text-[10px] font-semibold">
                             {t("noticeUnreadExcludedBadge")}
                           </span>
                         ) : (
@@ -588,7 +751,14 @@ export function AdminNoticeUnread() {
                       </td>
                     </tr>
                     {isOpen ? (
-                      <tr className="border-b border-border/40 bg-muted/20">
+                      <tr
+                        className={cn(
+                          "border-b border-border/40",
+                          isExcluded
+                            ? "bg-[hsl(0_72%_94%)] dark:bg-[hsl(0_40%_14%)]"
+                            : "bg-muted/20"
+                        )}
+                      >
                         <td colSpan={10} className="p-3">
                           {detail?.loading ? (
                             <p className="text-muted-foreground">{t("loading")}</p>

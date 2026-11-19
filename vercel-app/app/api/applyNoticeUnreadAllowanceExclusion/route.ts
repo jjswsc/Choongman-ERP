@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  supabaseDeleteByFilter,
   supabaseSelectFilter,
   supabaseUpsert,
 } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { isAccountingRole, isOfficeRole } from '@/lib/permissions'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import {
+  NOTICE_UNREAD_REASON,
+  NOTICE_UNREAD_WAIVED_REASON,
+} from '@/lib/notice-unread-allowance-settings'
 
 type EmpRef = { store: string; name: string; missedCount?: number; noticeIds?: number[] }
 
@@ -82,9 +85,11 @@ export async function GET(request: NextRequest) {
       }
     )) as Record<string, unknown>[]
 
-    const items = (rows || []).filter((r) =>
-      isStoreAllowedForAuth(String(r.store || ''), auth, isOffice)
-    )
+    const items = (rows || []).filter((r) => {
+      if (!isStoreAllowedForAuth(String(r.store || ''), auth, isOffice)) return false
+      const reason = String(r.reason || '').trim() || NOTICE_UNREAD_REASON
+      return reason === NOTICE_UNREAD_REASON
+    })
 
     return NextResponse.json({ success: true, items, payrollMonth: month }, { headers })
   } catch (e) {
@@ -178,21 +183,33 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === 'remove') {
-      let removed = 0
+      /** 삭제 대신 waived — 자동 모드 재동기화 시 다시 넣지 않음 */
+      const nowIso = new Date().toISOString()
+      const waiveRows: Record<string, unknown>[] = []
       for (const e of cleaned) {
-        await supabaseDeleteByFilter(
-          'payroll_allowance_exclusions',
-          `payroll_month=eq.${encodeURIComponent(month)}&store=eq.${encodeURIComponent(e.store)}&name=eq.${encodeURIComponent(e.name)}`
-        )
-        removed += 1
+        const employeeId = await resolveEmployeeId(e.store, e.name)
+        waiveRows.push({
+          payroll_month: month,
+          employee_id: employeeId,
+          store: e.store,
+          name: e.name,
+          reason: NOTICE_UNREAD_WAIVED_REASON,
+          notice_ids: e.noticeIds || [],
+          missed_count: e.missedCount || (e.noticeIds?.length ?? 0),
+          period_start: null,
+          period_end: null,
+          created_by: actor,
+          updated_at: nowIso,
+        })
       }
+      await supabaseUpsert('payroll_allowance_exclusions', waiveRows, 'payroll_month,store,name')
       return NextResponse.json(
         {
           success: true,
           action: 'remove',
           payrollMonth: month,
-          count: removed,
-          message: `${month} 수당 제외 ${removed}명 해제`,
+          count: waiveRows.length,
+          message: `${month} 수당 제외 ${waiveRows.length}명 해제(자동 재적용 제외)`,
         },
         { headers }
       )
@@ -210,7 +227,7 @@ export async function POST(request: NextRequest) {
         employee_id: employeeId,
         store: e.store,
         name: e.name,
-        reason: 'notice_unread',
+        reason: NOTICE_UNREAD_REASON,
         notice_ids: e.noticeIds || [],
         missed_count: e.missedCount || (e.noticeIds?.length ?? 0),
         period_start: periodStart,
@@ -228,7 +245,7 @@ export async function POST(request: NextRequest) {
         action: 'apply',
         payrollMonth: month,
         count: rows.length,
-        message: `${month} 직책·위험·근면수당 제외 ${rows.length}명 확정 (급여 재계산 시 반영)`,
+          message: `${month} 직책·위험·근면수당·보너스 제외 ${rows.length}명 확정 (급여 재계산 시 반영)`,
       },
       { headers }
     )

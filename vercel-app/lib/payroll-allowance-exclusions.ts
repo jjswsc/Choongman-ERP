@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { NOTICE_UNREAD_REASON, NOTICE_UNREAD_WAIVED_REASON } from '@/lib/notice-unread-allowance-settings'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 export type PayrollAllowanceExclusionRow = {
@@ -17,7 +18,7 @@ export type PayrollAllowanceExclusionRow = {
 
 const empKey = (store: string, name: string) => `${String(store).trim()}|${String(name).trim()}`
 
-/** 급여월(YYYY-MM) 제외 대상 → store|name Set */
+/** 급여월(YYYY-MM) 제외 대상 → store|name Set (waived 제외) */
 export async function loadAllowanceExclusionKeysForMonth(
   payrollMonth: string
 ): Promise<Set<string>> {
@@ -27,10 +28,13 @@ export async function loadAllowanceExclusionKeysForMonth(
     const rows = (await supabaseSelectFilter(
       'payroll_allowance_exclusions',
       `payroll_month=eq.${encodeURIComponent(month)}`,
-      { limit: 5000, select: 'store,name' }
-    )) as { store?: string; name?: string }[]
+      { limit: 5000, select: 'store,name,reason' }
+    )) as { store?: string; name?: string; reason?: string }[]
     const set = new Set<string>()
     for (const r of rows || []) {
+      const reason = String(r.reason || '').trim() || NOTICE_UNREAD_REASON
+      if (reason === NOTICE_UNREAD_WAIVED_REASON) continue
+      if (reason !== NOTICE_UNREAD_REASON) continue
       const s = String(r.store || '').trim()
       const n = String(r.name || '').trim()
       if (s && n) set.add(empKey(s, n))

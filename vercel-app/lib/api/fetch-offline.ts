@@ -82,6 +82,7 @@ const LEGACY_QUEUE_WHITELIST = new Set([
   '/api/updateNoticeAdmin',
   '/api/remindNoticeUnread',
   '/api/applyNoticeUnreadAllowanceExclusion',
+  '/api/notices/unread-allowance-settings',
   '/api/estimateNoticeRecipients',
   '/api/noticeTemplates',
   '/api/processLeaveApproval',

@@ -299,6 +299,55 @@ export async function listNoticeUnreadAllowanceExclusions(params: { payrollMonth
   }
 }
 
+export type NoticeUnreadAllowanceSettingsClient = {
+  mode: 'manual' | 'auto'
+  minUnreadDays: number
+  minMissed: number
+}
+
+export async function getNoticeUnreadAllowanceSettings(): Promise<{
+  success: boolean
+  message?: string
+  settings: NoticeUnreadAllowanceSettingsClient
+}> {
+  const res = await apiFetchWithOffline('/api/notices/unread-allowance-settings')
+  const data = (await res.json()) as {
+    success?: boolean
+    message?: string
+    settings?: NoticeUnreadAllowanceSettingsClient
+  }
+  return {
+    success: data.success !== false,
+    message: data.message,
+    settings: data.settings || { mode: 'auto', minUnreadDays: 3, minMissed: 1 },
+  }
+}
+
+export async function saveNoticeUnreadAllowanceSettings(params: {
+  mode?: 'manual' | 'auto'
+  minUnreadDays?: number
+  minMissed?: number
+  syncMonth?: string
+  syncOnly?: boolean
+}): Promise<{
+  success: boolean
+  message?: string
+  settings?: NoticeUnreadAllowanceSettingsClient
+  sync?: { applied?: number; removed?: number; skipped?: boolean; reason?: string }
+}> {
+  const res = await apiFetchWithOffline('/api/notices/unread-allowance-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    settings?: NoticeUnreadAllowanceSettingsClient
+    sync?: { applied?: number; removed?: number; skipped?: boolean; reason?: string }
+  }>
+}
+
 export async function deleteNoticeAdmin(params: { id: number }) {
   const res = await apiFetchWithOffline('/api/deleteNoticeAdmin', {
     method: 'POST',

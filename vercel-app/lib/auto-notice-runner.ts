@@ -29,6 +29,8 @@ import {
 import { loadStockTakeKpiReport } from '@/lib/stock-take-kpi-report'
 import { runStoreActionDailyReminders, type StoreActionReminderResult } from '@/lib/store-action-reminders'
 import { runDailyPlanCron, type DailyPlanCronResult } from '@/lib/daily-plan-cron'
+import { syncNoticeUnreadAllowanceExclusionsForMonth } from '@/lib/notice-unread-allowance-auto-sync'
+import type { NoticeUnreadAutoSyncResult } from '@/lib/notice-unread-allowance-auto-sync'
 
 export type AutoNoticesRunResult = {
   date: string
@@ -38,6 +40,8 @@ export type AutoNoticesRunResult = {
   custom: { ran: number; sent: number; results: Array<{ id: string; sent: number; skippedReason?: string }> }
   storeActions?: StoreActionReminderResult
   dailyPlans?: DailyPlanCronResult | { error: string }
+  /** 방콕 06시 — 공지 미확인 수당 제외 자동 동기화 */
+  noticeUnreadAllowance?: NoticeUnreadAutoSyncResult | { skipped: true; reason: string }
 }
 
 /**
@@ -195,6 +199,23 @@ export async function runAutoNotices(base: Date = new Date()): Promise<AutoNotic
   } catch (e) {
     console.error('auto-notices dailyPlans:', e)
     result.dailyPlans = { error: e instanceof Error ? e.message : String(e) }
+  }
+
+  // —— 공지 미확인 수당 제외 자동 동기화 (방콕 06시, 당월) ——
+  if (hourBangkok === 6) {
+    try {
+      result.noticeUnreadAllowance = await syncNoticeUnreadAllowanceExclusionsForMonth(
+        today.slice(0, 7)
+      )
+    } catch (e) {
+      console.error('auto-notices noticeUnreadAllowance:', e)
+      result.noticeUnreadAllowance = {
+        skipped: true,
+        reason: `error:${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+  } else {
+    result.noticeUnreadAllowance = { skipped: true, reason: 'hour_mismatch' }
   }
 
   return result

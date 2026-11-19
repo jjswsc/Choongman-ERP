@@ -29,4 +29,4 @@ CREATE INDEX IF NOT EXISTS idx_payroll_allowance_exclusions_emp
   WHERE employee_id IS NOT NULL;
 
 COMMENT ON TABLE payroll_allowance_exclusions IS
-  '공지 미확인 등으로 해당 급여월 직책·위험·근면수당을 0 처리하는 플래그. getPayrollCalc가 참조.';
+  '공지 미확인 등으로 해당 급여월 직책·위험·근면수당·매출/생일 보너스를 0 처리하는 플래그. getPayrollCalc가 참조. reason=notice_unread(제외) / notice_unread_waived(해제·자동 재적용 제외). created_by=auto 는 자동 동기화.';

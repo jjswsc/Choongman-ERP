@@ -58,6 +58,7 @@ import {
   hasAllowanceExclusion,
   loadAllowanceExclusionKeysForMonth,
 } from '@/lib/payroll-allowance-exclusions'
+import { syncNoticeUnreadAllowanceExclusionsForMonth } from '@/lib/notice-unread-allowance-auto-sync'
 import {
   appendSaasTenantFilter,
   isSaasTenantQueryBlocked,
@@ -1221,6 +1222,14 @@ export async function GET(request: NextRequest) {
     }
 
     const list: PayrollCalcRow[] = []
+    try {
+      await syncNoticeUnreadAllowanceExclusionsForMonth(normMonth)
+    } catch (syncErr) {
+      console.warn(
+        'notice unread allowance auto-sync skipped:',
+        syncErr instanceof Error ? syncErr.message : String(syncErr)
+      )
+    }
     const allowanceExclusionKeys = await loadAllowanceExclusionKeysForMonth(normMonth)
 
     const storeCodesForBonus = Array.from(
@@ -1565,7 +1574,7 @@ export async function GET(request: NextRequest) {
             absenceDays: salesBonusAbsenceDays,
             absencePenaltyPctPerDay: salesBonusSettings.absencePenaltyPctPerDay,
           })
-      const salesBonus = salesBonusResult?.finalAmount ?? 0
+      const salesBonusRaw = salesBonusResult?.finalAmount ?? 0
       // 태국 관행: 일급 = 월급 ÷ 당월 근무일수. 금액은 상세(일별·휴가 건별 floor) 합과 표시 일치
       const dailyRate = expectedWorkDays > 0 ? salary / expectedWorkDays : 0
       let unpaidAbsenceDed = 0
@@ -1595,7 +1604,7 @@ export async function GET(request: NextRequest) {
         earlyMin === 0 &&
         lateDaysOver10 < LATE_HALF_DAY_COUNT
       const diligenceAllowRaw = diligentEligible ? diligenceCfg : 0
-      const noticeUnreadExcludeAllowances = hasAllowanceExclusion(
+      const noticeUnreadPenalty = hasAllowanceExclusion(
         allowanceExclusionKeys,
         store,
         name
@@ -1603,10 +1612,14 @@ export async function GET(request: NextRequest) {
       let posAllowFinal = posAllowAmount
       let hazAllowFinal = hazAllow
       let diligenceAllow = diligenceAllowRaw
-      if (noticeUnreadExcludeAllowances) {
+      let salesBonus = salesBonusRaw
+      let birthBonusFinal = birthBonus
+      if (noticeUnreadPenalty) {
         posAllowFinal = 0
         hazAllowFinal = 0
         diligenceAllow = 0
+        salesBonus = 0
+        birthBonusFinal = 0
       }
 
       const income =
@@ -1614,7 +1627,7 @@ export async function GET(request: NextRequest) {
         posAllowFinal +
         hazAllowFinal +
         diligenceAllow +
-        birthBonus +
+        birthBonusFinal +
         holidayPay +
         salesBonus +
         otAmt
@@ -1625,7 +1638,7 @@ export async function GET(request: NextRequest) {
         posAllow: posAllowFinal,
         hazAllow: hazAllowFinal,
         diligenceAllow,
-        birthBonus,
+        birthBonus: birthBonusFinal,
         holidayPay,
         salesBonus,
         otAmt,
@@ -1659,7 +1672,13 @@ export async function GET(request: NextRequest) {
         tax: [],
         otherDed: [],
       }
-      if (salesBonusResult) {
+      if (noticeUnreadPenalty) {
+        explain.salesBonus.push({
+          reason: '매출 보너스 제외',
+          detail: '공지 미확인 패널티(수당·보너스 제외)',
+          amount: 0,
+        })
+      } else if (salesBonusResult) {
         for (const line of salesBonusResult.explain) {
           explain.salesBonus.push({
             reason: line.reason,
@@ -1691,20 +1710,25 @@ export async function GET(request: NextRequest) {
             })(),
         amount: salary,
       })
-      if (noticeUnreadExcludeAllowances) {
+      if (noticeUnreadPenalty) {
         explain.posAllow.push({
           reason: '직책수당 제외',
-          detail: '공지 미확인 패널티(수당 제외)',
+          detail: '공지 미확인 패널티(수당·보너스 제외)',
           amount: 0,
         })
         explain.hazAllow.push({
           reason: '위험수당 제외',
-          detail: '공지 미확인 패널티(수당 제외)',
+          detail: '공지 미확인 패널티(수당·보너스 제외)',
           amount: 0,
         })
         explain.diligenceAllow.push({
           reason: '근면수당 제외',
-          detail: '공지 미확인 패널티(수당 제외)',
+          detail: '공지 미확인 패널티(수당·보너스 제외)',
+          amount: 0,
+        })
+        explain.birthBonus.push({
+          reason: '생일 보너스 제외',
+          detail: '공지 미확인 패널티(수당·보너스 제외)',
           amount: 0,
         })
       } else {
@@ -1767,14 +1791,14 @@ export async function GET(request: NextRequest) {
       }
       }
 
-      if (birthBonus > 0 && birth) {
+      if (!noticeUnreadPenalty && birthBonusFinal > 0 && birth) {
         const mm = String(birth.getMonth() + 1).padStart(2, '0')
         const dd = String(birth.getDate()).padStart(2, '0')
         explain.birthBonus.push({
           date: `${year}-${mm}-${dd}`,
           reason: '생일 보너스',
           detail: '근속 1년 이상',
-          amount: birthBonus,
+          amount: birthBonusFinal,
         })
       }
 
@@ -1940,7 +1964,7 @@ export async function GET(request: NextRequest) {
         posAllow: posAllowFinal,
         hazAllow: hazAllowFinal,
         diligenceAllow,
-        birthBonus,
+        birthBonus: birthBonusFinal,
         holidayPay,
         holidayWorkDays,
         splBonus: 0,
