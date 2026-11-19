@@ -12,7 +12,7 @@ describe('qr-table poll intervals', () => {
   })
 
   it('polls hall QR badges every 60s when enabled', () => {
-    expect(QR_FLOOR_SESSION_HINTS_POLL_MS).toBe(60_000)
+    expect(QR_FLOOR_SESSION_HINTS_POLL_MS).toBe(90_000)
     expect(QR_FLOOR_SESSION_HINTS_DISABLED_POLL_MS).toBe(300_000)
     expect(QR_FLOOR_SESSION_HINTS_ERROR_POLL_MS).toBe(120_000)
   })

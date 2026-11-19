@@ -3,9 +3,11 @@ import {
   MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS,
   MAIN_POS_HEAD_POLL_INTERVAL_DEGRADED_MS,
   MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS,
+  MAIN_POS_HEAVY_SCAN_STALE_MS,
   MAIN_POS_POLL_INTERVAL_DEGRADED_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_ACTIVE_MS,
   MAIN_POS_POLL_INTERVAL_HEALTHY_MS,
+  isMainPosRealtimeFreshForHeavyScanSkip,
   isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
   resolveMainPosHeadPollIntervalMs,
@@ -112,7 +114,15 @@ describe('pos-main-poll-interval', () => {
     expect(isMainPosRealtimeRecentlyActive(0, now)).toBe(false)
   })
 
-  it('skips heavy order scan fallback when realtime is healthy and recent', () => {
+  it('keeps heavy-scan skip window longer than head stale (90s vs 5m)', () => {
+    const now = 1_000_000
+    expect(MAIN_POS_HEAVY_SCAN_STALE_MS).toBe(300_000)
+    expect(isMainPosRealtimeFreshForHeavyScanSkip(now - 120_000, now)).toBe(true)
+    expect(isMainPosRealtimeFreshForHeavyScanSkip(now - 301_000, now)).toBe(false)
+    expect(isMainPosRealtimeRecentlyActive(now - 120_000, now)).toBe(false)
+  })
+
+  it('skips heavy order scan fallback when realtime is healthy within 5m', () => {
     const now = 1_000_000
     expect(
       shouldUseMainPosHeavyOrderScanFallback({
@@ -128,10 +138,18 @@ describe('pos-main-poll-interval', () => {
         nowMs: now,
       })
     ).toBe(true)
+    // head는 90s에 stale이지만 800 스캔은 5분까지 억제
     expect(
       shouldUseMainPosHeavyOrderScanFallback({
         realtimeChannelHealthy: true,
         lastRealtimeOrderEventAtMs: now - 120_000,
+        nowMs: now,
+      })
+    ).toBe(false)
+    expect(
+      shouldUseMainPosHeavyOrderScanFallback({
+        realtimeChannelHealthy: true,
+        lastRealtimeOrderEventAtMs: now - 301_000,
         nowMs: now,
       })
     ).toBe(true)

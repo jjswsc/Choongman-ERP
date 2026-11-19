@@ -3,12 +3,15 @@
  *
  * 안전 우선 규칙:
  * - HEALTHY + 최근 Realtime 이벤트: head API 없음 (요금 절감). Realtime이 즉시 반영.
- * - HEALTHY + 이벤트 공백(≥90s): 초경량 head 45s — Realtime 무음·누락 시 조회 지연 방지.
+ * - HEALTHY + 이벤트 공백(≥90s): 초경량 head 60s — Realtime 무음·누락 시 조회 지연 방지.
+ * - HEALTHY + 공백이어도 5분 미만이면 limit=800 items_json(메타·결제) 폴백은 생략
+ *   (한산 시간대 Origin·CDN 폭주 방지). 채널 unhealthy면 즉시 폴백.
  * - DEGRADED: heavy 15s + head 15s.
  * - 2026-08-04 head(healthy 6s) → Fluid Active CPU 약 2배.
  * - 8/6 90s 완화, 8/9 healthy head 전면 중지 → 현장 조회 체감이 너무 느려져
  *   “최근 이벤트 있을 때만 중지”로 재조정 (상시 6s 폭주는 유지 금지).
- * - `realtimeRecentlyActive`는 heavy 간격·head fetch 여부·limit=800 폴백에 사용.
+ * - `realtimeRecentlyActive`(90s): heavy 간격·head fetch 여부.
+ * - 800 스캔 억제는 `isMainPosRealtimeFreshForHeavyScanSkip`(5분) 사용.
  */
 export const MAIN_POS_POLL_INTERVAL_HEALTHY_MS = 180_000
 /** Realtime 정상 + 최근 이벤트 있음 → HTTP 폴링은 안전망만 (Edge Request 절감) */
@@ -32,8 +35,13 @@ export const MAIN_POS_HEAD_POLL_INTERVAL_HEALTHY_SPARSE_MS = 60_000
  * Realtime이 활발할 때 head API를 치지 않음. 스케줄러만 이 간격으로 상태 재평가.
  */
 export const MAIN_POS_HEAD_POLL_HEALTHY_RECHECK_MS = 60_000
-/** Realtime 이벤트 없이 이 시간이 지나면 보조 폴링을 degraded/sparse 로 간주 */
+/** Realtime 이벤트 없이 이 시간이 지나면 head·heavy 간격을 sparse/healthy로 전환 */
 export const MAIN_POS_REALTIME_STALE_MS = 90_000
+/**
+ * SUBSCRIBED인데 주문 이벤트가 이 시간보다 짧으면 limit=800 메타·결제 스캔 생략.
+ * 90s와 분리 — 한산 시간에도 매분 800×items_json 이 Origin을 키우지 않게 함.
+ */
+export const MAIN_POS_HEAVY_SCAN_STALE_MS = 300_000
 /** 채널 오류 시 전체 재구독 최소 간격 (6/12 Realtime 활성화 후 alias 오류 폭주 방지) */
 export const MAIN_POS_REALTIME_RESUBSCRIBE_MIN_MS = 60_000
 export const MAIN_POS_REALTIME_RESUBSCRIBE_DELAY_MS = 15_000
@@ -58,7 +66,7 @@ export function shouldPauseMainPosIntervalPolling(opts: {
 /**
  * head 폴링 스케줄.
  * - healthy + recent: fetch=false (API 없음)
- * - healthy + stale: fetch=true, 45s (누락 안전망)
+ * - healthy + stale(≥90s): fetch=true, 60s (누락 안전망)
  * - degraded: fetch=true, 15s
  */
 export function resolveMainPosHeadPollSchedule(opts: {
@@ -104,6 +112,15 @@ export function isMainPosRealtimeRecentlyActive(
   return nowMs - lastEventAtMs < MAIN_POS_REALTIME_STALE_MS
 }
 
+/** SUBSCRIBED + 최근 5분 이내 이벤트 → 800 메타·결제 스캔 생략 가능 */
+export function isMainPosRealtimeFreshForHeavyScanSkip(
+  lastEventAtMs: number,
+  nowMs: number = Date.now()
+): boolean {
+  if (!lastEventAtMs || lastEventAtMs <= 0) return false
+  return nowMs - lastEventAtMs < MAIN_POS_HEAVY_SCAN_STALE_MS
+}
+
 /**
  * 매장 store_code 별칭(legacy·Grab ID)마다 INSERT/UPDATE 채널을 열어도,
  * INSERT 채널 하나라도 SUBSCRIBED 이면 Realtime 정상으로 본다.
@@ -118,12 +135,15 @@ export function isMainPosRealtimeInsertChannelHealthy(
   return false
 }
 
-/** Realtime 정상·최근 이벤트 있음 → limit 800 풀 스캔(메타·결제 영수증) 폴백 불필요 */
+/**
+ * limit 800 풀 스캔(메타·결제 영수증) 폴백.
+ * 채널 실패 시 즉시 true. SUBSCRIBED면 5분 무음 후에만 true (90s head stale과 분리).
+ */
 export function shouldUseMainPosHeavyOrderScanFallback(opts: {
   realtimeChannelHealthy: boolean
   lastRealtimeOrderEventAtMs: number
   nowMs?: number
 }): boolean {
   if (!opts.realtimeChannelHealthy) return true
-  return !isMainPosRealtimeRecentlyActive(opts.lastRealtimeOrderEventAtMs, opts.nowMs)
+  return !isMainPosRealtimeFreshForHeavyScanSkip(opts.lastRealtimeOrderEventAtMs, opts.nowMs)
 }

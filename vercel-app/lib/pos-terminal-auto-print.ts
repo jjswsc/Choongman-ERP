@@ -78,8 +78,9 @@ export const MAIN_POS_META_SCAN_INTERVAL_MS = 60_000
 
 /**
  * 주방 큐가 있으므로 kitchenOnOrder 만으로는 800건 스캔하지 않는다.
- * Realtime INSERT/UPDATE가 정상이고 최근 이벤트가 있으면 홀 추가도 Realtime 경로가 처리하므로
- * 800×items_json 폴링을 돌리지 않는다(CDN·Origin Transfer 절감). force 또는 Realtime 무음/실패 시에만 안전망.
+ * Realtime INSERT/UPDATE가 정상이고 최근 이벤트(호출부: 5분 heavy-skip 창)가 있으면
+ * 홀 추가도 Realtime 경로가 처리하므로 800×items_json 폴링을 돌리지 않는다.
+ * force 또는 채널 실패·5분 초과 무음 시에만 안전망.
  */
 export function shouldRunDineInAddonMetaScan(opts: {
   skip: boolean
@@ -88,6 +89,7 @@ export function shouldRunDineInAddonMetaScan(opts: {
   /** true면 Realtime 상태와 무관하게 스캔(수동·강제 catch-up) */
   force?: boolean
   realtimeChannelHealthy?: boolean
+  /** 호출부는 isMainPosRealtimeFreshForHeavyScanSkip(5분)을 넘긴다 */
   realtimeRecentlyActive?: boolean
 }): boolean {
   if (opts.skip) return false

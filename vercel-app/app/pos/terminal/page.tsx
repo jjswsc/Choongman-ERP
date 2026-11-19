@@ -375,6 +375,7 @@ import {
   type PosRealtimeSubscribeStatus,
 } from '@/lib/supabase-client'
 import {
+  isMainPosRealtimeFreshForHeavyScanSkip,
   isMainPosRealtimeInsertChannelHealthy,
   isMainPosRealtimeRecentlyActive,
   mainPosPrimaryInsertChannelKey,
@@ -6431,7 +6432,8 @@ export default function PosTerminalPage() {
             receiptOnAddOrder: autoPrintReceiptOnAddOrder,
             receiptOnOrder: autoPrintReceiptOnOrder,
             realtimeChannelHealthy: realtimeChannelHealthyRef.current,
-            realtimeRecentlyActive: isMainPosRealtimeRecentlyActive(
+            // 90s head stale과 분리 — 5분 이내면 800 메타 스캔 생략
+            realtimeRecentlyActive: isMainPosRealtimeFreshForHeavyScanSkip(
               lastRealtimeOrderEventAtRef.current,
               nowMs
             ),
