@@ -715,9 +715,13 @@ export const I18N_BASE_KO = {
   noticeUnreadModeHintManual:
     '목록만 보고, 선택한 직원만 「수당·보너스 제외 확정」으로 반영합니다. 급여 계산 시 자동 반영하지 않습니다.',
   noticeUnreadModeSaved: '수당·보너스 제외 방식을 저장했습니다.',
+  noticeUnreadPolicyDaysLabel: '유예일(정책)',
+  noticeUnreadPolicyDaysHint:
+    '유예일은 언제든 바꿀 수 있습니다(기본 3일). 정책 유예일을 바꾸면 자동 제외·급여 반영 기준이 함께 바뀝니다. 아래 「발송 후 미확인 기준」은 이번 조회 필터입니다.',
+  noticeUnreadPolicyDaysSaved: '유예일 정책을 {days}일로 저장했습니다.',
   noticeUnreadAutoSyncBtn: '지금 동기화',
   noticeUnreadAutoSyncDone: '자동 반영 {applied}명 · 해제 {removed}명',
-  noticeUnreadMinDaysLabel: '발송 후 미확인 기준',
+  noticeUnreadMinDaysLabel: '발송 후 미확인 기준(조회)',
   noticeUnreadMinDaysNone: '제한 없음(즉시)',
   noticeUnreadMinDays1: '1일 이상',
   noticeUnreadMinDays3: '3일 이상',

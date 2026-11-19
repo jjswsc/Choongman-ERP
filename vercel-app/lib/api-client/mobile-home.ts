@@ -71,7 +71,8 @@ export async function confirmNoticeRead(params: {
   name: string
   action: '확인' | '다음에'
 }) {
-  const res = await apiFetch('/api/confirmNoticeRead', {
+  // 오프라인·불안정 네트워크에서도 큐에 남겨 서버에 반드시 적재
+  const res = await apiFetchWithOffline('/api/confirmNoticeRead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

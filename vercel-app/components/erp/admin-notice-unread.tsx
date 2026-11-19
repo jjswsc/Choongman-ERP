@@ -440,25 +440,74 @@ export function AdminNoticeUnread() {
           <p className="text-xs text-muted-foreground mt-1">{t("noticeUnreadTabDesc")}</p>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-3 sm:flex-row sm:items-end sm:justify-between">
-          <UnreadFilterField label={t("noticeUnreadModeLabel")} className="w-full sm:w-64">
-            <Select
-              value={penaltyMode}
-              onValueChange={(v) => void savePenaltyMode(v === "manual" ? "manual" : "auto")}
-              disabled={policyLoading || policySaving || !isOffice}
-            >
-              <SelectTrigger className="h-9 w-full text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">{t("noticeUnreadModeAuto")}</SelectItem>
-                <SelectItem value="manual">{t("noticeUnreadModeManual")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </UnreadFilterField>
-          <p className="text-[11px] leading-snug text-muted-foreground sm:max-w-md sm:text-right">
-            {penaltyMode === "auto" ? t("noticeUnreadModeHintAuto") : t("noticeUnreadModeHintManual")}
-          </p>
+        <div className="flex flex-col gap-3 rounded-md border border-border/70 bg-muted/30 px-3 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-end">
+              <UnreadFilterField label={t("noticeUnreadModeLabel")} className="w-full sm:w-56">
+                <Select
+                  value={penaltyMode}
+                  onValueChange={(v) => void savePenaltyMode(v === "manual" ? "manual" : "auto")}
+                  disabled={policyLoading || policySaving || !isOffice}
+                >
+                  <SelectTrigger className="h-9 w-full text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">{t("noticeUnreadModeAuto")}</SelectItem>
+                    <SelectItem value="manual">{t("noticeUnreadModeManual")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </UnreadFilterField>
+              <UnreadFilterField label={t("noticeUnreadPolicyDaysLabel")} className="w-full sm:w-44">
+                <Select
+                  value={String(minUnreadDays)}
+                  onValueChange={(v) => {
+                    const next = Math.max(0, Math.floor(Number(v) || 0))
+                    setMinUnreadDays(next)
+                    if (!isOffice) return
+                    setPolicySaving(true)
+                    void saveNoticeUnreadAllowanceSettings({
+                      minUnreadDays: next,
+                      syncMonth: penaltyMode === "auto" ? payrollMonth : undefined,
+                    })
+                      .then((res) => {
+                        if (!res.success) {
+                          setActionMsg(res.message || t("noticeUnreadPenaltyFail"))
+                          return
+                        }
+                        setActionMsg(
+                          t("noticeUnreadPolicyDaysSaved").replace("{days}", String(next))
+                        )
+                        if (res.sync && !res.sync.skipped) {
+                          void loadExclusions(payrollMonth)
+                        }
+                      })
+                      .catch((e) =>
+                        setActionMsg(e instanceof Error ? e.message : String(e))
+                      )
+                      .finally(() => setPolicySaving(false))
+                  }}
+                  disabled={policyLoading || policySaving || !isOffice}
+                >
+                  <SelectTrigger className="h-9 w-full text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">{t("noticeUnreadMinDaysNone")}</SelectItem>
+                    <SelectItem value="1">{t("noticeUnreadMinDays1")}</SelectItem>
+                    <SelectItem value="3">{t("noticeUnreadMinDays3")}</SelectItem>
+                    <SelectItem value="5">{t("noticeUnreadMinDays5")}</SelectItem>
+                    <SelectItem value="7">{t("noticeUnreadMinDays7")}</SelectItem>
+                    <SelectItem value="14">{t("noticeUnreadMinDays14")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </UnreadFilterField>
+            </div>
+            <p className="text-[11px] leading-snug text-muted-foreground sm:max-w-md sm:text-right">
+              {penaltyMode === "auto" ? t("noticeUnreadModeHintAuto") : t("noticeUnreadModeHintManual")}
+            </p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">{t("noticeUnreadPolicyDaysHint")}</p>
         </div>
 
         <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-12">
@@ -516,13 +565,7 @@ export function AdminNoticeUnread() {
           <UnreadFilterField label={t("noticeUnreadMinDaysLabel")} className="xl:col-span-2">
             <Select
               value={String(minUnreadDays)}
-              onValueChange={(v) => {
-                const next = Math.max(0, Math.floor(Number(v) || 0))
-                setMinUnreadDays(next)
-                if (isOffice) {
-                  void saveNoticeUnreadAllowanceSettings({ minUnreadDays: next }).catch(() => {})
-                }
-              }}
+              onValueChange={(v) => setMinUnreadDays(Math.max(0, Math.floor(Number(v) || 0)))}
             >
               <SelectTrigger className="h-9 w-full text-xs">
                 <SelectValue />

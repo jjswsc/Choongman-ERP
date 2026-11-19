@@ -12,8 +12,9 @@ function isDuplicateKeyError(err: unknown): boolean {
 }
 
 /**
- * 공지 확인 저장. upsert on_conflict 실패(유니크 없음 등)여도 insert/update로 남긴다.
- * 같은 이름·같은 공지는 매장 표기가 달라도 확인으로 맞춘다.
+ * 공지 확인 저장.
+ * 반드시 현재 로그인 매장(store)+이름 키로 upsert 한다.
+ * (예전 name-only UPDATE는 다른 매장 행만 갱신하고 현재 매장 행이 없어 모바일에서 「확인했는데 다음날 또 뜸」이 났다.)
  */
 export async function persistNoticeRead(params: {
   noticeId: number
@@ -31,16 +32,30 @@ export async function persistNoticeRead(params: {
     status: '확인',
     read_at: new Date().toISOString(),
   }
-  const nameFilter = `notice_id=eq.${noticeId}&name=eq.${encodeURIComponent(name)}`
-  const updated = await supabaseUpdateByFilterReturning('notice_reads', nameFilter, patch)
-  if (Array.isArray(updated) && updated.length > 0) return
+
+  const storeFilter =
+    `notice_id=eq.${noticeId}` +
+    `&store=eq.${encodeURIComponent(store)}` +
+    `&name=eq.${encodeURIComponent(name)}`
+
+  const updatedSameStore = await supabaseUpdateByFilterReturning('notice_reads', storeFilter, patch)
+  if (Array.isArray(updatedSameStore) && updatedSameStore.length > 0) {
+    // 같은 이름·다른 매장 표기 행도 확인으로 맞춤(조회 폴백용)
+    const nameFilter = `notice_id=eq.${noticeId}&name=eq.${encodeURIComponent(name)}`
+    try {
+      await supabaseUpdateByFilterReturning('notice_reads', nameFilter, patch)
+    } catch {
+      /* best-effort */
+    }
+    return
+  }
 
   const insertOnce = async (row: Record<string, unknown>) => {
     try {
       await supabaseInsert('notice_reads', row)
     } catch (e) {
       if (isDuplicateKeyError(e)) {
-        await supabaseUpdateByFilterReturning('notice_reads', nameFilter, patch)
+        await supabaseUpdateByFilterReturning('notice_reads', storeFilter, patch)
         return
       }
       throw e
@@ -59,18 +74,26 @@ export async function persistNoticeRead(params: {
       markSaasTenantColumnMissing('notice_reads')
       const { tenant_id: _t, ...withoutTenant } = row
       await insertOnce(withoutTenant)
-      return
-    }
-    try {
-      await supabaseUpsert('notice_reads', [row], 'notice_id,store,name')
-    } catch (e2) {
-      if (isMissingSaasTenantColumnError(e2) && 'tenant_id' in row) {
-        markSaasTenantColumnMissing('notice_reads')
-        const { tenant_id: _t, ...withoutTenant } = row
-        await supabaseUpsert('notice_reads', [withoutTenant], 'notice_id,store,name')
-        return
+    } else {
+      try {
+        await supabaseUpsert('notice_reads', [row], 'notice_id,store,name')
+      } catch (e2) {
+        if (isMissingSaasTenantColumnError(e2) && 'tenant_id' in row) {
+          markSaasTenantColumnMissing('notice_reads')
+          const { tenant_id: _t, ...withoutTenant } = row
+          await supabaseUpsert('notice_reads', [withoutTenant], 'notice_id,store,name')
+        } else {
+          throw e2
+        }
       }
-      throw e2
     }
+  }
+
+  // 이름만 같은 기존 행도 확인으로 맞춤
+  const nameFilter = `notice_id=eq.${noticeId}&name=eq.${encodeURIComponent(name)}`
+  try {
+    await supabaseUpdateByFilterReturning('notice_reads', nameFilter, patch)
+  } catch {
+    /* best-effort */
   }
 }

@@ -1,8 +1,8 @@
 /**
  * 직원별 수신·확인 집계 — getMyNotices 수신 대상 판정과 맞춤(공지 탭/모바일과 동일).
  */
-import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeReceivesBroadcast, parseTargetRecipientKeys } from '@/lib/broadcast-notice-target'
+import { employeeHasConfirmedNoticeRead } from '@/lib/notice-read-lookup'
 
 export type EmpRow = {
   store: string
@@ -112,9 +112,6 @@ export function isWorkLogRelatedNotice(title: string, sender?: string): boolean 
 
 const empKey = (store: string, name: string) => `${String(store).trim()}|${String(name).trim()}`
 
-const readKey = (noticeId: number, store: string, name: string) =>
-  `${noticeId}::${String(store).trim()}::${String(name).trim()}`
-
 /**
  * 직원별: 대상 공지 수(수신) / 확인(확인 버튼)
  * opts.minUnreadDays>0 이면 발송 후 그 일수 이상 지난 공지만 집계(유예기간 제외).
@@ -132,17 +129,6 @@ export function aggregateNoticeReadStats(
   string,
   { store: string; name: string; job: string; targeted: number; confirmed: number }
 > {
-  const readStatusByKey = new Map<string, string>()
-  for (const r of readRows) {
-    const nid = r.notice_id
-    const s = String(r.store || '').trim()
-    const n = String(r.name || '').trim()
-    if (!nid || !s || !n) continue
-    const k = readKey(nid, s, n)
-    const st = String(r.status || '').trim()
-    if (isNoticeReadStatus(st)) readStatusByKey.set(k, st)
-  }
-
   const agg = new Map<
     string,
     { store: string; name: string; job: string; targeted: number; confirmed: number }
@@ -190,8 +176,7 @@ export function aggregateNoticeReadStats(
         const a = getAgg(t.store, t.name, false)
         if (!a) continue
         a.targeted += 1
-        const st = readStatusByKey.get(readKey(n.id, t.store, t.name)) || ''
-        if (isNoticeReadStatus(st)) a.confirmed += 1
+        if (employeeHasConfirmedNoticeRead(readRows, n.id, t.store, t.name)) a.confirmed += 1
       }
     } else {
       for (const e of byKey.values()) {
@@ -205,8 +190,7 @@ export function aggregateNoticeReadStats(
         const a = getAgg(e.store, e.name, false)
         if (!a) continue
         a.targeted += 1
-        const st = readStatusByKey.get(readKey(n.id, e.store, e.name)) || ''
-        if (isNoticeReadStatus(st)) a.confirmed += 1
+        if (employeeHasConfirmedNoticeRead(readRows, n.id, e.store, e.name)) a.confirmed += 1
       }
     }
   }
@@ -249,15 +233,6 @@ export function listUnreadNoticesForEmployee(
   const name = String(employee.name || '').trim()
   if (!store || !name) return []
 
-  const confirmed = new Set<number>()
-  for (const r of readRows) {
-    const nid = r.notice_id
-    if (!nid) continue
-    if (String(r.store || '').trim() !== store) continue
-    if (String(r.name || '').trim() !== name) continue
-    if (isNoticeReadStatus(String(r.status || '').trim())) confirmed.add(nid)
-  }
-
   const minUnreadDays = Math.max(0, Math.floor(Number(opts.minUnreadDays) || 0))
   const asOfYmd = String(opts.asOfYmd || '').trim().slice(0, 10)
 
@@ -281,7 +256,7 @@ export function listUnreadNoticesForEmployee(
       )
     }
     if (!targeted) continue
-    if (confirmed.has(n.id)) continue
+    if (employeeHasConfirmedNoticeRead(readRows, n.id, store, name)) continue
     out.push({
       id: n.id,
       title: String(n.title || '').trim() || `(#${n.id})`,

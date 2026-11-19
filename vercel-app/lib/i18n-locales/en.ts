@@ -708,9 +708,13 @@ Only matters the employee must handle personally on a working day:
   noticeUnreadModeHintManual:
     'List only; apply “Confirm allowance & bonus exclusion” for selected staff. Payroll calc does not auto-apply.',
   noticeUnreadModeSaved: 'Exclusion mode saved.',
+  noticeUnreadPolicyDaysLabel: 'Grace days (policy)',
+  noticeUnreadPolicyDaysHint:
+    'Grace days are editable anytime (default 3). Changing policy days updates auto exclusion / payroll. “Unread after send” below is only this search filter.',
+  noticeUnreadPolicyDaysSaved: 'Grace policy saved as {days} day(s).',
   noticeUnreadAutoSyncBtn: 'Sync now',
   noticeUnreadAutoSyncDone: 'Auto applied {applied} · cleared {removed}',
-  noticeUnreadMinDaysLabel: 'Unread after send',
+  noticeUnreadMinDaysLabel: 'Unread after send (filter)',
   noticeUnreadMinDaysNone: 'No wait (any unread)',
   noticeUnreadMinDays1: '1+ days',
   noticeUnreadMinDays3: '3+ days',

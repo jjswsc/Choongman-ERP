@@ -3,7 +3,8 @@ import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { NOTICE_LIST_COLS, NOTICE_LIST_COLS_LEGACY } from '@/lib/postgrest-narrow-select'
 import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
-import { employeeIsTargetedForRow, findEmployeeContextFromRoster, noticeReadRowMatchesEmployee } from '@/lib/broadcast-notice-target'
+import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
+import { buildNoticeReadStatusMap } from '@/lib/notice-read-lookup'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { isPurchaseOrderDecisionNotice, noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
 import { buildMyNoticesDbFilter, MY_NOTICES_DB_FETCH_LIMIT } from '@/lib/my-notices-query'
@@ -81,7 +82,7 @@ async function getMyNoticesHandler(
   }
   const { myJob, myRole } = findEmployeeContextFromRoster(empList || [], store, name)
 
-  const readMap: Record<number, string> = {}
+  let readMap: Record<number, string> = {}
   try {
     const readsBase = `name=eq.${encodeURIComponent(name)}`
     const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'notice_reads')
@@ -102,13 +103,8 @@ async function getMyNoticesHandler(
         throw e
       }
     }
-    for (let i = 0; i < (readRows || []).length; i++) {
-      const r = readRows![i]
-      if (!noticeReadRowMatchesEmployee(String(r.store || ''), String(r.name || ''), store, name)) continue
-      const nid = Number(r.notice_id)
-      if (!Number.isFinite(nid) || nid <= 0) continue
-      readMap[nid] = r.status || '확인'
-    }
+    // 매장 표기 차이·과거 저장 드리프트까지 흡수 (확인했는데 다음날 또 뜨는 문제)
+    readMap = buildNoticeReadStatusMap(readRows || [], store, name)
   } catch {
     /* ignore */
   }

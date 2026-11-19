@@ -590,9 +590,13 @@ export const I18N_BASE_TH = {
   noticeUnreadModeHintManual:
     'ดูรายการอย่างเดียว ต้องกด「ยืนยันตัดเบี้ย·โบนัส」เอง การคำนวณเงินเดือนจะไม่ตัดอัตโนมัติ',
   noticeUnreadModeSaved: 'บันทึกวิธีตัดเบี้ย·โบนัสแล้ว',
+  noticeUnreadPolicyDaysLabel: 'วันผ่อนผัน (นโยบาย)',
+  noticeUnreadPolicyDaysHint:
+    'เปลี่ยนวันผ่อนผันได้ตลอด (ค่าเริ่มต้น 3 วัน) เมื่อเปลี่ยนนโยบาย ระบบตัดอัตโนมัติ/เงินเดือนจะใช้ค่าใหม่ 「เกณฑ์หลังส่ง」ด้านล่างใช้กรองการค้นหาครั้งนี้เท่านั้น',
+  noticeUnreadPolicyDaysSaved: 'บันทึกนโยบายวันผ่อนผันเป็น {days} วันแล้ว',
   noticeUnreadAutoSyncBtn: 'ซิงก์ตอนนี้',
   noticeUnreadAutoSyncDone: 'ใส่แล้ว {applied} คน · ยกเลิก {removed} คน',
-  noticeUnreadMinDaysLabel: 'เกณฑ์ยังไม่อ่านหลังส่ง',
+  noticeUnreadMinDaysLabel: 'เกณฑ์ยังไม่อ่านหลังส่ง (ค้นหา)',
   noticeUnreadMinDaysNone: 'ไม่จำกัด (ทันที)',
   noticeUnreadMinDays1: '1 วันขึ้นไป',
   noticeUnreadMinDays3: '3 วันขึ้นไป',
