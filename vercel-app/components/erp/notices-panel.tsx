@@ -13,6 +13,7 @@ import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { MY_NOTICES_DB_FETCH_LIMIT } from "@/lib/my-notices-query"
 import { bangkokTodayYmd } from "@/lib/bangkok-date"
+import { isNoticeReadStatus } from "@/lib/notice-read-status"
 
 /** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
 const NOTICE_SERVER_FETCH_CAP = MY_NOTICES_DB_FETCH_LIMIT
@@ -22,7 +23,7 @@ function todayStr() {
 }
 
 function isRead(status: string) {
-  return /^(확인|Read|확인함)$/.test(String(status || "").trim())
+  return isNoticeReadStatus(status)
 }
 
 export function NoticesPanel() {
@@ -98,20 +99,27 @@ export function NoticesPanel() {
       }
       setConfirmingId(noticeId)
       try {
-        const res = await confirmNoticeRead({ noticeId, store: auth.store, name: auth.user, action })
-        if (res.success) {
+        const res = await confirmNoticeRead({
+          noticeId,
+          store: auth.store,
+          name: auth.user,
+          action,
+        })
+        if (res.success && (res.queued || res.verified !== false)) {
           setNotices((prev) =>
             prev.map((n) => (n.id === noticeId ? { ...n, status: '확인' } : n))
           )
           setExpandedId(null)
+        } else {
+          window.alert(res.message || t('processFail') || '처리 실패')
         }
       } catch {
-        // ignore
+        window.alert(t('processFail') || '처리 실패')
       } finally {
         setConfirmingId(null)
       }
     },
-    [auth?.store, auth?.user]
+    [auth?.store, auth?.user, t]
   )
 
   return (

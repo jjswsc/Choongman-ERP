@@ -82,7 +82,12 @@ export async function confirmNoticeRead(params: {
       action: params.action,
     }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    verified?: boolean
+    queued?: boolean
+  }>
 }
 
 export interface MyPayrollData {

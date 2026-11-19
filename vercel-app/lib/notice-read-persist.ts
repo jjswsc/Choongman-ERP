@@ -1,4 +1,7 @@
-import { supabaseInsert, supabaseUpdateByFilterReturning, supabaseUpsert } from '@/lib/supabase-server'
+import { isNoticeReadStatus } from '@/lib/notice-read-status'
+import { normalizeNoticePersonName } from '@/lib/notice-person-key'
+import { resolveCanonicalNoticeEmployeeKeys } from '@/lib/notice-read-canonical'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilterReturning, supabaseUpsert } from '@/lib/supabase-server'
 import {
   isMissingSaasTenantColumnError,
   markSaasTenantColumnMissing,
@@ -11,44 +14,21 @@ function isDuplicateKeyError(err: unknown): boolean {
   return /duplicate key|23505|already exists/i.test(msg)
 }
 
-/**
- * 공지 확인 저장.
- * 반드시 현재 로그인 매장(store)+이름 키로 upsert 한다.
- * (예전 name-only UPDATE는 다른 매장 행만 갱신하고 현재 매장 행이 없어 모바일에서 「확인했는데 다음날 또 뜸」이 났다.)
- */
-export async function persistNoticeRead(params: {
+async function upsertNoticeReadRow(params: {
   noticeId: number
   store: string
   name: string
+  patch: { status: string; read_at: string }
   tenantScope: SaasTenantScope
 }): Promise<void> {
-  const noticeId = Number(params.noticeId)
-  const store = String(params.store || '').trim()
-  const name = String(params.name || '').trim()
-  if (!Number.isFinite(noticeId) || noticeId <= 0 || !store || !name) {
-    throw new Error('invalid notice read key')
-  }
-  const patch = {
-    status: '확인',
-    read_at: new Date().toISOString(),
-  }
-
+  const { noticeId, store, name, patch, tenantScope } = params
   const storeFilter =
     `notice_id=eq.${noticeId}` +
     `&store=eq.${encodeURIComponent(store)}` +
     `&name=eq.${encodeURIComponent(name)}`
 
-  const updatedSameStore = await supabaseUpdateByFilterReturning('notice_reads', storeFilter, patch)
-  if (Array.isArray(updatedSameStore) && updatedSameStore.length > 0) {
-    // 같은 이름·다른 매장 표기 행도 확인으로 맞춤(조회 폴백용)
-    const nameFilter = `notice_id=eq.${noticeId}&name=eq.${encodeURIComponent(name)}`
-    try {
-      await supabaseUpdateByFilterReturning('notice_reads', nameFilter, patch)
-    } catch {
-      /* best-effort */
-    }
-    return
-  }
+  const updated = await supabaseUpdateByFilterReturning('notice_reads', storeFilter, patch)
+  if (Array.isArray(updated) && updated.length > 0) return
 
   const insertOnce = async (row: Record<string, unknown>) => {
     try {
@@ -64,7 +44,7 @@ export async function persistNoticeRead(params: {
 
   const row = stampSaasTenantId(
     { notice_id: noticeId, store, name, ...patch },
-    params.tenantScope,
+    tenantScope,
     'notice_reads'
   )
   try {
@@ -74,26 +54,90 @@ export async function persistNoticeRead(params: {
       markSaasTenantColumnMissing('notice_reads')
       const { tenant_id: _t, ...withoutTenant } = row
       await insertOnce(withoutTenant)
-    } else {
-      try {
-        await supabaseUpsert('notice_reads', [row], 'notice_id,store,name')
-      } catch (e2) {
-        if (isMissingSaasTenantColumnError(e2) && 'tenant_id' in row) {
-          markSaasTenantColumnMissing('notice_reads')
-          const { tenant_id: _t, ...withoutTenant } = row
-          await supabaseUpsert('notice_reads', [withoutTenant], 'notice_id,store,name')
-        } else {
-          throw e2
-        }
+      return
+    }
+    try {
+      await supabaseUpsert('notice_reads', [row], 'notice_id,store,name')
+    } catch (e2) {
+      if (isMissingSaasTenantColumnError(e2) && 'tenant_id' in row) {
+        markSaasTenantColumnMissing('notice_reads')
+        const { tenant_id: _t, ...withoutTenant } = row
+        await supabaseUpsert('notice_reads', [withoutTenant], 'notice_id,store,name')
+        return
       }
+      throw e2
     }
   }
+}
 
-  // 이름만 같은 기존 행도 확인으로 맞춤
-  const nameFilter = `notice_id=eq.${noticeId}&name=eq.${encodeURIComponent(name)}`
-  try {
-    await supabaseUpdateByFilterReturning('notice_reads', nameFilter, patch)
-  } catch {
-    /* best-effort */
+async function verifyNoticeReadSaved(params: {
+  noticeId: number
+  stores: string[]
+  name: string
+}): Promise<boolean> {
+  const name = normalizeNoticePersonName(params.name)
+  if (!name || params.stores.length === 0) return false
+  for (const store of params.stores) {
+    const filter =
+      `notice_id=eq.${params.noticeId}` +
+      `&store=eq.${encodeURIComponent(store)}` +
+      `&name=eq.${encodeURIComponent(name)}`
+    try {
+      const rows = (await supabaseSelectFilter('notice_reads', filter, {
+        limit: 1,
+        select: 'status',
+      })) as { status?: string }[]
+      if (rows?.[0] && isNoticeReadStatus(String(rows[0].status || ''))) return true
+    } catch {
+      /* try next store */
+    }
   }
+  return false
+}
+
+/**
+ * 공지 확인 저장.
+ * - 로그인 매장 + 인사 마스터 매장(표기만 다른 경우) 모두 upsert
+ * - 저장 후 재조회로 검증 (실패 시 throw → API 500 → 클라이언트 롤백)
+ */
+export async function persistNoticeRead(params: {
+  noticeId: number
+  store: string
+  name: string
+  tenantScope: SaasTenantScope
+}): Promise<{ verified: boolean; stores: string[]; name: string }> {
+  const noticeId = Number(params.noticeId)
+  const loginStore = String(params.store || '').trim()
+  const loginName = normalizeNoticePersonName(params.name)
+  if (!Number.isFinite(noticeId) || noticeId <= 0 || !loginStore || !loginName) {
+    throw new Error('invalid notice read key')
+  }
+
+  const canonical = await resolveCanonicalNoticeEmployeeKeys({
+    store: loginStore,
+    name: loginName,
+    tenantScope: params.tenantScope,
+  })
+  const name = canonical.name || loginName
+  const stores = canonical.stores.length > 0 ? canonical.stores : [loginStore]
+  const patch = {
+    status: '확인',
+    read_at: new Date().toISOString(),
+  }
+
+  for (const store of stores) {
+    await upsertNoticeReadRow({
+      noticeId,
+      store,
+      name,
+      patch,
+      tenantScope: params.tenantScope,
+    })
+  }
+
+  const verified = await verifyNoticeReadSaved({ noticeId, stores, name })
+  if (!verified) {
+    throw new Error('notice read verify failed')
+  }
+  return { verified: true, stores, name }
 }

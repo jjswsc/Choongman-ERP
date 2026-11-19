@@ -265,6 +265,8 @@ function getQueueDomain(path: string): 'pos' | 'erp' | 'accounting' | 'hr' | nul
 /** 큐 적재 시 반환할 fallback - API별 특수 케이스 */
 const OFFLINE_FALLBACK: Record<string, unknown> = {
   '/api/saveCheckResult': { result: 'SAVED' },
+  /** 공지 확인: 큐 대기 중에도 로컬 확인 유지(verified는 서버 확정 후) */
+  '/api/confirmNoticeRead': { success: true, queued: true, verified: false },
 }
 
 /** 기본 fallback */

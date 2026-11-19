@@ -321,23 +321,7 @@ export function HomeTab() {
       }
       setUnreadTotal((n) => (n == null ? n : Math.max(0, n - 1)))
       setExpandedId(null)
-      try {
-        const res = await confirmNoticeRead({ noticeId, store, name, action })
-        if (!res?.success) {
-          removeLocalConfirmedNoticeId(store, name, noticeId)
-          if (snapshot) {
-            setNotices((prev) => {
-              if (prev.some((n) => n.id === noticeId)) {
-                return prev.map((n) => (n.id === noticeId ? snapshot : n))
-              }
-              return statusFilter === "Unread" ? [snapshot, ...prev] : prev
-            })
-            if (statusFilter === "Unread") setNoticeTotal((n) => n + 1)
-            setUnreadTotal((n) => (n == null ? n : n + 1))
-          }
-          await appAlert(res?.message || t("processFail") || "처리 실패")
-        }
-      } catch {
+      const rollbackConfirm = async (msg?: string) => {
         removeLocalConfirmedNoticeId(store, name, noticeId)
         if (snapshot) {
           setNotices((prev) => {
@@ -349,7 +333,20 @@ export function HomeTab() {
           if (statusFilter === "Unread") setNoticeTotal((n) => n + 1)
           setUnreadTotal((n) => (n == null ? n : n + 1))
         }
-        await appAlert(t("processFail") || "처리 실패")
+        await appAlert(msg || t("processFail") || "처리 실패")
+      }
+      try {
+        const res = await confirmNoticeRead({ noticeId, store, name, action })
+        // 오프라인 큐(queued)는 로컬 확인 유지. 서버가 success여도 verified===false면 롤백.
+        if (!res?.success) {
+          await rollbackConfirm(res?.message)
+        } else if (res.queued) {
+          /* keep optimistic — syncPending가 재전송 */
+        } else if (res.verified === false) {
+          await rollbackConfirm(res.message || t("processFail") || "처리 실패")
+        }
+      } catch {
+        await rollbackConfirm()
       } finally {
         setConfirmingId(null)
         refreshUnreadCount()

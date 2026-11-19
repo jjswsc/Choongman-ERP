@@ -5,6 +5,8 @@ import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pa
 import { isNoticeReadStatus } from '@/lib/notice-read-status'
 import { employeeIsTargetedForRow, findEmployeeContextFromRoster } from '@/lib/broadcast-notice-target'
 import { buildNoticeReadStatusMap } from '@/lib/notice-read-lookup'
+import { resolveCanonicalNoticeEmployeeKeys } from '@/lib/notice-read-canonical'
+import { normalizeNoticePersonName } from '@/lib/notice-person-key'
 import { tryVerifyBearerFromRequest } from '@/lib/verify-auth'
 import { isPurchaseOrderDecisionNotice, noticeCreatedYmdBangkok } from '@/lib/notice-read-aggregation'
 import { buildMyNoticesDbFilter, MY_NOTICES_DB_FETCH_LIMIT } from '@/lib/my-notices-query'
@@ -84,7 +86,17 @@ async function getMyNoticesHandler(
 
   let readMap: Record<number, string> = {}
   try {
-    const readsBase = `name=eq.${encodeURIComponent(name)}`
+    const loginName = normalizeNoticePersonName(name)
+    const canon = await resolveCanonicalNoticeEmployeeKeys({
+      store,
+      name: loginName,
+      tenantScope,
+    })
+    const nameKeys = [...new Set([loginName, canon.name].filter(Boolean))]
+    const readsBase =
+      nameKeys.length <= 1
+        ? `name=eq.${encodeURIComponent(nameKeys[0] || loginName)}`
+        : `or=(${nameKeys.map((n) => `name.eq.${encodeURIComponent(n)}`).join(',')})`
     const readsFilter = appendSaasTenantFilter(readsBase, tenantScope, 'notice_reads')
     let readRows: { notice_id: number; store?: string; name?: string; status?: string }[] | null = null
     try {
@@ -103,8 +115,16 @@ async function getMyNoticesHandler(
         throw e
       }
     }
-    // 매장 표기 차이·과거 저장 드리프트까지 흡수 (확인했는데 다음날 또 뜨는 문제)
-    readMap = buildNoticeReadStatusMap(readRows || [], store, name)
+    // 매장 표기(CM 등) 차이만 흡수. 다른 매장 동명이인 확인은 절대 합치지 않음.
+    readMap = buildNoticeReadStatusMap(readRows || [], store, loginName)
+    // 인사 마스터 매장 키로도 한 번 더 병합
+    for (const s of canon.stores) {
+      if (s === store) continue
+      const extra = buildNoticeReadStatusMap(readRows || [], s, canon.name || loginName)
+      for (const [nid, st] of Object.entries(extra)) {
+        if (st && !readMap[Number(nid)]) readMap[Number(nid)] = st
+      }
+    }
   } catch {
     /* ignore */
   }

@@ -2,6 +2,7 @@
  * 공지/인사규정 등 "브로드캐스트 대상" 수신자 판정 — getMyNotices·notice-read-aggregation·getMyHrPolicies 공통
  */
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
+import { noticePersonNamesMatch, normalizeNoticePersonName } from '@/lib/notice-person-key'
 
 export type BroadcastTargetRow = {
   target_store?: string | null
@@ -67,7 +68,7 @@ function recipientKeyMatchesEmployee(
   myStore: string,
   myName: string
 ): boolean {
-  if (recipientName.trim() !== myName.trim()) return false
+  if (!noticePersonNamesMatch(recipientName, myName)) return false
   const rs = recipientStore.trim()
   const ms = myStore.trim()
   return rs === ms || storesMatchForGradeLookup(rs, ms)
@@ -148,6 +149,7 @@ export function findEmployeeContextFromRoster(
   store: string,
   name: string
 ): { myJob: string; myRole: string } {
+  const myName = normalizeNoticePersonName(name)
   let myJob = ""
   let myRole = ""
   let aliasJob = ""
@@ -155,7 +157,7 @@ export function findEmployeeContextFromRoster(
   for (let i = 0; i < (employees || []).length; i++) {
     const s = String(employees[i].store || "").trim()
     const n = String(employees[i].name || "").trim()
-    if (n !== name) continue
+    if (!noticePersonNamesMatch(n, myName)) continue
     const job = String(employees[i].job || employees[i].role || "").trim()
     const role = String(employees[i].role || "").trim().toLowerCase()
     if (s === store) {
