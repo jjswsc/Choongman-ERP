@@ -190,7 +190,6 @@ export function ItemTable({
                   <p className={cn("text-sm font-semibold", ADMIN_NUMERIC_CN)}>
                     {product.price > 0 ? product.price.toLocaleString() : "-"}
                   </p>
-                  <p className="text-[9px] text-muted-foreground">{t("itemsPriceVatExclShort") || "VAT제외"}</p>
                   <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
                     {product.taxType === "exempt"
                       ? t("itemsExempt")
@@ -230,8 +229,16 @@ export function ItemTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[160px] text-center">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center" title={t("itemsListPriceCostBasis")}>
-                {t("itemsColPriceVatExcl") || "판매가(VAT제외)"}
+              <th
+                className="px-3 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center"
+                title={t("itemsListPriceCostBasis") || t("itemsColPriceVatExcl") || "판매가(VAT제외)"}
+              >
+                <span className="inline-flex flex-col items-center leading-tight gap-0.5">
+                  <span>{t("itemsColPrice") || "판매가"}</span>
+                  <span className="text-[9px] font-medium text-muted-foreground">
+                    {t("itemsPriceVatExclShort") || "VAT제외"}
+                  </span>
+                </span>
               </th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
@@ -309,12 +316,11 @@ export function ItemTable({
                   <td className="px-5 py-3 min-w-[160px]">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-3 py-3 text-right">
                     <div className="flex flex-col items-end gap-0.5">
                       <span className={cn("text-xs text-foreground", ADMIN_NUMERIC_CN)}>
                         {product.price > 0 ? product.price.toLocaleString() : "-"}
                       </span>
-                      <span className="text-[9px] text-muted-foreground">{t("itemsPriceVatExclShort") || "VAT제외"}</span>
                       <span
                         className={cn(
                           "inline-flex rounded px-1 py-0.5 text-[9px] font-semibold",

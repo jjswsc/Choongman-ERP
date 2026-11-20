@@ -8423,6 +8423,8 @@ export const I18N_BASE_KO = {
   itemsCostVatIncludedHint: '저장 시 공급가(부가세 제외)로 환산됩니다.',
   itemsCostVatExclHint: '원가는 부가세 제외 기준.',
   itemsListPriceCostBasis: '목록의 판매가·원가는 공급가(부가세 제외) 기준',
+  itemsPriceVatExclShort: 'VAT제외',
+  itemsColPriceVatExcl: '판매가(VAT제외)',
   itemsExempt: '면세',
   itemsZero: '영세율',
   itemsSpec: '규격',
