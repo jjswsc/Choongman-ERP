@@ -5,6 +5,7 @@ import {
   isNativeOfficeRole,
   isSupervisorRole,
   isManagerRole,
+  isFranchiseeRole,
   isOfficeStore,
   isOmniManagerOfficeEquivalent,
   type PermissionBrandKey,
@@ -162,6 +163,10 @@ export function canAuthManageAttendanceQrStore(params: {
   /** Omni Manager는 isManagerRole=false — 매장 Manager와 동일하게 자기 매장, 본사 소속이면 전 매장 */
   if (isManagerRole(role, brandKey) || isOmniManagerOfficeEquivalent(role, brandKey)) {
     if (isOmniManagerOfficeEquivalent(role, brandKey) && isOfficeStore(authStore)) return true
+    return storesMatchForGradeLookup(authStore, target)
+  }
+  /** 가맹점주 — 자기 매장 QR 키오스크 등록 */
+  if (isFranchiseeRole(role)) {
     return storesMatchForGradeLookup(authStore, target)
   }
   return false

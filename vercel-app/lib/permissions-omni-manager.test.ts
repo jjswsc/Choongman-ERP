@@ -61,6 +61,11 @@ describe("Omni Manager = Officer (ERP only)", () => {
     expect(canPickAttendanceQrStoreFilter("Manager", "Branch A", "choongman")).toBe(false)
   })
 
+  it("lets Choongman Franchisee register attendance QR kiosk", () => {
+    expect(canRegisterAttendanceQrDevice("Franchisee", "choongman")).toBe(true)
+    expect(canRegisterAttendanceQrDevice("franchisee", "choongman")).toBe(true)
+  })
+
   it("locks Omni branch Manager inbound to own store, not CM Office", () => {
     expect(canPickInboundStore("Manager", "1001")).toBe(false)
     expect(canPickInboundStore("Manager", "Office")).toBe(true)

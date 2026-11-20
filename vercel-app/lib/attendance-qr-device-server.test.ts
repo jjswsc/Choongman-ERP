@@ -78,4 +78,23 @@ describe("canAuthManageAttendanceQrStore", () => {
       })
     ).toBe(false)
   })
+
+  it("lets Choongman Franchisee register their own store", () => {
+    expect(
+      canAuthManageAttendanceQrStore({
+        authStore: "CM Huamak",
+        authRole: "franchisee",
+        targetStore: "CM Huamak",
+        brandKey: "choongman",
+      })
+    ).toBe(true)
+    expect(
+      canAuthManageAttendanceQrStore({
+        authStore: "CM Huamak",
+        authRole: "franchisee",
+        targetStore: "CM Silom",
+        brandKey: "choongman",
+      })
+    ).toBe(false)
+  })
 })

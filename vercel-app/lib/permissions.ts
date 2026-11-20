@@ -517,12 +517,17 @@ export function canEditPosAttendanceManagement(role: string, store?: string): bo
 }
 
 /**
- * 출퇴근 QR 키오스크 단말 등록·해제 — 본사(Officer·Director 등)·Supervisor·매장 Manager.
+ * 출퇴근 QR 키오스크 단말 등록·해제 — 본사(Officer·Director 등)·Supervisor·매장 Manager·가맹점주.
  * Omni 초기 admin 계정은 Officer라서 isManagerRole만 보면 등록 버튼이 안 나온다.
  * Omni Manager는 ERP에서 Officer로 승격되어 isManagerRole=false 이므로 isOfficeRole로 허용.
  */
 export function canRegisterAttendanceQrDevice(role: string, brandKey?: PermissionBrandKey): boolean {
-  return isOfficeRole(role, brandKey) || isSupervisorRole(role) || isManagerRole(role, brandKey)
+  return (
+    isOfficeRole(role, brandKey) ||
+    isSupervisorRole(role) ||
+    isManagerRole(role, brandKey) ||
+    isFranchiseeRole(role)
+  )
 }
 
 /** 출퇴근 QR 단말 목록 조회·revoke (프린터 설정 화면) */

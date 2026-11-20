@@ -6638,7 +6638,7 @@ export const I18N_BASE_KO = {
   adminPosScreenConfig: 'POS 설정',
   attendanceQrDevicesTitle: '출퇴근 QR 단말',
   attendanceQrDevicesDesc:
-    '매장에 고정해 둔 태블릿·폰에서 /kiosk/attendance-qr 화면을 켜 두면 출퇴근용 QR이 표시됩니다. 최초 1회는 Officer·Director·Supervisor 또는 해당 매장 Manager가 등록합니다.',
+    '매장에 고정해 둔 태블릿·폰에서 /kiosk/attendance-qr 화면을 켜 두면 출퇴근용 QR이 표시됩니다. 최초 1회는 Officer·Director·Supervisor 또는 해당 매장 Manager·가맹점주가 등록합니다.',
   attendanceQrDevicesEmpty: '등록된 QR 단말이 없습니다.',
   attendanceQrDevicesOpenKiosk: 'QR 키오스크 열기',
   attendanceQrRevokeConfirm: '이 QR 단말 등록을 해제하시겠습니까? 해당 기기의 QR 표시가 중단됩니다.',
@@ -6647,7 +6647,7 @@ export const I18N_BASE_KO = {
     '이 기기를 매장 출퇴근 QR 표시용으로 1회 등록합니다. 등록 후에는 로그인 없이 QR만 표시됩니다.',
   attendanceQrRegisterDevice: '이 기기를 QR 단말로 등록',
   attendanceQrRegisterLoginHint:
-    'Officer, Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요.',
+    'Officer, Director, Supervisor 또는 해당 매장 Manager·가맹점주가 로그인한 뒤 등록해 주세요.',
   attendanceQrPickStore: '매장을 선택해 주세요.',
   attendanceQrDeviceLabel: '표시 이름 (선택)',
   attendanceQrDeviceLabelPh: '예: 카운터 QR',
@@ -6655,7 +6655,7 @@ export const I18N_BASE_KO = {
   attendanceQrKioskFootnote: 'QR 코드는 랜덤하게 변경됩니다. 이 화면을 매장에 고정해 두세요.',
   attendanceQrDisplayFail: 'QR을 불러오지 못했습니다.',
   attendanceQrRegisterFail: 'QR 단말 등록에 실패했습니다.',
-  attendance_qr_register_forbidden: 'QR 단말 등록 권한이 없습니다. (Officer·Director·Supervisor·Manager만 가능)',
+  attendance_qr_register_forbidden: 'QR 단말 등록 권한이 없습니다. (Officer·Director·Supervisor·Manager·가맹점주만 가능)',
   attendance_qr_store_forbidden: '이 매장에 QR 단말을 등록할 권한이 없습니다.',
   attendance_qr_device_not_registered: '등록되지 않은 QR 단말입니다.',
   adminPosPrinters: '프린터 설정',

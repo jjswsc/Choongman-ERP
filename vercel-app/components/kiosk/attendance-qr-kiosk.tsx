@@ -73,13 +73,23 @@ export function AttendanceQrKiosk() {
 
   const canRegister = canRegisterAttendanceQrDevice(auth?.role || "")
   const canPickStore = canPickAttendanceQrStoreFilter(auth?.role || "", auth?.store || "")
+  /** 로그인 직후 auth.store 는 있는데 storeCode state 가 비면 등록 버튼만 비활성처럼 보인다 */
+  const effectiveStoreCode = String(storeCode || auth?.store || "").trim()
 
   React.useEffect(() => {
     requestAttendanceQrPersistentStorage()
   }, [])
 
+  React.useEffect(() => {
+    const authStore = String(auth?.store || "").trim()
+    if (!authStore) return
+    setStoreCode((prev) => (String(prev || "").trim() ? prev : authStore))
+  }, [auth?.store])
+
   const resolveStoreCode = React.useCallback(() => {
-    return String(storeCode || readAttendanceQrStoreCode(tenantId || undefined)).trim()
+    return String(
+      storeCode || authStoreRef.current || readAttendanceQrStoreCode(tenantId || undefined)
+    ).trim()
   }, [storeCode, tenantId])
 
   const refreshQr = React.useCallback(async () => {
@@ -161,10 +171,11 @@ export function AttendanceQrKiosk() {
       }
       const stores = posStoresRef.current
       const ownSaved = tid ? readAttendanceQrStoreCode(tid) : legacyStore
+      const authStore = authStoreRef.current
       const preferred =
         ownSaved && (stores.length === 0 || stores.includes(ownSaved))
           ? ownSaved
-          : authStoreRef.current
+          : authStore
       setDeviceToken(token)
       setStoreCode(preferred)
       setMode("register")
@@ -194,7 +205,7 @@ export function AttendanceQrKiosk() {
   }, [mode, refreshQr])
 
   async function handleRegister() {
-    const store = String(storeCode || "").trim()
+    const store = effectiveStoreCode
     if (!store) {
       await appAlert(t("attendanceQrPickStore") || "매장을 선택해 주세요.")
       return
@@ -220,6 +231,7 @@ export function AttendanceQrKiosk() {
         )
         return
       }
+      setStoreCode(store)
       persistBinding(deviceToken, store)
       requestAttendanceQrPersistentStorage()
       setMode("display")
@@ -279,7 +291,7 @@ export function AttendanceQrKiosk() {
             </div>
           ) : (
             <div className="rounded-lg bg-slate-800 px-3 py-2 text-sm">
-              {t("store") || "매장"}: {formatStoreLabel(storeCode || auth?.store || "")}
+              {t("store") || "매장"}: {formatStoreLabel(effectiveStoreCode)}
             </div>
           )}
 
@@ -299,7 +311,7 @@ export function AttendanceQrKiosk() {
           {canRegister ? (
             <Button
               className="w-full"
-              disabled={registering || !storeCode}
+              disabled={registering || !effectiveStoreCode}
               onClick={() => void handleRegister()}
             >
               {registering

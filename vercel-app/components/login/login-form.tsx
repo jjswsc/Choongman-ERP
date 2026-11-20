@@ -1015,6 +1015,13 @@ export function LoginForm({ redirectTo, isAdminPage, initialNoticeKey }: LoginFo
   const handleStoreChange = (s: string) => {
     setStore(s)
     setUser("")
+    /** 회사 태그가 비어 보일 때(필터 불일치로 company 해제된 경우) 매장 태그로 회사를 다시 채운다 */
+    if (!useManualCompanyField) {
+      const tagged = String(loginStoreCompanies[s] || "").trim()
+      if (tagged) {
+        setCompany((prev) => (String(prev || "").trim() ? prev : tagged))
+      }
+    }
   }
   const handleCompanyChange = (c: string) => {
     setCompany(c)
