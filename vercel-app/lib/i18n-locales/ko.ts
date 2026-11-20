@@ -6649,6 +6649,7 @@ export const I18N_BASE_KO = {
   attendanceQrRegisterLoginHint:
     'Officer, Director, Supervisor 또는 해당 매장 Manager·가맹점주가 로그인한 뒤 등록해 주세요.',
   attendanceQrPickStore: '매장을 선택해 주세요.',
+  attendanceQrPickStoreFirst: '먼저 매장을 선택한 뒤, Manager로 로그인하여 등록하세요.',
   attendanceQrDeviceLabel: '표시 이름 (선택)',
   attendanceQrDeviceLabelPh: '예: 카운터 QR',
   attendanceQrScanTitle: '출퇴근 QR 스캔',

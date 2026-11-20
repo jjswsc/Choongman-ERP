@@ -6647,6 +6647,7 @@ orderItemQty: 'Qty',
   attendanceQrRegisterLoginHint:
     'An Officer, Director, Supervisor, store Manager, or franchisee must log in to register this device.',
   attendanceQrPickStore: 'Select a store.',
+  attendanceQrPickStoreFirst: 'Select the store first, then sign in with Manager to register.',
   attendanceQrDeviceLabel: 'Display name (optional)',
   attendanceQrDeviceLabelPh: 'e.g. Counter QR',
   attendanceQrScanTitle: 'Scan for attendance',

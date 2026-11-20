@@ -18,4 +18,13 @@ describe("safeAttendanceQrKioskRedirect", () => {
       `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}&switch=1`
     )
   })
+
+  it("prefills store on POS login when the kiosk already picked one", () => {
+    const href = attendanceQrKioskLoginHref("CM Huamak")
+    expect(href.startsWith("/pos/login?")).toBe(true)
+    const q = new URL(href, "https://example.local").searchParams
+    expect(q.get("redirect")).toBe(ATTENDANCE_QR_KIOSK_PATH)
+    expect(q.get("switch")).toBe("1")
+    expect(q.get("store")).toBe("CM Huamak")
+  })
 })

@@ -17,9 +17,11 @@ import {
   getOrCreateAttendanceQrDeviceToken,
   readAttendanceQrDeviceToken,
   readAttendanceQrStoreCode,
+  readAttendanceQrPendingDisplayLabel,
   requestAttendanceQrPersistentStorage,
   writeAttendanceQrDeviceToken,
   writeAttendanceQrStoreCode,
+  writeAttendanceQrPendingDisplayLabel,
   attendanceQrKioskLoginHref,
 } from "@/lib/attendance-qr-device-client"
 import { Button } from "@/components/ui/button"
@@ -75,9 +77,16 @@ export function AttendanceQrKiosk() {
   const canPickStore = canPickAttendanceQrStoreFilter(auth?.role || "", auth?.store || "")
   /** 로그인 직후 auth.store 는 있는데 storeCode state 가 비면 등록 버튼만 비활성처럼 보인다 */
   const effectiveStoreCode = String(storeCode || auth?.store || "").trim()
+  /** 새 iPad 등: 저장된 매장이 없으면 Manager도 로그인 전에 매장을 고를 수 있어야 한다 */
+  const showStorePicker = canPickStore || !effectiveStoreCode
 
   React.useEffect(() => {
     requestAttendanceQrPersistentStorage()
+  }, [])
+
+  React.useEffect(() => {
+    const pending = readAttendanceQrPendingDisplayLabel()
+    if (pending) setDisplayLabel((prev) => (String(prev || "").trim() ? prev : pending))
   }, [])
 
   React.useEffect(() => {
@@ -85,6 +94,18 @@ export function AttendanceQrKiosk() {
     if (!authStore) return
     setStoreCode((prev) => (String(prev || "").trim() ? prev : authStore))
   }, [auth?.store])
+
+  const handleStorePick = React.useCallback(
+    (code: string) => {
+      const next = String(code || "").trim()
+      setStoreCode(next)
+      if (next) {
+        writeAttendanceQrStoreCode(next, tenantId || undefined)
+        writeAttendanceQrStoreCode(next)
+      }
+    },
+    [tenantId]
+  )
 
   const resolveStoreCode = React.useCallback(() => {
     return String(
@@ -266,17 +287,21 @@ export function AttendanceQrKiosk() {
                 {auth.user}
                 {auth.store ? ` · ${formatStoreLabel(auth.store)}` : ""}
                 {" · "}
-                <Link href={attendanceQrKioskLoginHref()} className="underline text-slate-300">
+                <Link
+                  href={attendanceQrKioskLoginHref(effectiveStoreCode)}
+                  className="underline text-slate-300"
+                  onClick={() => writeAttendanceQrPendingDisplayLabel(displayLabel)}
+                >
                   {t("posSwitchUser") || "Switch user"}
                 </Link>
               </p>
             ) : null}
           </div>
 
-          {canPickStore ? (
+          {showStorePicker ? (
             <div className="space-y-2">
               <Label className="text-slate-200">{t("store") || "매장"}</Label>
-              <Select value={storeCode || undefined} onValueChange={setStoreCode}>
+              <Select value={effectiveStoreCode || undefined} onValueChange={handleStorePick}>
                 <SelectTrigger className="bg-slate-800 text-white">
                   <SelectValue placeholder={t("attendanceQrPickStore") || "매장 선택"} />
                 </SelectTrigger>
@@ -288,6 +313,12 @@ export function AttendanceQrKiosk() {
                   ))}
                 </SelectContent>
               </Select>
+              {!effectiveStoreCode ? (
+                <p className="text-[11px] text-amber-200/90">
+                  {t("attendanceQrPickStoreFirst") ||
+                    "Select the store first, then sign in with Manager to register."}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-lg bg-slate-800 px-3 py-2 text-sm">
@@ -302,7 +333,10 @@ export function AttendanceQrKiosk() {
             <Input
               className="bg-slate-800 text-white"
               value={displayLabel}
-              onChange={(e) => setDisplayLabel(e.target.value)}
+              onChange={(e) => {
+                setDisplayLabel(e.target.value)
+                writeAttendanceQrPendingDisplayLabel(e.target.value)
+              }}
               placeholder={t("attendanceQrDeviceLabelPh") || "예: 카운터 QR"}
               maxLength={80}
             />
@@ -325,7 +359,12 @@ export function AttendanceQrKiosk() {
                   "Officer, Director, Supervisor 또는 해당 매장 Manager가 로그인한 뒤 등록해 주세요."}
               </p>
               <Button asChild variant="secondary" className="w-full">
-                <Link href={attendanceQrKioskLoginHref()}>{t("qrFooterPosLogin") || "POS 로그인"}</Link>
+                <Link
+                  href={attendanceQrKioskLoginHref(effectiveStoreCode)}
+                  onClick={() => writeAttendanceQrPendingDisplayLabel(displayLabel)}
+                >
+                  {t("qrFooterPosLogin") || "POS 로그인"}
+                </Link>
               </Button>
             </div>
           )}

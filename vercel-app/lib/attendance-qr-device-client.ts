@@ -172,8 +172,37 @@ export function buildAttendanceQrClientHint(): string {
 export const ATTENDANCE_QR_KIOSK_PATH = '/kiosk/attendance-qr'
 
 /** switch=1: 직원 세션이 남아 있어도 로그인 폼을 보여 매니저로 전환 가능하게 함 (자동 복귀 루프 방지) */
-export function attendanceQrKioskLoginHref(): string {
-  return `/pos/login?redirect=${encodeURIComponent(ATTENDANCE_QR_KIOSK_PATH)}&switch=1`
+export function attendanceQrKioskLoginHref(storeCode?: string): string {
+  const q = new URLSearchParams({
+    redirect: ATTENDANCE_QR_KIOSK_PATH,
+    switch: '1',
+  })
+  const store = String(storeCode || '').trim()
+  if (store) q.set('store', store)
+  return `/pos/login?${q.toString()}`
+}
+
+/** 로그인 왕복 중 표시 이름 유지 (iPad Safari 등) */
+export const ATTENDANCE_QR_PENDING_LABEL_KEY = 'attendance_qr_pending_display_label'
+
+export function readAttendanceQrPendingDisplayLabel(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return String(sessionStorage.getItem(ATTENDANCE_QR_PENDING_LABEL_KEY) || '').trim().slice(0, 80)
+  } catch {
+    return ''
+  }
+}
+
+export function writeAttendanceQrPendingDisplayLabel(label: string): void {
+  if (typeof window === 'undefined') return
+  const v = String(label || '').trim().slice(0, 80)
+  try {
+    if (v) sessionStorage.setItem(ATTENDANCE_QR_PENDING_LABEL_KEY, v)
+    else sessionStorage.removeItem(ATTENDANCE_QR_PENDING_LABEL_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 /** POS/관리자 로그인 ?redirect= 은 출퇴근 QR 키오스크 경로만 허용 (오픈 리다이렉트 방지) */
