@@ -7,6 +7,8 @@ import {
   overnightPlanStillActive,
   overnightShiftEndMin,
   planDayStart,
+  planMayContinuePastMidnight,
+  previousDayPlanStillActive,
   shouldKeepOvernightPlan,
   suggestVisitStores,
   timelineNowMin,
@@ -152,6 +154,36 @@ describe("야간 근무표 — 자정 이후에도 출근일 표를 유지", () 
         yesterdayStatus: "in_progress",
         shiftIn: "22:00",
         shiftOut: "08:00",
+      })
+    ).toBe(false)
+  })
+
+  it("늦은 마감 매장(14:00–23:00)은 자정 지나도 08:59까지 전날 미마감 표를 유지한다", () => {
+    expect(planMayContinuePastMidnight("14:00", "23:00")).toBe(true)
+    expect(planMayContinuePastMidnight("09:00", "18:00")).toBe(false)
+    expect(planMayContinuePastMidnight("", "")).toBe(true)
+    expect(previousDayPlanStillActive("14:00", "23:00", at("00:40"))).toBe(true)
+    expect(previousDayPlanStillActive("14:00", "23:00", at("08:59"))).toBe(true)
+    expect(previousDayPlanStillActive("14:00", "23:00", at("09:00"))).toBe(false)
+    expect(previousDayPlanStillActive("09:00", "18:00", at("00:40"))).toBe(false)
+    expect(
+      shouldKeepOvernightPlan({
+        requestedYmd: "2026-11-20",
+        calendarTodayYmd: "2026-11-20",
+        nowMin: at("00:40"),
+        yesterdayStatus: "in_progress",
+        shiftIn: "14:00",
+        shiftOut: "23:00",
+      })
+    ).toBe(true)
+    expect(
+      shouldKeepOvernightPlan({
+        requestedYmd: "2026-11-20",
+        calendarTodayYmd: "2026-11-20",
+        nowMin: at("00:40"),
+        yesterdayStatus: "cancelled",
+        shiftIn: "14:00",
+        shiftOut: "23:00",
       })
     ).toBe(false)
   })

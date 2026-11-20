@@ -7,7 +7,7 @@ import {
   computePlanTimeline,
   hmToMin,
   lateMinutes,
-  overnightPlanStillActive,
+  previousDayPlanStillActive,
   timelineNowMin,
 } from '@/lib/daily-plan-timeline'
 import {
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       )) || []) as Record<string, unknown>[]
       for (const row of rows) {
         const p = normalizePlanRow(row)
-        if (overnightPlanStillActive(p.shift_in, p.shift_out, nowMin)) overnightByEmp.set(p.employee_id, p)
+        if (previousDayPlanStillActive(p.shift_in, p.shift_out, nowMin)) overnightByEmp.set(p.employee_id, p)
       }
     }
     const members = []

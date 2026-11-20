@@ -140,7 +140,7 @@ const KO = {
   dp_shift_anchor_default: '타임라인 시작: 근무표 없음 → 09:00 (출근 스캔 시 실제 출근 시각으로 맞춤)',
   dp_shift_out_suffix: ' ~ {out}',
   dp_clockin_shifts_hint:
-    '출근 스캔 후 계획 시각이 실제 출근 시각 기준으로 다시 맞춰집니다. 자정을 넘는 근무는 다음날 아침 퇴근 시각(최대 08:59)까지 같은 일정표에서 완료합니다.',
+    '출근 스캔 후 계획 시각이 실제 출근 시각 기준으로 다시 맞춰집니다. 마감하지 않은 전날 일정(야간·22시 이후 퇴근·근무표 없음)은 자정 이후에도 다음날 아침 08:59까지 같은 일정표에서 이어서 완료합니다.',
   dp_est_zero_hint: '예상 분이 0이면 저장 시 30분으로 적용됩니다. 시험 운영 때는 15~30분을 넣어 보세요.',
   dp_apply_all_min: '전 항목(분)',
   dp_apply_all_min_btn: '일괄',
@@ -499,7 +499,7 @@ const EN: Record<DailyPlanKey, string> = {
   dp_shift_anchor_default: 'Timeline starts at 09:00 — no shift on schedule (moves to actual clock-in after scan)',
   dp_shift_out_suffix: ' – {out}',
   dp_clockin_shifts_hint:
-    'After clock-in scan, planned times realign to your actual clock-in. Overnight shifts keep this same schedule until clock-out the next morning (08:59 at the latest).',
+    'After clock-in scan, planned times realign to your actual clock-in. An unfinished previous-day plan (overnight, clock-out after 22:00, or no roster times) stays on the same schedule after midnight until 08:59 the next morning.',
   dp_est_zero_hint: 'If estimate is 0, save applies 30 min. For trials, try 15–30 min.',
   dp_apply_all_min: 'All items (min)',
   dp_apply_all_min_btn: 'Apply',
@@ -856,7 +856,7 @@ const TH: Record<DailyPlanKey, string> = {
   dp_shift_anchor_default: 'เริ่มไทม์ไลน์ 09:00 — ไม่มีกะในตาราง (เมื่อสแกนเข้างานจะเลื่อนตามเวลาเข้างานจริง)',
   dp_shift_out_suffix: ' – {out}',
   dp_clockin_shifts_hint:
-    'หลังสแกนเข้างาน ระบบจะจัดเวลาตามเวลาเข้างานจริงใหม่อัตโนมัติครับ กะที่ข้ามเที่ยงคืนใช้ตารางวันเข้ากะต่อจนถึงเวลาเลิกกะ สูงสุด 08:59 น. ของเช้าวันถัดไปครับ',
+    'หลังสแกนเข้างาน ระบบจะจัดเวลาตามเวลาเข้างานจริงใหม่อัตโนมัติครับ ตารางวันก่อนที่ยังไม่ปิดงาน (กะข้ามเที่ยงคืน / เลิกหลัง 22:00 / ไม่มีเวลาในตาราง) ใช้ต่อได้หลังเที่ยงคืนถึง 08:59 น. ของเช้าวันถัดไปครับ',
   dp_est_zero_hint: 'ถ้าใส่ 0 ระบบจะบันทึกเป็น 30 นาที ช่วงทดลองลองใส่ 15–30 นาทีครับ',
   dp_apply_all_min: 'ทุกงาน (นาที)',
   dp_apply_all_min_btn: 'ใส่ทั้งชุด',

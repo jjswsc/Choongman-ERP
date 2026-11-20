@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     let workingDate = date
     let plan = await findOwnPlan(date, scope.actorEmployeeId, scope.actorName)
-    /** 자정 이후에도 전날 야간 근무표(22:00–08:00 등)를 퇴근 시각까지 유지 */
+    /** 자정 이후에도 전날 야간·늦은 마감 표를 그레이스(최대 08:59)까지 유지 */
     if (date === today && nowMin < 12 * 60) {
       const yesterday = addDaysYmdUtc(today, -1)
       const yPlan = await findOwnPlan(yesterday, scope.actorEmployeeId, scope.actorName)

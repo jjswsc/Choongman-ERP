@@ -9,7 +9,8 @@ import {
   hmToMin,
   lateMinutes,
   minToHm,
-  overnightPlanStillActive,
+  planMayContinuePastMidnight,
+  previousDayPlanStillActive,
 } from '@/lib/daily-plan-timeline'
 import {
   closeDailyPlan,
@@ -26,9 +27,9 @@ import { dailyPlanItemTitle, koThText } from '@/lib/daily-plan-i18n'
 
 /** 방콕 18시 — 내일 일정표 생성·공개·푸시 */
 export const DAILY_PLAN_PUBLISH_HOUR_BANGKOK = 18
-/** 방콕 22시 — 오늘 일정표 자동 마감 (자정 넘김 근무는 퇴근 시각까지 유지, 최대 익일 오전) */
+/** 방콕 22시 — 오늘 일정표 자동 마감 (늦은 마감·야간은 퇴근/그레이스까지 유지, 최대 익일 08:59) */
 export const DAILY_PLAN_CLOSE_HOUR_BANGKOK = 22
-/** 이 시각 이후 지난 날짜의 미마감 일정표 정리. 야간(22:00–08:00 등)은 퇴근 전까지 제외 */
+/** 이 시각 이후 지난 날짜의 미마감 일정표 정리. 야간·늦은 마감(22시 이후 퇴근)은 그레이스(08:59) 전까지 제외 */
 export const DAILY_PLAN_CATCHUP_FROM_HOUR_BANGKOK = 5
 
 /** 지연 알림 시간대 (방콕) */
@@ -232,15 +233,20 @@ export async function runDailyPlanCron(today: string, hourBangkok: number): Prom
   const nowMin = hmToMin(getBangkokDateTimeString().slice(11, 16)) ?? hourBangkok * 60
   let targets = pastRows
     .map(normalizePlanRow)
-    .filter((p) => !overnightPlanStillActive(p.shift_in, p.shift_out, nowMin))
+    .filter((p) => !previousDayPlanStillActive(p.shift_in, p.shift_out, nowMin))
   let deferred = 0
   if (closeToday && lastRun.close !== today) {
     const todayRows = ((await supabaseSelectFilter('daily_plans', `plan_date=eq.${today}&status=neq.closed&status=neq.cancelled`, {
       limit: 2000,
     })) || []) as Record<string, unknown>[]
     for (const p of todayRows.map(normalizePlanRow)) {
-      if (shiftEndsAfterClose(p.shift_in, p.shift_out, DAILY_PLAN_CLOSE_HOUR_BANGKOK)) deferred += 1
-      else targets = [...targets, p]
+      /** 야간·22시 이후 퇴근·근무표 없음(매니저 등)은 자정 넘김 마감 가능 → 자동 마감 보류 */
+      if (
+        shiftEndsAfterClose(p.shift_in, p.shift_out, DAILY_PLAN_CLOSE_HOUR_BANGKOK) ||
+        planMayContinuePastMidnight(p.shift_in, p.shift_out)
+      ) {
+        deferred += 1
+      } else targets = [...targets, p]
     }
   }
   if (targets.length === 0 && !(closeToday && lastRun.close !== today)) {

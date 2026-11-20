@@ -132,7 +132,38 @@ export function overnightPlanStillActive(shiftIn: string, shiftOut: string, nowM
   return nowMin <= until
 }
 
-/** 오늘(달력) 조회일 때, 아직 안 끝난 전날 야간 표를 보여줄지 */
+/**
+ * 미마감 전날 일정표를 자정 이후에도 유지하는 아침 상한(분).
+ * The Street·Silom·Bangna 등 늦은 마감 매장은 근무표가 14:00–23:00처럼
+ * 「야간 형태」가 아니어도 00시 넘어서 마감 체크리스트를 끝낸다.
+ * 근태 야간 상한(08:59)과 맞춘다.
+ */
+export const DAILY_PLAN_PREV_DAY_GRACE_UNTIL_MIN = 8 * 60 + 59
+
+/**
+ * 늦은 마감·야간 가능성이 있는 근무표인지.
+ * - 자정을 넘는 야간(22–08, 18–02, 24시+ 표기)
+ * - 22:00 이후 퇴근(당일 늦은 마감)
+ * - 근무표 시각 없음(매니저·미기입) — 자정 넘김 마감을 막지 않도록 허용
+ */
+export function planMayContinuePastMidnight(shiftIn: string, shiftOut: string): boolean {
+  if (overnightShiftEndMin(shiftIn, shiftOut) != null) return true
+  const out = hmToMin(shiftOut)
+  if (out == null) return !String(shiftIn || "").trim()
+  if (out >= 22 * 60) return true
+  const inn = hmToMin(shiftIn)
+  if (inn != null && out <= inn) return true
+  return false
+}
+
+/** 전날 미마감 표를 지금 시각에도 이어서 보여줄지(야간 형태 + 늦은 마감 그레이스) */
+export function previousDayPlanStillActive(shiftIn: string, shiftOut: string, nowMin: number): boolean {
+  if (overnightPlanStillActive(shiftIn, shiftOut, nowMin)) return true
+  if (nowMin > DAILY_PLAN_PREV_DAY_GRACE_UNTIL_MIN) return false
+  return planMayContinuePastMidnight(shiftIn, shiftOut)
+}
+
+/** 오늘(달력) 조회일 때, 아직 안 끝난 전날 표(야간·늦은 마감)를 보여줄지 */
 export function shouldKeepOvernightPlan(params: {
   requestedYmd: string
   calendarTodayYmd: string
@@ -142,8 +173,9 @@ export function shouldKeepOvernightPlan(params: {
   shiftOut: string
 }): boolean {
   if (params.requestedYmd !== params.calendarTodayYmd) return false
-  if (String(params.yesterdayStatus || "").trim() === "closed") return false
-  return overnightPlanStillActive(params.shiftIn, params.shiftOut, params.nowMin)
+  const st = String(params.yesterdayStatus || "").trim()
+  if (st === "closed" || st === "cancelled") return false
+  return previousDayPlanStillActive(params.shiftIn, params.shiftOut, params.nowMin)
 }
 
 /**

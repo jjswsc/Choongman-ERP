@@ -42,7 +42,7 @@ import {
   hmToMin,
   lateMinutes,
   minToHm,
-  overnightPlanStillActive,
+  previousDayPlanStillActive,
   timelineNowMin,
 } from "@/lib/daily-plan-timeline"
 import { DailyPlanActionSheet } from "@/components/daily-plan/daily-plan-action-sheet"
@@ -138,11 +138,11 @@ export function DailyPlanItems(props: {
     })
   const calendarToday = getBangkokTodayDateString()
   const [wallNowMin, setWallNowMin] = useState(bangkokNowMin)
-  /** 자정 이후에도 전날 야간 근무표는 퇴근 전까지 오늘 표처럼 진행·지연을 표시 */
+  /** 자정 이후에도 전날 야간·늦은 마감 표는 그레이스(최대 08:59)까지 오늘 표처럼 진행·지연을 표시 */
   const onOvernight =
     !closed &&
     plan.plan_date === addBangkokCalendarDays(calendarToday, -1) &&
-    overnightPlanStillActive(plan.shift_in, plan.shift_out, wallNowMin)
+    previousDayPlanStillActive(plan.shift_in, plan.shift_out, wallNowMin)
   const isLive = !closed && (plan.plan_date === calendarToday || onOvernight)
   const nowMin = timelineNowMin(plan.shift_in, plan.shift_out, wallNowMin)
   const targets = (delegateTargets || []).filter((m) => m.employeeId !== plan.employee_id)
