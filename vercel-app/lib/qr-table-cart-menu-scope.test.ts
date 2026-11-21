@@ -78,6 +78,35 @@ describe('qr cart menu scope filter', () => {
       })
     ).toEqual([2, 3])
   })
+
+  it('hides The Street-only Good Morning Deal on Seacon when scopes loaded', () => {
+    expect(
+      filterCartMenusByStoreScope({
+        menuIds: [454, 455, 456, 457, 458, 459],
+        requestedStoreCode: 'CM Seacon Srinakarin',
+        scopesByMenuId: {
+          454: ['CM The street'],
+          455: ['CM The street'],
+          456: ['CM The street'],
+          457: ['CM The street'],
+          458: ['CM The street'],
+          459: ['CM The street'],
+        },
+        compatibilityMode: true,
+      })
+    ).toEqual([])
+  })
+
+  it('fails open (shows all) only when scope schema is not ready', () => {
+    expect(
+      shouldMenuBeVisibleForStore({
+        requestedStoreCode: 'CM Seacon Srinakarin',
+        scopedStores: ['CM The street'],
+        compatibilityMode: true,
+        scopeSchemaReady: false,
+      })
+    ).toBe(true)
+  })
 })
 
 describe('qr extra menu allow list', () => {

@@ -1,6 +1,8 @@
 import {
   supabaseDeleteByFilter,
+  supabaseSelectAllPages,
   supabaseSelectFilter,
+  supabaseSelectFilterAllPages,
 } from '@/lib/supabase-server'
 import { stripTenantPrefixedStoreCode } from '@/lib/pos-operating-store-code'
 import { normalizeMenuScopeStoreCodes } from '@/lib/pos-menu-store-scope'
@@ -13,7 +15,31 @@ export type PromoMirrorIndex = {
   scopeSchemaReady: boolean
 }
 
-/** 메뉴 id → 매장 스코프 코드 목록 */
+type ScopeRow = { menu_id?: number | null; store_code?: string | null; enabled?: boolean | null }
+
+function absorbScopeRows(
+  byMenuId: Map<number, string[]>,
+  scopeRows: ScopeRow[] | null | undefined,
+  onlyMenuIds?: Set<number>
+) {
+  for (const row of scopeRows || []) {
+    if (row.enabled === false) continue
+    const menuId = Number(row.menu_id || 0)
+    const storeCode = stripTenantPrefixedStoreCode(row.store_code || '')
+    if (!menuId || !storeCode) continue
+    if (onlyMenuIds && !onlyMenuIds.has(menuId)) continue
+    const list = byMenuId.get(menuId) || []
+    if (!list.some((x) => x.toLowerCase() === storeCode.toLowerCase())) list.push(storeCode)
+    byMenuId.set(menuId, list)
+  }
+}
+
+/**
+ * 메뉴 id → 매장 스코프 코드 목록
+ *
+ * PostgREST 단일 limit(흔히 1000)에 잘리면 일부 메뉴 스코프가 빈 배열로 보여
+ * 충만 호환모드에서 전 매장 QR에 잘못 노출된다(getPosMenus는 이미 AllPages).
+ */
 export async function loadStoreCodesByMenuIds(menuIds: number[]): Promise<{
   byMenuId: Map<number, string[]>
   scopeSchemaReady: boolean
@@ -23,23 +49,33 @@ export async function loadStoreCodesByMenuIds(menuIds: number[]): Promise<{
   if (ids.length === 0) return { byMenuId, scopeSchemaReady: true }
 
   try {
-    const chunkSize = 300
+    /** QR 홀 카탈로그처럼 id가 많으면 전체 스코프를 페이지 로드( getPosMenus 와 동일 ) */
+    if (ids.length > 80) {
+      const idSet = new Set(ids)
+      const scopeRows = (await supabaseSelectAllPages('pos_menu_store_scopes', {
+        order: 'store_code.asc,menu_id.asc',
+        select: 'menu_id,store_code,enabled',
+        pageSize: 3000,
+        maxRows: 500000,
+      })) as ScopeRow[]
+      absorbScopeRows(byMenuId, scopeRows, idSet)
+      return { byMenuId, scopeSchemaReady: true }
+    }
+
+    const chunkSize = 80
     for (let i = 0; i < ids.length; i += chunkSize) {
       const chunk = ids.slice(i, i + chunkSize)
-      const scopeRows = (await supabaseSelectFilter(
+      const scopeRows = (await supabaseSelectFilterAllPages(
         'pos_menu_store_scopes',
         `menu_id=in.(${chunk.join(',')})`,
-        { limit: 100000, select: 'menu_id,store_code,enabled' }
-      )) as Array<{ menu_id?: number | null; store_code?: string | null; enabled?: boolean | null }>
-      for (const row of scopeRows || []) {
-        if (row.enabled === false) continue
-        const menuId = Number(row.menu_id || 0)
-        const storeCode = stripTenantPrefixedStoreCode(row.store_code || '')
-        if (!menuId || !storeCode) continue
-        const list = byMenuId.get(menuId) || []
-        if (!list.some((x) => x.toLowerCase() === storeCode.toLowerCase())) list.push(storeCode)
-        byMenuId.set(menuId, list)
-      }
+        {
+          order: 'menu_id.asc,store_code.asc',
+          select: 'menu_id,store_code,enabled',
+          pageSize: 3000,
+          maxRows: 200000,
+        }
+      )) as ScopeRow[]
+      absorbScopeRows(byMenuId, scopeRows)
     }
     return { byMenuId, scopeSchemaReady: true }
   } catch {

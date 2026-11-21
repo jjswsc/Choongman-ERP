@@ -72,9 +72,9 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **862**개 · 접두어 그룹 **102**개
+- `sql/` 최상위: **866**개 · 접두어 그룹 **103**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
-- `sql/archive/` (진단 전용 등 보관): **76**개
+- `sql/archive/` (진단 전용 등 보관): **79**개
 
 <details><summary><code>pos_*</code> (236)</summary>
 
@@ -1041,6 +1041,15 @@
 
 </details>
 
+<details><summary><code>seacon_*</code> (4)</summary>
+
+- [`seacon_qr_hide_good_morning_01_preview.sql`](../sql/seacon_qr_hide_good_morning_01_preview.sql) — preview
+- [`seacon_qr_hide_good_morning_02_qr_settings_preview.sql`](../sql/seacon_qr_hide_good_morning_02_qr_settings_preview.sql) — preview
+- [`seacon_qr_hide_good_morning_03_apply_hide.sql`](../sql/seacon_qr_hide_good_morning_03_apply_hide.sql) — apply, log
+- [`seacon_qr_hide_good_morning_04_verify.sql`](../sql/seacon_qr_hide_good_morning_04_verify.sql) — verify
+
+</details>
+
 <details><summary><code>wht_*</code> (4)</summary>
 
 - [`wht_mbk_branch_address_01_preview.sql`](../sql/wht_mbk_branch_address_01_preview.sql) — preview
@@ -1597,7 +1606,7 @@
 
 </details>
 
-<details><summary><code>archive/</code> (76)</summary>
+<details><summary><code>archive/</code> (79)</summary>
 
 - [`archive/diagnose/diagnose_abc_company_login_pos_menus.sql`](../sql/archive/diagnose/diagnose_abc_company_login_pos_menus.sql)
 - [`archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql`](../sql/archive/diagnose/diagnose_attendance_qr_mode_01_settings.sql)
@@ -1661,6 +1670,9 @@
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_02_attempts.sql)
 - [`archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql`](../sql/archive/diagnose/diagnose_qr_table_partial_pay_20261013_03_by_total.sql)
 - [`archive/diagnose/diagnose_rpkm2026_promo_code.sql`](../sql/archive/diagnose/diagnose_rpkm2026_promo_code.sql)
+- [`archive/diagnose/diagnose_seacon_cancel_block_01_outstanding.sql`](../sql/archive/diagnose/diagnose_seacon_cancel_block_01_outstanding.sql)
+- [`archive/diagnose/diagnose_seacon_cancel_block_02_today_orders.sql`](../sql/archive/diagnose/diagnose_seacon_cancel_block_02_today_orders.sql)
+- [`archive/diagnose/diagnose_seacon_cancel_block_03_by_ref_type.sql`](../sql/archive/diagnose/diagnose_seacon_cancel_block_03_by_ref_type.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_01_status.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_01_status.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_02_grab_webhook.sql)
 - [`archive/diagnose/diagnose_silom_delivery_sales_03_paid_at.sql`](../sql/archive/diagnose/diagnose_silom_delivery_sales_03_paid_at.sql)
