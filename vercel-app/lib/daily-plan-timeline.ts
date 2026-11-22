@@ -12,7 +12,8 @@ export const DAILY_PLAN_LATE_ALERT_MINUTES = 60
 export const DAILY_PLAN_AUTO_ROUTE_MAX = 3
 
 export function hmToMin(hm: string | null | undefined): number | null {
-  const m = /^(\d{1,2}):(\d{2})/.exec(String(hm || "").trim())
+  /** 근무표·태국 표기 `02.30` / `26.00` 도 허용 */
+  const m = /^(\d{1,2})[:.](\d{2})/.exec(String(hm || "").trim())
   if (!m) return null
   const h = Number(m[1])
   const mm = Number(m[2])
@@ -156,11 +157,15 @@ export function planMayContinuePastMidnight(shiftIn: string, shiftOut: string): 
   return false
 }
 
-/** 전날 미마감 표를 지금 시각에도 이어서 보여줄지(야간 형태 + 늦은 마감 그레이스) */
+/**
+ * 전날 미마감 표를 지금 시각에도 이어서 보여줄지.
+ * 근무표가 야간/늦은 마감 형태가 아니어도(오기재·실제 02:30 마감 등)
+ * 「닫기」 전이면 익일 08:59까지 유지한다. 야간은 퇴근+59분(최대 11:59)까지 더 길 수 있다.
+ */
 export function previousDayPlanStillActive(shiftIn: string, shiftOut: string, nowMin: number): boolean {
   if (overnightPlanStillActive(shiftIn, shiftOut, nowMin)) return true
   if (nowMin > DAILY_PLAN_PREV_DAY_GRACE_UNTIL_MIN) return false
-  return planMayContinuePastMidnight(shiftIn, shiftOut)
+  return true
 }
 
 /** 오늘(달력) 조회일 때, 아직 안 끝난 전날 표(야간·늦은 마감)를 보여줄지 */

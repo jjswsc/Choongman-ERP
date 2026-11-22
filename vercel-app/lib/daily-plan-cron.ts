@@ -9,7 +9,6 @@ import {
   hmToMin,
   lateMinutes,
   minToHm,
-  planMayContinuePastMidnight,
   previousDayPlanStillActive,
 } from '@/lib/daily-plan-timeline'
 import {
@@ -27,9 +26,13 @@ import { dailyPlanItemTitle, koThText } from '@/lib/daily-plan-i18n'
 
 /** 방콕 18시 — 내일 일정표 생성·공개·푸시 */
 export const DAILY_PLAN_PUBLISH_HOUR_BANGKOK = 18
-/** 방콕 22시 — 오늘 일정표 자동 마감 (늦은 마감·야간은 퇴근/그레이스까지 유지, 최대 익일 08:59) */
+/**
+ * 방콕 22시 — 당일 자동 마감 시각(기록용).
+ * 실제로는 근무표 오기재·야간(02:30 마감 등) 때문에 당일분은 자동 마감하지 않고,
+ * 익일 그레이스(08:59) 이후 catch-up 에서만 지난 날짜를 정리한다.
+ */
 export const DAILY_PLAN_CLOSE_HOUR_BANGKOK = 22
-/** 이 시각 이후 지난 날짜의 미마감 일정표 정리. 야간·늦은 마감(22시 이후 퇴근)은 그레이스(08:59) 전까지 제외 */
+/** 이 시각 이후 지난 날짜의 미마감 일정표 정리. 미마감은 그레이스(08:59) 전까지 제외 */
 export const DAILY_PLAN_CATCHUP_FROM_HOUR_BANGKOK = 5
 
 /** 지연 알림 시간대 (방콕) */
@@ -185,7 +188,7 @@ async function runLateAlerts(today: string): Promise<DailyPlanCronResult['late']
 
 /**
  * 매시 cron. 18시: 내일 일정표 생성 + 공개 + 푸시(하루 1회).
- * 22시: 오늘 일정표 자동 마감(자정 넘김 근무 제외). 5시 이후: 지난 날짜 미마감 정리(야간은 퇴근 시각까지 유지).
+ * 22시: 당일 자동 마감은 하지 않음(기록만). 5시 이후: 지난 날짜 미마감 정리(그레이스 08:59 전까지 유지).
  */
 export async function runDailyPlanCron(today: string, hourBangkok: number): Promise<DailyPlanCronResult> {
   const result: DailyPlanCronResult = { publish: { ran: false }, late: { ran: false }, close: { ran: false } }
@@ -239,15 +242,8 @@ export async function runDailyPlanCron(today: string, hourBangkok: number): Prom
     const todayRows = ((await supabaseSelectFilter('daily_plans', `plan_date=eq.${today}&status=neq.closed&status=neq.cancelled`, {
       limit: 2000,
     })) || []) as Record<string, unknown>[]
-    for (const p of todayRows.map(normalizePlanRow)) {
-      /** 야간·22시 이후 퇴근·근무표 없음(매니저 등)은 자정 넘김 마감 가능 → 자동 마감 보류 */
-      if (
-        shiftEndsAfterClose(p.shift_in, p.shift_out, DAILY_PLAN_CLOSE_HOUR_BANGKOK) ||
-        planMayContinuePastMidnight(p.shift_in, p.shift_out)
-      ) {
-        deferred += 1
-      } else targets = [...targets, p]
-    }
+    /** 당일분은 22시에 자동 마감하지 않음 — 직원이「닫기」하거나 익일 08:59 이후 catch-up */
+    deferred += todayRows.length
   }
   if (targets.length === 0 && !(closeToday && lastRun.close !== today)) {
     result.close.skippedReason = 'nothing_to_close'

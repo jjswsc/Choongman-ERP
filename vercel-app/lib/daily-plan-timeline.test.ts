@@ -27,6 +27,8 @@ const item = (id: number, p: Partial<TimelineItemInput>): TimelineItemInput => (
 describe("daily-plan-timeline", () => {
   it("hm 변환", () => {
     expect(hmToMin("09:15")).toBe(555)
+    expect(hmToMin("02.30")).toBe(150)
+    expect(hmToMin("26.00")).toBe(26 * 60)
     expect(hmToMin("x")).toBeNull()
     expect(minToHm(555)).toBe("09:15")
     expect(minToHm(1440 + 30)).toBe("00:30")
@@ -158,14 +160,18 @@ describe("야간 근무표 — 자정 이후에도 출근일 표를 유지", () 
     ).toBe(false)
   })
 
-  it("늦은 마감 매장(14:00–23:00)은 자정 지나도 08:59까지 전날 미마감 표를 유지한다", () => {
+  it("미마감 전날 표는 근무표 형태와 무관하게 08:59까지 유지한다 (Ekkamai 02:30 마감·주간 표 오기재 포함)", () => {
     expect(planMayContinuePastMidnight("14:00", "23:00")).toBe(true)
     expect(planMayContinuePastMidnight("09:00", "18:00")).toBe(false)
     expect(planMayContinuePastMidnight("", "")).toBe(true)
     expect(previousDayPlanStillActive("14:00", "23:00", at("00:40"))).toBe(true)
     expect(previousDayPlanStillActive("14:00", "23:00", at("08:59"))).toBe(true)
     expect(previousDayPlanStillActive("14:00", "23:00", at("09:00"))).toBe(false)
-    expect(previousDayPlanStillActive("09:00", "18:00", at("00:40"))).toBe(false)
+    expect(previousDayPlanStillActive("09:00", "18:00", at("00:28"))).toBe(true)
+    expect(previousDayPlanStillActive("17:00", "21:00", at("00:28"))).toBe(true)
+    expect(previousDayPlanStillActive("17:00", "02:30", at("00:28"))).toBe(true)
+    expect(previousDayPlanStillActive("17:00", "02.30", at("02:00"))).toBe(true)
+    expect(previousDayPlanStillActive("09:00", "18:00", at("09:00"))).toBe(false)
     expect(
       shouldKeepOvernightPlan({
         requestedYmd: "2026-11-20",
@@ -174,6 +180,16 @@ describe("야간 근무표 — 자정 이후에도 출근일 표를 유지", () 
         yesterdayStatus: "in_progress",
         shiftIn: "14:00",
         shiftOut: "23:00",
+      })
+    ).toBe(true)
+    expect(
+      shouldKeepOvernightPlan({
+        requestedYmd: "2026-11-23",
+        calendarTodayYmd: "2026-11-23",
+        nowMin: at("00:28"),
+        yesterdayStatus: "in_progress",
+        shiftIn: "17:00",
+        shiftOut: "21:00",
       })
     ).toBe(true)
     expect(
