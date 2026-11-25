@@ -735,6 +735,9 @@ export async function updatePosOrderStatus(params: {
   retrySideEffects?: boolean
   /** 선수금 보유 주문 취소 시 환불/몰수 */
   depositDisposition?: 'refund' | 'forfeit'
+  /** 비회원 예약금 홀더 조회용 (원장 guest_phone) */
+  depositPhone?: string
+  guestPhone?: string
 }) {
   const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {
     method: 'POST',

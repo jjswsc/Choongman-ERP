@@ -3850,7 +3850,11 @@ export const I18N_POS_EN: Record<string, string> = {
     posDepositCheckIn: 'Check in',
     posDepositApplied: 'Deposit applied',
     posDepositCollectable: 'Amount due',
-    posDepositRefundAsk: 'Refund the deposit?\nOK = refund, Cancel = keep (forfeit)',
+    posDepositRefundAsk: 'Refund the deposit to the guest?\nOK = refund, Cancel = abort',
+    posDepositForfeitAsk:
+      'Keep the deposit (forfeit) without refunding?\nOK = forfeit (cash stays in drawer), Cancel = abort',
+    posDepositDisposeAborted: 'Deposit action cancelled, so the order was not cancelled.',
+    posDepositForfeit: 'Forfeit',
     posDepositSlipTitle: 'Deposit received',
     posDepositSlipVisit: 'Visit',
     posDepositErrAmount: 'Enter a deposit amount.',

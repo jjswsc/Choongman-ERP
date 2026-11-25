@@ -3848,7 +3848,11 @@ export const I18N_POS_KO: Record<string, string> = {
     posDepositCheckIn: '체크인',
     posDepositApplied: '예약금 차감',
     posDepositCollectable: '받을 금액',
-    posDepositRefundAsk: '예약금을 환불할까요?\n확인 = 환불, 취소 = 몰수',
+    posDepositRefundAsk: '예약금을 손님에게 환불할까요?\n확인 = 환불, 취소 = 중단',
+    posDepositForfeitAsk:
+      '환불하지 않고 몰수할까요?\n확인 = 몰수(현금은 시재에 남음), 취소 = 중단',
+    posDepositDisposeAborted: '예약금 처리를 취소해서 주문도 취소하지 않았습니다.',
+    posDepositForfeit: '몰수',
     posDepositSlipTitle: '예약금 수령',
     posDepositSlipVisit: '방문',
     posDepositErrAmount: '예약금 금액을 입력해 주세요.',

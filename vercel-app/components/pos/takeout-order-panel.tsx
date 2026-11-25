@@ -393,6 +393,8 @@ export function TakeoutOrderPanel({
           reasonPrompt: t('posCancelReasonPrompt'),
           reasonTooShort: t('posReceiptPayCorrectReasonShort'),
           depositRefundAsk: t('posDepositRefundAsk'),
+          depositForfeitAsk: t('posDepositForfeitAsk'),
+          depositDisposeAborted: t('posDepositDisposeAborted'),
           retryConfirm: t('posStatusRetryConfirm'),
           orderNotFound: t('syncRecOrderNotFound'),
           localizeMessage: (message, fallback) => localizeApiMessage(message, t, fallback, lang),

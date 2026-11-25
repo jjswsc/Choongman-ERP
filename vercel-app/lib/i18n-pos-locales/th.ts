@@ -3700,7 +3700,11 @@ export const I18N_POS_TH: Record<string, string> = {
     posDepositCheckIn: 'เช็คอิน',
     posDepositApplied: 'หักมัดจำ',
     posDepositCollectable: 'ยอดที่ต้องรับ',
-    posDepositRefundAsk: 'คืนมัดจำให้ลูกค้าไหมครับ?\nตกลง = คืน, ยกเลิก = ไม่คืน',
+    posDepositRefundAsk: 'คืนมัดจำให้ลูกค้าไหมครับ?\nตกลง = คืนเงิน, ยกเลิก = ยกเลิก',
+    posDepositForfeitAsk:
+      'ไม่คืนเงินและยึดมัดจำใช่ไหมครับ?\nตกลง = ยึด (เงินสดยังอยู่ในลิ้นชัก), ยกเลิก = ยกเลิก',
+    posDepositDisposeAborted: 'ยกเลิกการจัดการมัดจำแล้ว จึงยังไม่ยกเลิกออเดอร์ครับ',
+    posDepositForfeit: 'ไม่คืน',
     posDepositSlipTitle: 'ใบรับมัดจำ',
     posDepositSlipVisit: 'เวลานัด',
     posDepositErrAmount: 'กรุณากรอกจำนวนมัดจำครับ',

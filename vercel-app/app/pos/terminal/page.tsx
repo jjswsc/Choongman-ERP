@@ -1126,12 +1126,38 @@ export default function PosTerminalPage() {
   const handleRefundPosDeposit = useCallback(
     async (holder: { memberId?: number; phone: string }) => {
       if (!currentStoreId) return
+      // ยกเลิก = 중단. 예전처럼 취소=몰수면 테스트·오클릭 시 시재「เงินสดมัดจำ」이 그대로 남음.
       const refund = await appConfirm(
-        t('posDepositRefundAsk') || '예약금을 환불할까요?\n확인 = 환불, 취소 = 몰수'
+        t('posDepositRefundAsk') || '예약금을 손님에게 환불할까요?\n확인 = 환불, 취소 = 중단'
       )
+      if (!refund) return
       const res = await disposePosDeposit({
         storeCode: currentStoreId,
-        disposition: refund ? 'refund' : 'forfeit',
+        disposition: 'refund',
+        memberId: holder.memberId,
+        phone: holder.phone,
+      })
+      if (!res.success) {
+        await appAlert(
+          localizeApiMessage(String(res.message || ''), t, t('processFail') || '처리 실패', lang)
+        )
+        return
+      }
+      setDepositQueueTick((n) => n + 1)
+    },
+    [currentStoreId, t, lang]
+  )
+  const handleForfeitPosDeposit = useCallback(
+    async (holder: { memberId?: number; phone: string }) => {
+      if (!currentStoreId) return
+      const ok = await appConfirm(
+        t('posDepositForfeitAsk') ||
+          '환불하지 않고 몰수할까요?\n확인 = 몰수(현금은 시재에 남음), 취소 = 중단'
+      )
+      if (!ok) return
+      const res = await disposePosDeposit({
+        storeCode: currentStoreId,
+        disposition: 'forfeit',
         memberId: holder.memberId,
         phone: holder.phone,
       })
@@ -12500,6 +12526,7 @@ export default function PosTerminalPage() {
                       busy={posCartBackendBusy}
                       reloadToken={depositQueueTick}
                       onRefund={handleRefundPosDeposit}
+                      onForfeit={handleForfeitPosDeposit}
                     />
                   )}
                   {activeTab === 'tables' && (

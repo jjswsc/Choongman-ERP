@@ -36,6 +36,7 @@ import {
 } from '@/lib/saas/pos-completion-side-effects-gate'
 import {
   applyPosDepositOnSettle,
+  disposePosDepositHeld,
 } from '@/lib/pos-deposit-server'
 import {
   isPosOrderCollectableSettled,
@@ -536,6 +537,43 @@ export async function POST(req: NextRequest) {
           await revokeMemberStampForOrder({ memberId: reversalMemberId, orderId: id })
         } catch (stampErr) {
           console.error('updatePosOrderStatus stamp revoke:', stampErr)
+        }
+      }
+    }
+
+    // 예약금 보유 주문 취소·환불: 클라이언트가 고른 refund/forfeit 를 원장에 반영
+    // (미결제 취소 포함 — 결제 역분개 블록과 별개)
+    if (isPosReversalStatus(appliedStatus)) {
+      const dispositionRaw = String(body.depositDisposition ?? body.deposit_disposition ?? '')
+        .trim()
+        .toLowerCase()
+      if (dispositionRaw === 'refund' || dispositionRaw === 'forfeit') {
+        try {
+          const allowAccounting = storeCode
+            ? await shouldRunPosAccountingSideEffectsForStore(storeCode)
+            : false
+          const guestPhone = String(
+            body.depositPhone ??
+              body.guestPhone ??
+              body.guest_phone ??
+              (prev as { guest_phone?: string } | null)?.guest_phone ??
+              ''
+          ).trim()
+          const disposed = await disposePosDepositHeld({
+            storeCode,
+            disposition: dispositionRaw,
+            memberId: Number(prev?.member_id || 0) || null,
+            guestPhone,
+            posOrderId: id,
+            createdBy: String(auth.name || prev?.created_by || '').trim(),
+            allowAccounting,
+            memo: dispositionRaw === 'refund' ? 'order_cancel_refund' : 'order_cancel_forfeit',
+          })
+          if (!disposed.ok && disposed.message !== 'deposit_nothing_held') {
+            console.error('updatePosOrderStatus deposit dispose:', disposed.message)
+          }
+        } catch (depDisposeErr) {
+          console.error('updatePosOrderStatus deposit dispose:', depDisposeErr)
         }
       }
     }

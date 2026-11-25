@@ -29,6 +29,8 @@ export async function executePosFullOrderCancel(params: {
     reasonTooShort?: string
     retryConfirm?: string
     depositRefundAsk?: string
+    depositForfeitAsk?: string
+    depositDisposeAborted?: string
     /** Shown when the order cannot be resolved to a server id */
     orderNotFound?: string
     /** Localize `res.message` from updatePosOrderStatus (e.g. localizeApiMessage) */
@@ -56,11 +58,23 @@ export async function executePosFullOrderCancel(params: {
   const depositHeld = Math.max(0, Number(order.depositAmt ?? 0) || 0)
   let depositDisposition: 'refund' | 'forfeit' | undefined
   if (depositHeld > 0.005) {
+    // 확인=환불. 취소는 몰수가 아니라「몰수할지」를 한 번 더 묻고, 그것도 거절하면 주문 취소 자체를 중단.
+    // (예전: 취소=몰수 → 테스트·오클릭 시 시재「มัดจำ 현금」이 그대로 남는 사고)
     const refund = await onConfirm(
-      i18n?.depositRefundAsk ||
-        '선수금을 환불할까요?\n확인 = 환불, 취소 = 미환불(몰수)'
+      i18n?.depositRefundAsk || '예약금을 손님에게 환불할까요?\n확인 = 환불'
     )
-    depositDisposition = refund ? 'refund' : 'forfeit'
+    if (refund) {
+      depositDisposition = 'refund'
+    } else {
+      const forfeit = await onConfirm(
+        i18n?.depositForfeitAsk ||
+          '환불하지 않고 몰수할까요?\n확인 = 몰수, 취소 = 주문 취소 중단'
+      )
+      if (!forfeit) {
+        return { ok: false, message: i18n?.depositDisposeAborted || '예약금 처리가 취소되어 주문을 취소하지 않았습니다.' }
+      }
+      depositDisposition = 'forfeit'
+    }
   }
 
   let resolved = await resolvePosOrderServerIdForAction(order, storeCode)
@@ -89,11 +103,13 @@ export async function executePosFullOrderCancel(params: {
     return { ok: false, message: notFound }
   }
 
+  const depositPhone = String(order.customerPhone ?? '').trim()
   const first = await updatePosOrderStatus({
     id: serverId,
     status: 'cancelled',
     memoAppend,
     ...(depositDisposition ? { depositDisposition } : {}),
+    ...(depositPhone ? { depositPhone, guestPhone: depositPhone } : {}),
   })
   if (first.success) {
     return { ok: true, serverId, localOnly: false, result: first }
@@ -126,6 +142,7 @@ export async function executePosFullOrderCancel(params: {
     retrySideEffects: true,
     memoAppend,
     ...(depositDisposition ? { depositDisposition } : {}),
+    ...(depositPhone ? { depositPhone, guestPhone: depositPhone } : {}),
   })
   if (!retried.success) {
     const retryMsg = buildFailure(retried)

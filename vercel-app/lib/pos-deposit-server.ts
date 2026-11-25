@@ -131,6 +131,96 @@ export async function loadPosDepositHeldAmount(params: {
   return posDepositBalanceFromLedger(await loadPosDepositLedgerForHolder(params))
 }
 
+export type DisposePosDepositHeldResult =
+  | {
+      ok: true
+      ledgerId: number
+      amount: number
+      remaining: number
+      disposition: 'refund' | 'forfeit'
+      tender: PosDepositTender
+    }
+  | { ok: false; message: string }
+
+/** 보유 예약금 전액 환불 또는 몰수. 원장·(옵션) 분개까지. */
+export async function disposePosDepositHeld(params: {
+  storeCode: string
+  disposition: 'refund' | 'forfeit'
+  memberId?: number | null
+  guestPhone?: string | null
+  createdBy?: string | null
+  tenantId?: string | null
+  posOrderId?: number | null
+  allowAccounting?: boolean
+  memo?: string | null
+}): Promise<DisposePosDepositHeldResult> {
+  const storeCode = String(params.storeCode ?? '').trim()
+  const disposition = params.disposition === 'forfeit' ? 'forfeit' : 'refund'
+  const memberId = Math.trunc(Number(params.memberId) || 0) || null
+  const guestPhone = String(params.guestPhone ?? '').trim()
+  if (!storeCode) return { ok: false, message: 'store_required' }
+  if (!memberId && !guestPhone) return { ok: false, message: 'phone_or_member_required' }
+
+  const holder = { storeCode, memberId, guestPhone }
+  const held = await loadPosDepositHeldAmount(holder)
+  if (held <= 0.005) return { ok: false, message: 'deposit_nothing_held' }
+
+  const rows = await loadPosDepositLedgerForHolder(holder)
+  const lastReceive = [...rows].reverse().find((r) => String(r.kind ?? '') === 'receive')
+  const tender = coercePosDepositTender(lastReceive?.tender)
+  const guestName = String(lastReceive?.guest_name ?? '').trim()
+  const kind = disposition === 'refund' ? 'refund' : 'forfeit'
+
+  const ledgerId = await insertPosDepositLedgerRow({
+    tenantId: params.tenantId,
+    storeCode,
+    posOrderId: params.posOrderId,
+    memberId,
+    guestPhone,
+    guestName,
+    kind,
+    amount: held,
+    tender,
+    memo:
+      String(params.memo ?? '').trim() ||
+      (disposition === 'refund' ? 'hold_refund' : 'hold_forfeit'),
+    createdBy: params.createdBy,
+  })
+  if (ledgerId <= 0) return { ok: false, message: 'deposit_ledger_failed' }
+
+  if (params.allowAccounting) {
+    try {
+      if (disposition === 'refund') {
+        await postPosDepositRefundJournal({
+          ledgerId,
+          storeCode,
+          amount: held,
+          tender,
+          createdAtIso: new Date().toISOString(),
+        })
+      } else {
+        await postPosDepositForfeitJournal({
+          ledgerId,
+          storeCode,
+          amount: held,
+          createdAtIso: new Date().toISOString(),
+        })
+      }
+    } catch (journalErr) {
+      console.error('disposePosDepositHeld journal:', journalErr)
+    }
+  }
+
+  return {
+    ok: true,
+    ledgerId,
+    amount: held,
+    remaining: posDepositBalanceFromLedger([...rows, { kind, amount: held }]),
+    disposition,
+    tender,
+  }
+}
+
 function depositAssetLine(tender: PosDepositTender | string | null | undefined) {
   const t = coercePosDepositTender(tender)
   if (t === 'cash') return { ...GL.cash(), side: 'debit' as const }

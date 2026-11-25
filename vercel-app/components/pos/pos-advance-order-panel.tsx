@@ -18,7 +18,7 @@ const KIND_KEY: Record<string, string> = {
   forfeit: 'posDepositKindForfeit',
 }
 
-/** 상단 툴바 버튼 — 예약금 현황(걸린 목록·환불·이력 조회). 받기는 장바구니 「예약금」 버튼. */
+/** 상단 툴바 버튼 — 예약금 현황(걸린 목록·환불·몰수·이력 조회). 받기는 장바구니 「예약금」 버튼. */
 export function PosAdvanceOrderPanel(props: {
   t: (k: string) => string
   lang?: string
@@ -26,8 +26,9 @@ export function PosAdvanceOrderPanel(props: {
   busy?: boolean
   reloadToken?: number
   onRefund?: (holder: { memberId?: number; phone: string }) => void | Promise<void>
+  onForfeit?: (holder: { memberId?: number; phone: string }) => void | Promise<void>
 }) {
-  const { t, storeCode, busy, reloadToken, onRefund } = props
+  const { t, storeCode, busy, reloadToken, onRefund, onForfeit } = props
   const [open, setOpen] = useState(false)
   const [phoneQuery, setPhoneQuery] = useState('')
   const [historyRows, setHistoryRows] = useState<PosDepositHistoryRow[]>([])
@@ -55,11 +56,16 @@ export function PosAdvanceOrderPanel(props: {
 
   const title = t('posDepositStatusTitle') || 'สถานะมัดจำ'
 
-  /** 환불은 별도 확인 모달을 띄우므로 이 팝업을 먼저 닫는다 */
+  /** 환불·몰수는 별도 확인 모달을 띄우므로 이 팝업을 먼저 닫는다 */
   const runRefund = (holder: { memberId?: number; phone: string }) => {
     if (!onRefund) return
     setOpen(false)
     void Promise.resolve(onRefund(holder)).then(() => loadHeld())
+  }
+  const runForfeit = (holder: { memberId?: number; phone: string }) => {
+    if (!onForfeit) return
+    setOpen(false)
+    void Promise.resolve(onForfeit(holder)).then(() => loadHeld())
   }
 
   return (
@@ -129,6 +135,18 @@ export function PosAdvanceOrderPanel(props: {
                           {t('posDepositRefund') || '환불'}
                         </Button>
                       )}
+                      {onForfeit && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs text-muted-foreground"
+                          disabled={busy}
+                          onClick={() => runForfeit({ memberId: holder.memberId, phone: holder.guestPhone })}
+                        >
+                          {t('posDepositForfeit') || '몰수'}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -166,20 +184,39 @@ export function PosAdvanceOrderPanel(props: {
                   <p className="font-medium">
                     {(t('posDepositHeld') || '보유')} {held.toLocaleString()} ฿
                   </p>
-                  {held > 0.005 && onRefund && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      disabled={busy}
-                      onClick={() => {
-                        const memberId = historyRows.find((r) => Number(r.memberId) > 0)?.memberId
-                        runRefund({ memberId, phone: phoneQuery })
-                      }}
-                    >
-                      {t('posDepositRefund') || '환불'}
-                    </Button>
+                  {held > 0.005 && (onRefund || onForfeit) && (
+                    <div className="flex shrink-0 gap-1">
+                      {onRefund && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={busy}
+                          onClick={() => {
+                            const memberId = historyRows.find((r) => Number(r.memberId) > 0)?.memberId
+                            runRefund({ memberId, phone: phoneQuery })
+                          }}
+                        >
+                          {t('posDepositRefund') || '환불'}
+                        </Button>
+                      )}
+                      {onForfeit && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-muted-foreground"
+                          disabled={busy}
+                          onClick={() => {
+                            const memberId = historyRows.find((r) => Number(r.memberId) > 0)?.memberId
+                            runForfeit({ memberId, phone: phoneQuery })
+                          }}
+                        >
+                          {t('posDepositForfeit') || '몰수'}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
                 {historyRows.slice(0, 10).map((row) => (
