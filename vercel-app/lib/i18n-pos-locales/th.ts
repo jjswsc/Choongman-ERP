@@ -462,9 +462,14 @@ export const I18N_POS_TH: Record<string, string> = {
     posOptionPartSoldOutHint:
       'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR · ปิด/เปิดทุกช่องทาง = รวม Grab (ระบบขอรีเฟรชเมนูให้อัตโนมัติ) · ปิดไว้จนกว่าจะกดเปิดเองครับ',
     posBanbanFlavorSoldOutHint:
-      'ปิด/เปิดรสชาติ Banban ทีละรสได้ครับ · ปิดหน้าร้าน = POS และ QR · ปิดทุกช่องทาง = รวม Grab · เมนูไก่ชิ้นเดียวของรสนั้นก็ปิดตามด้วยครับ',
+      'ปิด/เปิดเฉพาะใน Banban ทีละรสได้ครับ · ไม่กระทบเมนูไก่ชิ้นเดียว · ปิดหน้าร้าน = POS และ QR · ปิดทุกช่องทาง = รวม Grab · ถ้าจะปิดชิ้นเดียวด้วย ให้ไปแท็บเมนูครับ',
     posBanbanFlavorSoldOutSearchPh: 'ค้นหาชื่อหรือรหัสรสชาติ',
     posBanbanFlavorSoldOutEmpty: 'ไม่พบรสชาติ Banban ในเมนูสาขานี้ครับ',
+    posBanbanFlavorAlsoMenuSoldOut: 'เมนูชิ้นเดียวก็ปิดอยู่ (แท็บเมนู)',
+    posBanbanFlavorSoldOutGrabSyncOk:
+      'ส่งคำขอรีเฟรชเมนู Grab แล้วครับ แอปลูกค้าอาจใช้เวลาสักครู่ถึงจะอัปเดต',
+    posBanbanFlavorSoldOutGrabSyncNeedManual:
+      'เปลี่ยนขอบเขตเดลิเวอรี่แล้ว กรุณาตรวจซิงก์เมนูแอปเดลิเวอรี่อีกครั้งครับ',
     posOptionPartSoldOutSearchPh: 'ค้นหาชื่อส่วนชิ้น',
     posOptionPartSoldOutEmpty: 'ไม่พบตัวเลือกส่วนชิ้นครับ',
     posOptionPartSoldOutNeedStore: 'ต้องมีรหัสสาขา กรุณาเข้าสู่ระบบ POS ด้วยสาขาครับ',

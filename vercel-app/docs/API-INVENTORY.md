@@ -3,9 +3,9 @@
 > 이 파일은 `npm run api:inventory`로 생성합니다. 직접 수정하지 마세요.
 > 신규 라우트 규칙: [`.cursor/rules/api-route-conventions.mdc`](../../.cursor/rules/api-route-conventions.mdc) · 검사: `npm run api:check`
 
-- 라우트 수: **916**
-- 도메인 그룹 수: **177** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
-- 외부 호출(웹훅·크론): **22** — 경로 변경 금지
+- 라우트 수: **922**
+- 도메인 그룹 수: **178** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
+- 외부 호출(웹훅·크론): **23** — 경로 변경 금지
 
 ## 경로 변경 금지 (외부 등록·Vercel 크론)
 
@@ -13,8 +13,8 @@
 |---|---|---|
 | `/api/applyDuePriceSchedules` | POST, GET | cron `*/15 * * * *` |
 | `/api/cron/auto-notices` | GET | cron `0 * * * *` |
-| `/api/cron/marketing-ads-sync` | GET | cron `0 2 * * 1` |
 | `/api/cron/grab-menu-availability` | GET | cron `*/5 * * * *` |
+| `/api/cron/marketing-ads-sync` | GET | cron `0 2 * * 1` |
 | `/api/cron/saas-auto-suspend` | GET | cron `15 17 * * *` |
 | `/api/member-portal/cron/expire-pending-payments` | GET | cron `*/10 * * * *` |
 | `/api/member-portal/cron/reconcile-pending-payments` | GET | cron `*/15 * * * *` |
@@ -37,7 +37,7 @@
 
 ## 도메인별
 
-- [pos](#pos) (137)
+- [pos](#pos) (138)
 - [member-portal](#member-portal) (56)
 - [interior](#interior) (41)
 - [store](#store) (31)
@@ -65,6 +65,7 @@
 - [payroll](#payroll) (9)
 - [petty](#petty) (9)
 - [purchase](#purchase) (9)
+- [hr](#hr) (8)
 - [income](#income) (8)
 - [meta](#meta) (8)
 - [my](#my) (8)
@@ -75,9 +76,9 @@
 - [webhooks/grab](#webhooksgrab) (7)
 - [invoice](#invoice) (6)
 - [tiktok](#tiktok) (6)
+- [cron](#cron) (5)
 - [debug](#debug) (5)
 - [fixed](#fixed) (5)
-- [hr](#hr) (5)
 - [ops](#ops) (5)
 - [outbound](#outbound) (5)
 - [price](#price) (5)
@@ -85,7 +86,6 @@
 - [warning](#warning) (5)
 - [webhooks/shopeefood](#webhooksshopeefood) (5)
 - [checklist](#checklist) (4)
-- [cron](#cron) (4)
 - [employee](#employee) (4)
 - [items](#items) (4)
 - [kt20k](#kt20k) (4)
@@ -170,6 +170,7 @@
 - [member-stamps](#member-stamps) (1)
 - [migrate](#migrate) (1)
 - [no](#no) (1)
+- [notices](#notices) (1)
 - [notification](#notification) (1)
 - [oaplus](#oaplus) (1)
 - [office](#office) (1)
@@ -274,6 +275,7 @@
 | `/api/importPosChannelSettlements` | POST |  |
 | `/api/importPosMenus` | POST |  |
 | `/api/markPosOrderItemServed` | POST |  |
+| `/api/pos/banban-flavor-sold-out` | GET, POST |  |
 | `/api/pos/cash-order-drill-down` | GET |  |
 | `/api/pos/kbank/cancel-qr` | OPTIONS, POST |  |
 | `/api/pos/kbank/check-status` | OPTIONS, POST |  |
@@ -766,7 +768,7 @@
 | 경로 | 메서드 | 비고 |
 |---|---|---|
 | `/api/applyNoticeUnreadAllowanceExclusion` | GET, POST |  |
-| `/api/confirmNoticeRead` | POST |  |
+| `/api/confirmNoticeRead` | OPTIONS, POST |  |
 | `/api/deleteNoticeAdmin` | POST |  |
 | `/api/getNoticeOptions` | GET |  |
 | `/api/getNoticeReadDetail` | GET |  |
@@ -936,6 +938,19 @@
 | `/api/savePurchaseOrder` | POST |  |
 | `/api/updatePurchaseOrderInvoice` | POST |  |
 
+### hr
+
+| 경로 | 메서드 | 비고 |
+|---|---|---|
+| `/api/confirmHrPolicyRead` | POST |  |
+| `/api/getHrPolicies` | GET |  |
+| `/api/getHrPolicyReadDetail` | GET |  |
+| `/api/getHrPolicyReaderStats` | GET |  |
+| `/api/hr/sales-bonus/preview` | GET |  |
+| `/api/hr/sales-bonus/settings` | GET, POST |  |
+| `/api/hr/sales-bonus/stats` | GET |  |
+| `/api/saveHrPolicy` | POST |  |
+
 ### income
 
 | 경로 | 메서드 | 비고 |
@@ -1058,6 +1073,16 @@
 | `/api/tiktok/oauth/start` | GET |  |
 | `/api/tiktok/sync` | POST |  |
 
+### cron
+
+| 경로 | 메서드 | 비고 |
+|---|---|---|
+| `/api/cron/auto-notices` | GET | cron `0 * * * *` |
+| `/api/cron/grab-menu-availability` | GET | cron `*/5 * * * *` |
+| `/api/cron/marketing-ads-sync` | GET | cron `0 2 * * 1` |
+| `/api/cron/saas-auto-suspend` | GET | cron `15 17 * * *` |
+| `/api/cron/work-log-reminders` | GET |  |
+
 ### debug
 
 | 경로 | 메서드 | 비고 |
@@ -1077,16 +1102,6 @@
 | `/api/getFixedExpenses` | GET |  |
 | `/api/saveFixedAsset` | POST |  |
 | `/api/saveFixedExpense` | POST |  |
-
-### hr
-
-| 경로 | 메서드 | 비고 |
-|---|---|---|
-| `/api/confirmHrPolicyRead` | POST |  |
-| `/api/getHrPolicies` | GET |  |
-| `/api/getHrPolicyReadDetail` | GET |  |
-| `/api/getHrPolicyReaderStats` | GET |  |
-| `/api/saveHrPolicy` | POST |  |
 
 ### ops
 
@@ -1156,16 +1171,6 @@
 | `/api/deleteChecklistItem` | POST |  |
 | `/api/getChecklistItems` | GET |  |
 | `/api/updateChecklistItems` | POST |  |
-
-### cron
-
-| 경로 | 메서드 | 비고 |
-|---|---|---|
-| `/api/cron/auto-notices` | GET | cron `0 * * * *` |
-| `/api/cron/marketing-ads-sync` | GET | cron `0 2 * * 1` |
-| `/api/cron/grab-menu-availability` | GET | cron `*/5 * * * *` |
-| `/api/cron/saas-auto-suspend` | GET | cron `15 17 * * *` |
-| `/api/cron/work-log-reminders` | GET |  |
 
 ### employee
 
@@ -1752,6 +1757,12 @@
 | 경로 | 메서드 | 비고 |
 |---|---|---|
 | `/api/approveNoClockOut` | POST |  |
+
+### notices
+
+| 경로 | 메서드 | 비고 |
+|---|---|---|
+| `/api/notices/unread-allowance-settings` | GET, POST |  |
 
 ### notification
 

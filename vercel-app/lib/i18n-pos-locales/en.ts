@@ -1903,9 +1903,14 @@ export const I18N_POS_EN: Record<string, string> = {
     posOptionPartSoldOutHint:
       'Store only = POS & QR. All channels on/off = includes Grab (auto menu refresh request). Stays off until you turn it back on.',
     posBanbanFlavorSoldOutHint:
-      'Turn each Banban flavor on/off. Store only = POS & QR. All channels = includes Grab. The matching single chicken item is also stopped.',
+      'Turn each flavor on/off for Banban only — a la carte chicken stays on sale. Store only = POS & QR. All channels = includes Grab. To stop the single item too, use the Menus tab.',
     posBanbanFlavorSoldOutSearchPh: 'Search flavor name or code',
     posBanbanFlavorSoldOutEmpty: 'No Banban flavors found for this store menu.',
+    posBanbanFlavorAlsoMenuSoldOut: 'A la carte also off (Menus tab)',
+    posBanbanFlavorSoldOutGrabSyncOk:
+      'Grab menu refresh requested. It may take a moment to show in the guest app.',
+    posBanbanFlavorSoldOutGrabSyncNeedManual:
+      'Delivery scope changed. Please confirm delivery app menu sync once.',
     posOptionPartSoldOutSearchPh: 'Search part name',
     posOptionPartSoldOutEmpty: 'No part options found.',
     posOptionPartSoldOutNeedStore: 'Store code required. Sign in to POS with a store.',

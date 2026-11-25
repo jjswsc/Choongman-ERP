@@ -40,6 +40,7 @@ import {
   type PosDeliveryMenuPolicy,
   type PosDeliveryPolicyBundle,
 } from '@/lib/pos-delivery-policy'
+import { loadStoreBanbanFlavorSoldOut } from '@/lib/pos-banban-flavor-store-sold-out-server'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
 import {
   isOptionStepSoldOutForStore,
@@ -244,7 +245,15 @@ function normalizeId(raw: string, fallback: string): string {
   return cleaned || fallback
 }
 
-function toBanbanPosMenu(menu: MenuRow): PosMenu {
+function toBanbanPosMenu(
+  menu: MenuRow,
+  banbanFlavorSoldOut?: { byMenuId: Map<number, string>; soldOutMenuIds: Set<string> } | null
+): PosMenu {
+  const id = Number(menu.id ?? 0)
+  const banbanFlavorSoldOutDate =
+    banbanFlavorSoldOut && id > 0 && banbanFlavorSoldOut.soldOutMenuIds.has(String(id))
+      ? banbanFlavorSoldOut.byMenuId.get(id) || null
+      : null
   return {
     id: String(menu.id ?? ''),
     code: String(menu.code ?? ''),
@@ -258,6 +267,8 @@ function toBanbanPosMenu(menu: MenuRow): PosMenu {
     isActive: menu.is_active !== false,
     sortOrder: Number(menu.sort_order ?? 0),
     soldOutDate: menu.sold_out_date ? String(menu.sold_out_date).slice(0, 10) : null,
+    banbanFlavorSoldOutDate,
+    banbanFlavorSoldOutScope: banbanFlavorSoldOutDate ? 'all' : null,
     isBanban: menu.is_banban === true,
     descriptionDefault: String(menu.description_default ?? ''),
     descriptionDelivery:
@@ -276,7 +287,8 @@ function isBanbanMenuRow(menu: MenuRow): boolean {
 function isGrabBanbanFlavorAvailable(
   menu: MenuRow,
   policy: PosDeliveryMenuPolicy | undefined,
-  storeSoldOut?: { byMenuId: Map<number, string>; schemaReady: boolean }
+  storeSoldOut?: { byMenuId: Map<number, string>; schemaReady: boolean },
+  banbanFlavorSoldOutIds?: ReadonlySet<string>
 ): boolean {
   if (menu.is_active === false) return false
   if (menu.sell_delivery === false) return false
@@ -288,6 +300,10 @@ function isGrabBanbanFlavorAvailable(
       useStoreScope: !!storeSoldOut?.schemaReady,
     })
   ) {
+    return false
+  }
+  const flavorId = String(Number(menu.id || 0) || '')
+  if (flavorId && flavorId !== '0' && banbanFlavorSoldOutIds?.has(flavorId)) {
     return false
   }
   if (policy && !policy.enabled) return false
@@ -831,7 +847,7 @@ export async function buildGrabMenuFromPos(params: {
   const resolved = await resolvePolicyBundleForGrabMenu(storeGuess)
   // 품절은 정책과 같은 canonical store_code 로 읽어 POS 토글과 키를 맞춘다
   const soldOutStoreCode = String(resolved.storeCode || storeGuess || '').trim()
-  const [storeSoldOutLoad, optionStepSoldOutLoad] = await Promise.all([
+  const [storeSoldOutLoad, optionStepSoldOutLoad, banbanFlavorSoldOutLoad] = await Promise.all([
     loadStoreMenuSoldOutMap(soldOutStoreCode, { channel: 'delivery' }).catch(() => ({
       byMenuId: new Map<number, string>(),
       schemaReady: false,
@@ -842,8 +858,21 @@ export async function buildGrabMenuFromPos(params: {
       soldOutKeys: new Set<string>(),
       schemaReady: false,
     })),
+    loadStoreBanbanFlavorSoldOut(soldOutStoreCode, { channel: 'delivery' }).catch(() => ({
+      byMenuId: new Map<number, string>(),
+      scopeByMenuId: new Map(),
+      soldOutMenuIds: new Set<string>(),
+      schemaReady: false,
+    })),
   ])
   const deliveryPartSoldOutKeys = optionStepSoldOutLoad.soldOutKeys
+  const banbanFlavorSoldOutForPicker = banbanFlavorSoldOutLoad.schemaReady
+    ? {
+        byMenuId: banbanFlavorSoldOutLoad.byMenuId,
+        soldOutMenuIds: banbanFlavorSoldOutLoad.soldOutMenuIds,
+      }
+    : null
+  const banbanFlavorSoldOutIds = banbanFlavorSoldOutLoad.soldOutMenuIds
   const { policyBundle } = resolved
   const menuPolicyMap = buildMenuPolicyMap(policyBundle?.menuPolicies || [])
   const categoryOrderMap = buildCategoryOrderMap(policyBundle?.categoryOrders || [])
@@ -1117,8 +1146,8 @@ export async function buildGrabMenuFromPos(params: {
 
       const banbanFlavorMenus = isBanbanMenuRow(menu)
         ? getBanbanFlavorMenuList(
-            menus.map(toBanbanPosMenu),
-            toBanbanPosMenu(menu),
+            menus.map((m) => toBanbanPosMenu(m, banbanFlavorSoldOutForPicker)),
+            toBanbanPosMenu(menu, banbanFlavorSoldOutForPicker),
             new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
           )
             .map((candidate) => {
@@ -1127,7 +1156,12 @@ export async function buildGrabMenuFromPos(params: {
             })
             .filter((m): m is MenuRow => !!m)
             .filter((m) =>
-              isGrabBanbanFlavorAvailable(m, menuPolicyMap.get(Number(m.id ?? 0)), storeSoldOutLoad)
+              isGrabBanbanFlavorAvailable(
+                m,
+                menuPolicyMap.get(Number(m.id ?? 0)),
+                storeSoldOutLoad,
+                banbanFlavorSoldOutIds
+              )
             )
             .slice(0, 30)
         : []

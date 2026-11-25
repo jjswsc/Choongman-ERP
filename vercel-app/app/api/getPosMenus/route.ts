@@ -23,6 +23,7 @@ import {
   isPosCatalogTenantQueryBlocked,
   resolvePosCatalogTenantScope,
 } from '@/lib/pos-catalog-tenant-scope'
+import { loadStoreBanbanFlavorSoldOut } from '@/lib/pos-banban-flavor-store-sold-out-server'
 import { loadStoreMenuSoldOutMap, resolveMenuSoldOutDate } from '@/lib/pos-menu-store-sold-out-server'
 import type { PosMenuSoldOutScope } from '@/lib/pos-menu-sold-out'
 import { getVerifiedAuth } from '@/lib/verify-auth'
@@ -244,11 +245,25 @@ export async function GET(request: NextRequest) {
     const useStoreSoldOutScope = !!requestedStoreCode
     let storeSoldOutByMenuId: Map<number, string> | null = null
     let storeSoldOutScopeByMenuId: Map<number, PosMenuSoldOutScope> | null = null
+    let banbanFlavorSoldOutByMenuId: Map<number, string> | null = null
+    let banbanFlavorSoldOutScopeByMenuId: Map<number, PosMenuSoldOutScope> | null = null
     if (useStoreSoldOutScope) {
       try {
-        const soldOutLoad = await loadStoreMenuSoldOutMap(requestedStoreCode)
+        const [soldOutLoad, banbanFlavorSoldOutLoad] = await Promise.all([
+          loadStoreMenuSoldOutMap(requestedStoreCode),
+          loadStoreBanbanFlavorSoldOut(requestedStoreCode, { channel: 'storefront' }).catch(() => ({
+            byMenuId: new Map<number, string>(),
+            scopeByMenuId: new Map<number, PosMenuSoldOutScope>(),
+            soldOutMenuIds: new Set<string>(),
+            schemaReady: false,
+          })),
+        ])
         storeSoldOutByMenuId = soldOutLoad.schemaReady ? soldOutLoad.byMenuId : null
         storeSoldOutScopeByMenuId = soldOutLoad.schemaReady ? soldOutLoad.scopeByMenuId ?? null : null
+        if (banbanFlavorSoldOutLoad.schemaReady) {
+          banbanFlavorSoldOutByMenuId = banbanFlavorSoldOutLoad.byMenuId
+          banbanFlavorSoldOutScopeByMenuId = banbanFlavorSoldOutLoad.scopeByMenuId
+        }
       } catch {
         storeSoldOutByMenuId = null
       }
@@ -257,9 +272,22 @@ export async function GET(request: NextRequest) {
       if (!soldOutDate) return null
       return storeSoldOutScopeByMenuId?.get(menuId) ?? 'all'
     }
+    const banbanFlavorSoldOutFields = (menuId: number) => {
+      const banbanFlavorSoldOutDate = banbanFlavorSoldOutByMenuId?.get(menuId) || null
+      return {
+        banbanFlavorSoldOutDate,
+        banbanFlavorSoldOutScope: banbanFlavorSoldOutDate
+          ? banbanFlavorSoldOutScopeByMenuId?.get(menuId) || 'store'
+          : null,
+      }
+    }
     const soldOutFields = (menuId: number, globalDate: string | null | undefined) => {
       const soldOutDate = resolveSoldOut(menuId, globalDate)
-      return { soldOutDate, soldOutScope: resolveSoldOutScope(menuId, soldOutDate) }
+      return {
+        soldOutDate,
+        soldOutScope: resolveSoldOutScope(menuId, soldOutDate),
+        ...banbanFlavorSoldOutFields(menuId),
+      }
     }
     const resolveSoldOut = (menuId: number, globalDate: string | null | undefined) =>
       resolveMenuSoldOutDate({

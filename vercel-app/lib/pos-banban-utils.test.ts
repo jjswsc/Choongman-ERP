@@ -220,6 +220,23 @@ describe('getBanbanFlavorMenuList', () => {
       '2026-05-26'
     ).map((menu) => menu.id)).toEqual(['2'])
   })
+
+  it('Banban-only sold-out hides flavor from picker but a la carte soldOutDate can stay null', () => {
+    const menus = [
+      { ...banbanMenu, banbanFlavorMenuIds: ['1', '2'] },
+      {
+        ...soyMenu,
+        soldOutDate: null,
+        banbanFlavorSoldOutDate: '2026-05-20',
+        banbanFlavorSoldOutScope: 'store' as const,
+      },
+      supremeMenu,
+    ]
+    expect(
+      getBanbanFlavorMenuList(menus, menus[0]!, '2026-05-26').map((menu) => menu.id)
+    ).toEqual(['2'])
+    expect(menus[1]!.soldOutDate).toBeNull()
+  })
 })
 
 describe('parseBanbanFlavorsFromDisplayName', () => {

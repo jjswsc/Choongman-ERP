@@ -35,6 +35,12 @@ export interface PosMenu {
   soldOutDate?: string | null
   /** 매장 품절 범위 — store 면 หน้าร้าน만 품절(배달 주문은 판매) */
   soldOutScope?: PosMenuSoldOutScope | null
+  /**
+   * Banban(반반) 피커에서만 숨기는 맛 품절.
+   * 단품 치킨 soldOutDate 와 분리 — 값이 있어도 단품 그리드는 그대로 판매 가능.
+   */
+  banbanFlavorSoldOutDate?: string | null
+  banbanFlavorSoldOutScope?: PosMenuSoldOutScope | null
   /** 옵션 단계별 선택 그룹. 예: ["size","bone"] → 1단계 사이즈, 2단계 뼈/순살 */
   optionSelectionGroups?: string[]
   /** 그룹별 선택 규칙(1단계): required/optional + 최대 1개 선택 */
@@ -388,6 +394,59 @@ export async function updatePosOptionStepSoldOut(params: {
   }
   if (data?.success) {
     void getPosMenuOptions({ fresh: true, storeCode: params.storeCode })
+  }
+  return data
+}
+
+export type PosBanbanFlavorSoldOutItem = {
+  flavorMenuId: string
+  soldOut: boolean
+  soldOutDate: string | null
+  soldOutScope: PosMenuSoldOutScope | null
+}
+
+export async function getPosBanbanFlavorSoldOut(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', String(params.storeCode || '').trim())
+  const res = await apiFetchWithOffline(`/api/pos/banban-flavor-sold-out?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    schemaReady?: boolean
+    storeCode?: string
+    items?: PosBanbanFlavorSoldOutItem[]
+  }>
+}
+
+export async function updatePosBanbanFlavorSoldOut(params: {
+  storeCode: string
+  flavorMenuId: string
+  soldOut: boolean
+  soldOutScope?: PosMenuSoldOutScope
+}) {
+  const res = await apiFetchWithOffline('/api/pos/banban-flavor-sold-out', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      flavorMenuId: params.flavorMenuId,
+      soldOut: params.soldOut,
+      scope: params.soldOutScope || 'store',
+    }),
+  })
+  const data = (await res.json()) as {
+    success: boolean
+    message?: string
+    code?: string
+    soldOutDate?: string | null
+    soldOutScope?: PosMenuSoldOutScope | null
+    flavorMenuId?: string
+    grabSyncRequested?: boolean
+    grabSync?: { attempted: number; sent: number; failed: number } | null
+  }
+  if (data?.success) {
+    void getPosMenus({ fresh: true, storeCode: params.storeCode })
   }
   return data
 }

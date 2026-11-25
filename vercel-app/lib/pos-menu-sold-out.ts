@@ -25,12 +25,24 @@ export function isPosMenuSoldOutForOrderType(
 }
 
 /** soldOutDate만 보는 하위 로직(반반 맛 후보 등)용 — 이 채널에서 판매 가능한 메뉴는 soldOutDate를 비운다 */
-export function withSoldOutForOrderType<T extends { soldOutDate?: string | null; soldOutScope?: PosMenuSoldOutScope | null }>(
-  menus: T[],
-  orderType: string | null | undefined
-): T[] {
+export function withSoldOutForOrderType<
+  T extends {
+    soldOutDate?: string | null
+    soldOutScope?: PosMenuSoldOutScope | null
+    banbanFlavorSoldOutDate?: string | null
+    banbanFlavorSoldOutScope?: PosMenuSoldOutScope | null
+  },
+>(menus: T[], orderType: string | null | undefined): T[] {
   if (orderType !== 'delivery') return menus
-  return menus.map((m) =>
-    isPosMenuSoldOut(m.soldOutDate) && !isPosMenuSoldOutForOrderType(m, orderType) ? { ...m, soldOutDate: null } : m
-  )
+  return menus.map((m) => {
+    let next = m
+    if (isPosMenuSoldOut(m.soldOutDate) && !isPosMenuSoldOutForOrderType(m, orderType)) {
+      next = { ...next, soldOutDate: null }
+    }
+    // Banban 피커 전용: scope=store 이면 배달(Grab) Banban에서는 다시 열림
+    if (isPosMenuSoldOut(m.banbanFlavorSoldOutDate) && m.banbanFlavorSoldOutScope === 'store') {
+      next = { ...next, banbanFlavorSoldOutDate: null }
+    }
+    return next
+  })
 }

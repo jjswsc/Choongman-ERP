@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import {
   getPosMenus,
   getPosOptionStepSoldOut,
+  updatePosBanbanFlavorSoldOut,
   updatePosOptionStepSoldOut,
   type PosMenu,
   type PosOptionStepSoldOutItem,
@@ -33,6 +34,12 @@ type MainTab = 'menus' | 'flavors' | 'parts'
 function menuSaleState(menu: PosMenu): MenuSaleState {
   if (!isPosMenuSoldOut(menu.soldOutDate)) return 'selling'
   return menu.soldOutScope === 'store' ? 'store' : 'all'
+}
+
+/** Banban 피커 전용 품절 상태 (단품 soldOutDate 와 분리) */
+function banbanFlavorSaleState(menu: PosMenu): MenuSaleState {
+  if (!isPosMenuSoldOut(menu.banbanFlavorSoldOutDate)) return 'selling'
+  return menu.banbanFlavorSoldOutScope === 'store' ? 'store' : 'all'
 }
 
 function partLabel(stepValue: string, t: (k: string) => string): string {
@@ -124,12 +131,12 @@ export function PosMenuSoldOutContent() {
   )
 
   const filterMenusByMode = React.useCallback(
-    (list: PosMenu[]) => {
+    (list: PosMenu[], stateOf: (m: PosMenu) => MenuSaleState) => {
       const q = search.trim().toLowerCase()
       const rank: Record<MenuSaleState, number> = { all: 0, store: 1, selling: 2 }
       return list
         .filter((m) => {
-          const state = menuSaleState(m)
+          const state = stateOf(m)
           if (filter === 'selling' && state !== 'selling') return false
           if (filter === 'storeOff' && state !== 'store') return false
           if (filter === 'allOff' && state !== 'all') return false
@@ -143,7 +150,7 @@ export function PosMenuSoldOutContent() {
           )
         })
         .sort((a, b) => {
-          const diff = rank[menuSaleState(a)] - rank[menuSaleState(b)]
+          const diff = rank[stateOf(a)] - rank[stateOf(b)]
           if (diff !== 0) return diff
           return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
         })
@@ -151,9 +158,12 @@ export function PosMenuSoldOutContent() {
     [search, filter]
   )
 
-  const filtered = React.useMemo(() => filterMenusByMode(menus), [filterMenusByMode, menus])
+  const filtered = React.useMemo(
+    () => filterMenusByMode(menus, menuSaleState),
+    [filterMenusByMode, menus]
+  )
   const filteredFlavors = React.useMemo(
-    () => filterMenusByMode(flavorMenus),
+    () => filterMenusByMode(flavorMenus, banbanFlavorSaleState),
     [filterMenusByMode, flavorMenus]
   )
 
@@ -173,10 +183,11 @@ export function PosMenuSoldOutContent() {
 
   const counts = React.useMemo(() => {
     const source = mainTab === 'flavors' ? flavorMenus : menus
+    const stateOf = mainTab === 'flavors' ? banbanFlavorSaleState : menuSaleState
     let store = 0
     let all = 0
     for (const m of source) {
-      const state = menuSaleState(m)
+      const state = stateOf(m)
       if (state === 'store') store += 1
       else if (state === 'all') all += 1
     }
@@ -184,7 +195,7 @@ export function PosMenuSoldOutContent() {
   }, [menus, flavorMenus, mainTab])
 
   const flavorSoldOutCount = React.useMemo(
-    () => flavorMenus.filter((m) => isPosMenuSoldOut(m.soldOutDate)).length,
+    () => flavorMenus.filter((m) => isPosMenuSoldOut(m.banbanFlavorSoldOutDate)).length,
     [flavorMenus]
   )
 
@@ -222,6 +233,60 @@ export function PosMenuSoldOutContent() {
           m.id === menu.id ? { ...m, soldOutDate: nextDate, soldOutScope: nextScope } : m
         )
       )
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const handleBanbanFlavorSetState = async (menu: PosMenu, next: MenuSaleState) => {
+    if (!storeCode || banbanFlavorSaleState(menu) === next) return
+    const nextSoldOut = next !== 'selling'
+    setTogglingId(`banban:${menu.id}`)
+    try {
+      const res = await updatePosBanbanFlavorSoldOut({
+        storeCode,
+        flavorMenuId: menu.id,
+        soldOut: nextSoldOut,
+        soldOutScope: nextSoldOut ? next : undefined,
+      })
+      if (!res.success) {
+        await appAlert(localizeApiMessage(res.message, t, t('msg_save_fail_detail'), lang))
+        return
+      }
+      const nextDate = nextSoldOut
+        ? String(res.soldOutDate || todayStr).slice(0, 10)
+        : null
+      const nextScope: PosMenuSoldOutScope | null = nextDate
+        ? res.soldOutScope ?? (next === 'store' ? 'store' : 'all')
+        : null
+      setMenus((prev) =>
+        prev.map((m) =>
+          m.id === menu.id
+            ? {
+                ...m,
+                banbanFlavorSoldOutDate: nextDate,
+                banbanFlavorSoldOutScope: nextScope,
+              }
+            : m
+        )
+      )
+      if (res.grabSyncRequested) {
+        const sent = Number(res.grabSync?.sent || 0)
+        const failed = Number(res.grabSync?.failed || 0)
+        if (sent > 0 && failed === 0) {
+          await appAlert(
+            t('posBanbanFlavorSoldOutGrabSyncOk') ||
+              'Grab 메뉴 갱신 요청을 보냈습니다. 손님 앱 반영까지 잠시 걸릴 수 있습니다.'
+          )
+        } else {
+          await appAlert(
+            t('posBanbanFlavorSoldOutGrabSyncNeedManual') ||
+              '배달 범위가 바뀌었습니다. 배달앱 메뉴 동기화를 한 번 확인해 주세요.'
+          )
+        }
+      }
     } catch (e) {
       await appAlert(String(e))
     } finally {
@@ -331,7 +396,7 @@ export function PosMenuSoldOutContent() {
                     '매장만 중지 = POS·QR만. 전체 중지 = Grab 배달 포함. 전체 중지 후 배달앱 메뉴 동기화를 한 번 해 주세요. 다시 열 때까지 유지.'
                   : mainTab === 'flavors'
                     ? t('posBanbanFlavorSoldOutHint') ||
-                      'Banban 맛을 하나씩 열고 닫을 수 있습니다. 매장만 중지 = POS·QR, 전체 중지 = Grab 포함. 해당 단품 치킨도 함께 중지됩니다.'
+                      'Banban에서만 맛을 하나씩 열고 닫습니다. 단품 치킨 판매는 그대로입니다. 매장만 중지 = POS·QR, 전체 중지 = Grab 포함.'
                     : t('posMenuSoldOutManageHint') ||
                       '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
               </p>
@@ -468,8 +533,10 @@ export function PosMenuSoldOutContent() {
             ) : (
               <ul className="space-y-2">
                 {(mainTab === 'flavors' ? filteredFlavors : filtered).map((menu) => {
-                  const state = menuSaleState(menu)
-                  const busy = togglingId === menu.id
+                  const isFlavorTab = mainTab === 'flavors'
+                  const state = isFlavorTab ? banbanFlavorSaleState(menu) : menuSaleState(menu)
+                  const busy = togglingId === (isFlavorTab ? `banban:${menu.id}` : menu.id)
+                  const aLaCarteOff = isFlavorTab && isPosMenuSoldOut(menu.soldOutDate)
                   return (
                     <li
                       key={menu.id}
@@ -489,6 +556,9 @@ export function PosMenuSoldOutContent() {
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">
                           {menu.code}
                           {menu.category ? ` · ${menu.category}` : ''}
+                          {aLaCarteOff
+                            ? ` · ${t('posBanbanFlavorAlsoMenuSoldOut') || '단품도 중지 중(메뉴 탭)'}`
+                            : ''}
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
@@ -501,9 +571,13 @@ export function PosMenuSoldOutContent() {
                             <button
                               key={opt.id}
                               type="button"
-                              disabled={busy}
+                              disabled={busy || (isFlavorTab && !storeCode)}
                               aria-pressed={active}
-                              onClick={() => void handleSetState(menu, opt.id)}
+                              onClick={() =>
+                                void (isFlavorTab
+                                  ? handleBanbanFlavorSetState(menu, opt.id)
+                                  : handleSetState(menu, opt.id))
+                              }
                               className={cn(
                                 'min-h-[40px] rounded-full border px-3 py-1.5 text-sm font-medium transition-colors touch-manipulation',
                                 'active:scale-[0.98] disabled:opacity-60',

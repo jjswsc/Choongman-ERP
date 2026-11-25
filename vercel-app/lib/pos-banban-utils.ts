@@ -155,6 +155,8 @@ function isAvailableBanbanFlavorMenu(
   return (
     menu.isActive !== false &&
     (opts?.includeSoldOut === true || !isPosMenuSoldOut(menu.soldOutDate)) &&
+    // Banban 피커 전용 품절(단품 판매와 분리)
+    (opts?.includeSoldOut === true || !isPosMenuSoldOut(menu.banbanFlavorSoldOutDate)) &&
     !isBanbanMenu(menu) &&
     String(menu.id) !== String(banbanMenu.id) &&
     !isExcludedFromBanbanFlavorPick(menu)

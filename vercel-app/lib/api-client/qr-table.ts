@@ -84,6 +84,7 @@ type MenuLike = {
   category: string
   categoryMain: string
   soldOut?: boolean
+  banbanFlavorSoldOut?: boolean
   isBanban?: boolean
   banbanFlavorMenuIds?: string[]
   optionSelectionGroups?: string[]

@@ -91,6 +91,8 @@ type MenuItem = {
   listPrice: number
   imageUrl: string
   soldOut?: boolean
+  /** Banban 피커에서만 숨김 (단품 soldOut 과 분리) */
+  banbanFlavorSoldOut?: boolean
   buffetIncluded: boolean
   description: string
   descriptionDefault?: string
@@ -1372,6 +1374,8 @@ export function QrTableGuestApp({ token }: { token: string }) {
       optionSelectionGroups: m.optionSelectionGroups,
       optionSelectionConfig: m.optionSelectionConfig,
       soldOutDate: m.soldOut ? getBangkokSoldOutFlag() : undefined,
+      banbanFlavorSoldOutDate: m.banbanFlavorSoldOut ? getBangkokSoldOutFlag() : undefined,
+      banbanFlavorSoldOutScope: m.banbanFlavorSoldOut ? 'store' : null,
     }
   }
 

@@ -65,6 +65,7 @@ import {
   type QrGuestPromoLine,
 } from '@/lib/qr-table-promo'
 import { isBanbanMenu, overlayBanbanFlavorMenuIds } from '@/lib/pos-banban-utils'
+import { loadStoreBanbanFlavorSoldOut } from '@/lib/pos-banban-flavor-store-sold-out-server'
 import { loadStoreMenuSoldOutMap, isMenuSoldOutForStore } from '@/lib/pos-menu-store-sold-out-server'
 import { isMenuUnavailableDueToPartSoldOut } from '@/lib/pos-option-step-store-sold-out'
 import { isOptionStepSoldOutForStore, loadStoreOptionStepSoldOut } from '@/lib/pos-option-step-store-sold-out-server'
@@ -2106,7 +2107,8 @@ export async function loadQrMenusForSession(session: QrTableSession) {
   menus.sort((a, b) => compareQrMenuDisplayOrder(a, b, tabOrder))
 
   const menuIds = menus.map((m) => Number(m.id || 0)).filter((id) => id > 0)
-  const [optionsByMenuIdRaw, flavorIdsByBanban, promoById, optionStepSoldOut] = await Promise.all([
+  const [optionsByMenuIdRaw, flavorIdsByBanban, promoById, optionStepSoldOut, banbanFlavorSoldOut] =
+    await Promise.all([
     loadHallOptionsByMenuIds(menuIds).catch((e) => {
       console.error('qr_table menus options load:', e)
       return new Map<number, QrGuestMenuOption[]>()
@@ -2120,6 +2122,12 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       byKey: new Map<string, string>(),
       scopeByKey: new Map(),
       soldOutKeys: new Set<string>(),
+      schemaReady: false,
+    })),
+    loadStoreBanbanFlavorSoldOut(session.storeCode, { channel: 'storefront' }).catch(() => ({
+      byMenuId: new Map<number, string>(),
+      scopeByMenuId: new Map(),
+      soldOutMenuIds: new Set<string>(),
       schemaReady: false,
     })),
   ])
@@ -2159,6 +2167,7 @@ export async function loadQrMenusForSession(session: QrTableSession) {
       listPrice: asNum(m.price),
       imageUrl: menuImageUrl(m),
       soldOut,
+      banbanFlavorSoldOut: banbanFlavorSoldOut.soldOutMenuIds.has(String(id)),
       buffetIncluded: isIncluded,
       isBanban: m.is_banban === true,
       banbanFlavorMenuIds:
@@ -2564,6 +2573,7 @@ export async function submitQrCart(params: {
     soldOutLoad,
     storeSettings,
     optionStepSoldOut,
+    banbanFlavorSoldOut,
   ] = await Promise.all([
     tierId > 0 ? loadIncludedMenuIdSet(tierId, requestedIds) : Promise.resolve(new Set<number>()),
     tierId > 0
@@ -2607,6 +2617,12 @@ export async function submitQrCart(params: {
       byKey: new Map<string, string>(),
       scopeByKey: new Map(),
       soldOutKeys: new Set<string>(),
+      schemaReady: false,
+    })),
+    loadStoreBanbanFlavorSoldOut(session.storeCode, { channel: 'storefront' }).catch(() => ({
+      byMenuId: new Map<number, string>(),
+      scopeByMenuId: new Map(),
+      soldOutMenuIds: new Set<string>(),
       schemaReady: false,
     })),
   ])
@@ -2683,6 +2699,22 @@ export async function submitQrCart(params: {
       if (allowedFlavors && allowedFlavors.length > 0) {
         if (!allowedFlavors.includes(String(menuId1)) || !allowedFlavors.includes(String(menuId2))) {
           throw new Error('banban_flavor_missing')
+        }
+      }
+      for (const flavorId of [menuId1, menuId2]) {
+        const flavorRow = byId.get(flavorId)
+        if (
+          isMenuSoldOutForStore({
+            menuId: flavorId,
+            globalSoldOutDate: flavorRow?.sold_out_date,
+            storeMap: soldOutLoad.byMenuId,
+            useStoreScope: soldOutLoad.schemaReady,
+          })
+        ) {
+          throw new Error(`menu_sold_out:${flavorId}`)
+        }
+        if (banbanFlavorSoldOut.soldOutMenuIds.has(String(flavorId))) {
+          throw new Error(`banban_flavor_sold_out:${flavorId}`)
         }
       }
       const n1 = String(flavor1.name || '').trim()
