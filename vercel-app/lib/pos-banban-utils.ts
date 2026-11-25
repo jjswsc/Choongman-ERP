@@ -172,7 +172,8 @@ export function isBanbanFlavorWhitelistMissing(menu: Pick<PosMenu, 'banbanFlavor
 export function getConfiguredBanbanFlavorMenuList(
   allMenus: PosMenu[],
   banbanMenu: PosMenu,
-  todayStr: string
+  todayStr: string,
+  opts?: { includeSoldOut?: boolean }
 ): PosMenu[] | null {
   if (!Array.isArray(banbanMenu.banbanFlavorMenuIds)) return null
   const menuById = new Map(allMenus.map((menu) => [String(menu.id), menu] as const))
@@ -184,7 +185,14 @@ export function getConfiguredBanbanFlavorMenuList(
     seen.add(id)
     const menu = menuById.get(id)
     if (!menu) continue
-    if (!isAvailableBanbanFlavorMenu(menu, banbanMenu, { todayStr })) continue
+    if (
+      !isAvailableBanbanFlavorMenu(menu, banbanMenu, {
+        todayStr,
+        includeSoldOut: opts?.includeSoldOut === true,
+      })
+    ) {
+      continue
+    }
     out.push(menu)
   }
   return out
@@ -242,10 +250,39 @@ export function getAutoBanbanFlavorMenuList(
   return sortMenusByName(loose).slice(0, 120)
 }
 
-export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu, todayStr: string): PosMenu[] {
-  const configured = getConfiguredBanbanFlavorMenuList(allMenus, banbanMenu, todayStr)
+export function getBanbanFlavorMenuList(
+  allMenus: PosMenu[],
+  banbanMenu: PosMenu,
+  todayStr: string,
+  opts?: { includeSoldOut?: boolean }
+): PosMenu[] {
+  const configured = getConfiguredBanbanFlavorMenuList(allMenus, banbanMenu, todayStr, opts)
   if (configured) return configured
-  return getAutoBanbanFlavorMenuList(allMenus, banbanMenu, { todayStr })
+  return getAutoBanbanFlavorMenuList(allMenus, banbanMenu, {
+    todayStr,
+    includeSoldOut: opts?.includeSoldOut === true,
+  })
+}
+
+/**
+ * 품절 관리 화면용: 매장 Banban(반반)에 연결된 맛 메뉴를 중복 없이 모은다.
+ * 이미 품절인 맛도 포함해 다시 열 수 있게 한다.
+ */
+export function listBanbanFlavorMenusForSoldOutManage(
+  allMenus: PosMenu[],
+  todayStr: string
+): PosMenu[] {
+  const byId = new Map<string, PosMenu>()
+  for (const parent of allMenus) {
+    if (!isBanbanMenu(parent)) continue
+    const flavors = getBanbanFlavorMenuList(allMenus, parent, todayStr, { includeSoldOut: true })
+    for (const flavor of flavors) {
+      const id = String(flavor.id || '').trim()
+      if (!id || byId.has(id)) continue
+      byId.set(id, flavor)
+    }
+  }
+  return sortMenusByName([...byId.values()])
 }
 
 /** POS `pos_banban_flavor_links` 결과를 메뉴 목록에 얹는다. 연결된 맛이 있을 때만 whitelist. */

@@ -19,6 +19,7 @@ import { useT } from '@/lib/i18n'
 import { localizeApiMessage } from '@/lib/translate-api-message'
 import { navigatePosOfflineAware } from '@/lib/pos-offline-nav'
 import { isPosMenuSoldOut, type PosMenuSoldOutScope } from '@/lib/pos-menu-sold-out'
+import { listBanbanFlavorMenusForSoldOutManage } from '@/lib/pos-banban-utils'
 import { canAccessPosOrder } from '@/lib/permissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,7 +28,7 @@ import { cn } from '@/lib/utils'
 type FilterMode = 'all' | 'selling' | 'storeOff' | 'allOff'
 /** selling = 판매, store = หน้าร้าน만 중지(배달 판매), all = 전 채널 중지 */
 type MenuSaleState = 'selling' | PosMenuSoldOutScope
-type MainTab = 'menus' | 'parts'
+type MainTab = 'menus' | 'flavors' | 'parts'
 
 function menuSaleState(menu: PosMenu): MenuSaleState {
   if (!isPosMenuSoldOut(menu.soldOutDate)) return 'selling'
@@ -94,15 +95,15 @@ export function PosMenuSoldOutContent() {
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      if (mainTab === 'menus') {
-        await loadMenus()
-      } else {
+      if (mainTab === 'parts') {
         await loadParts()
+      } else {
+        await loadMenus()
       }
     } catch (e) {
       await appAlert(String(e))
-      if (mainTab === 'menus') setMenus([])
-      else setParts([])
+      if (mainTab === 'parts') setParts([])
+      else setMenus([])
     } finally {
       setLoading(false)
     }
@@ -117,30 +118,44 @@ export function PosMenuSoldOutContent() {
     void load()
   }, [initialized, auth?.role, router, load])
 
-  const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
-    const rank: Record<MenuSaleState, number> = { all: 0, store: 1, selling: 2 }
-    return menus
-      .filter((m) => {
-        const state = menuSaleState(m)
-        if (filter === 'selling' && state !== 'selling') return false
-        if (filter === 'storeOff' && state !== 'store') return false
-        if (filter === 'allOff' && state !== 'all') return false
-        if (!q) return true
-        return (
-          m.name.toLowerCase().includes(q) ||
-          m.code.toLowerCase().includes(q) ||
-          String(m.category || '')
-            .toLowerCase()
-            .includes(q)
-        )
-      })
-      .sort((a, b) => {
-        const diff = rank[menuSaleState(a)] - rank[menuSaleState(b)]
-        if (diff !== 0) return diff
-        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
-      })
-  }, [menus, search, filter])
+  const flavorMenus = React.useMemo(
+    () => listBanbanFlavorMenusForSoldOutManage(menus, todayStr),
+    [menus, todayStr]
+  )
+
+  const filterMenusByMode = React.useCallback(
+    (list: PosMenu[]) => {
+      const q = search.trim().toLowerCase()
+      const rank: Record<MenuSaleState, number> = { all: 0, store: 1, selling: 2 }
+      return list
+        .filter((m) => {
+          const state = menuSaleState(m)
+          if (filter === 'selling' && state !== 'selling') return false
+          if (filter === 'storeOff' && state !== 'store') return false
+          if (filter === 'allOff' && state !== 'all') return false
+          if (!q) return true
+          return (
+            m.name.toLowerCase().includes(q) ||
+            m.code.toLowerCase().includes(q) ||
+            String(m.category || '')
+              .toLowerCase()
+              .includes(q)
+          )
+        })
+        .sort((a, b) => {
+          const diff = rank[menuSaleState(a)] - rank[menuSaleState(b)]
+          if (diff !== 0) return diff
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)
+        })
+    },
+    [search, filter]
+  )
+
+  const filtered = React.useMemo(() => filterMenusByMode(menus), [filterMenusByMode, menus])
+  const filteredFlavors = React.useMemo(
+    () => filterMenusByMode(flavorMenus),
+    [filterMenusByMode, flavorMenus]
+  )
 
   const filteredParts = React.useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -157,15 +172,21 @@ export function PosMenuSoldOutContent() {
   }, [parts, search, t])
 
   const counts = React.useMemo(() => {
+    const source = mainTab === 'flavors' ? flavorMenus : menus
     let store = 0
     let all = 0
-    for (const m of menus) {
+    for (const m of source) {
       const state = menuSaleState(m)
       if (state === 'store') store += 1
       else if (state === 'all') all += 1
     }
     return { store, all }
-  }, [menus])
+  }, [menus, flavorMenus, mainTab])
+
+  const flavorSoldOutCount = React.useMemo(
+    () => flavorMenus.filter((m) => isPosMenuSoldOut(m.soldOutDate)).length,
+    [flavorMenus]
+  )
 
   const partSoldOutCount = React.useMemo(
     () => parts.filter((p) => p.soldOut).length,
@@ -308,8 +329,11 @@ export function PosMenuSoldOutContent() {
                 {mainTab === 'parts'
                   ? t('posOptionPartSoldOutHint') ||
                     '매장만 중지 = POS·QR만. 전체 중지 = Grab 배달 포함. 전체 중지 후 배달앱 메뉴 동기화를 한 번 해 주세요. 다시 열 때까지 유지.'
-                  : t('posMenuSoldOutManageHint') ||
-                    '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
+                  : mainTab === 'flavors'
+                    ? t('posBanbanFlavorSoldOutHint') ||
+                      'Banban 맛을 하나씩 열고 닫을 수 있습니다. 매장만 중지 = POS·QR, 전체 중지 = Grab 포함. 해당 단품 치킨도 함께 중지됩니다.'
+                    : t('posMenuSoldOutManageHint') ||
+                      '매장만 중지 = POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.'}
               </p>
             </div>
           </div>
@@ -351,6 +375,7 @@ export function PosMenuSoldOutContent() {
             className="h-9"
             onClick={() => {
               setSearch('')
+              setFilter('all')
               setMainTab('menus')
             }}
           >
@@ -359,10 +384,24 @@ export function PosMenuSoldOutContent() {
           <Button
             type="button"
             size="sm"
+            variant={mainTab === 'flavors' ? 'default' : 'outline'}
+            className="h-9"
+            onClick={() => {
+              setSearch('')
+              setFilter('all')
+              setMainTab('flavors')
+            }}
+          >
+            {`${t('posMenuSoldOutTabFlavors') || 'Banban 맛'}${flavorSoldOutCount > 0 ? ` (${flavorSoldOutCount})` : ''}`}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
             variant={mainTab === 'parts' ? 'default' : 'outline'}
             className="h-9"
             onClick={() => {
               setSearch('')
+              setFilter('all')
               setMainTab('parts')
             }}
           >
@@ -378,13 +417,15 @@ export function PosMenuSoldOutContent() {
             placeholder={
               mainTab === 'parts'
                 ? t('posOptionPartSoldOutSearchPh') || '부위명 검색'
-                : t('posMenuSoldOutSearchPh') || '메뉴명·코드 검색'
+                : mainTab === 'flavors'
+                  ? t('posBanbanFlavorSoldOutSearchPh') || '맛 이름·코드 검색'
+                  : t('posMenuSoldOutSearchPh') || '메뉴명·코드 검색'
             }
             className="h-11 pl-9 text-base"
           />
         </div>
 
-        {mainTab === 'menus' ? (
+        {mainTab === 'menus' || mainTab === 'flavors' ? (
           <>
             <div className="flex flex-wrap gap-2">
               {(
@@ -418,13 +459,15 @@ export function PosMenuSoldOutContent() {
               <div className="flex min-h-[30vh] items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
               </div>
-            ) : filtered.length === 0 ? (
+            ) : (mainTab === 'flavors' ? filteredFlavors : filtered).length === 0 ? (
               <p className="py-12 text-center text-sm text-muted-foreground">
-                {t('posMenuEmpty') || '메뉴가 없습니다.'}
+                {mainTab === 'flavors'
+                  ? t('posBanbanFlavorSoldOutEmpty') || '이 매장 메뉴에 Banban 맛이 없습니다.'
+                  : t('posMenuEmpty') || '메뉴가 없습니다.'}
               </p>
             ) : (
               <ul className="space-y-2">
-                {filtered.map((menu) => {
+                {(mainTab === 'flavors' ? filteredFlavors : filtered).map((menu) => {
                   const state = menuSaleState(menu)
                   const busy = togglingId === menu.id
                   return (

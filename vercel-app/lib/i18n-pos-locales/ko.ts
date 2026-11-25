@@ -1885,9 +1885,14 @@ export const I18N_POS_KO: Record<string, string> = {
     posMenuSoldOutManage: '메뉴 품절',
     posMenuSoldOutManageHint: '매장만 중지 = 이 매장 POS·QR만 막고 Grab 배달은 판매. 전체 중지 = Grab 포함 전부. 다시 열 때까지 유지.',
     posMenuSoldOutTabMenus: '메뉴',
+    posMenuSoldOutTabFlavors: 'Banban 맛',
     posMenuSoldOutTabParts: '부위',
     posOptionPartSoldOutHint:
       '매장만 중지 = POS·QR만. 전체 중지/해제 = Grab 포함(자동 메뉴 갱신 요청). 다시 열 때까지 유지.',
+    posBanbanFlavorSoldOutHint:
+      'Banban 맛을 하나씩 열고 닫을 수 있습니다. 매장만 중지 = POS·QR, 전체 중지 = Grab 포함. 해당 단품 치킨도 함께 중지됩니다.',
+    posBanbanFlavorSoldOutSearchPh: '맛 이름·코드 검색',
+    posBanbanFlavorSoldOutEmpty: '이 매장 메뉴에 Banban 맛이 없습니다.',
     posOptionPartSoldOutSearchPh: '부위명 검색',
     posOptionPartSoldOutEmpty: '부위 옵션이 없습니다.',
     posOptionPartSoldOutNeedStore: '매장 코드가 필요합니다. POS에 매장으로 로그인해 주세요.',

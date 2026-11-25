@@ -1898,9 +1898,14 @@ export const I18N_POS_EN: Record<string, string> = {
     posMenuSoldOutManage: 'Menu sold out',
     posMenuSoldOutManageHint: 'Store only = blocks this store\'s POS & QR, Grab keeps selling. All channels = Grab too. Stays off until you turn it back on.',
     posMenuSoldOutTabMenus: 'Menus',
+    posMenuSoldOutTabFlavors: 'Banban flavors',
     posMenuSoldOutTabParts: 'Parts',
     posOptionPartSoldOutHint:
       'Store only = POS & QR. All channels on/off = includes Grab (auto menu refresh request). Stays off until you turn it back on.',
+    posBanbanFlavorSoldOutHint:
+      'Turn each Banban flavor on/off. Store only = POS & QR. All channels = includes Grab. The matching single chicken item is also stopped.',
+    posBanbanFlavorSoldOutSearchPh: 'Search flavor name or code',
+    posBanbanFlavorSoldOutEmpty: 'No Banban flavors found for this store menu.',
     posOptionPartSoldOutSearchPh: 'Search part name',
     posOptionPartSoldOutEmpty: 'No part options found.',
     posOptionPartSoldOutNeedStore: 'Store code required. Sign in to POS with a store.',

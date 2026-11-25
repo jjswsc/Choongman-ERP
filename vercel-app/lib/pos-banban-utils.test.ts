@@ -8,6 +8,7 @@ import {
   getBanbanFlavorMenuList,
   isBanbanMenu,
   isBanbanFlavorWhitelistMissing,
+  listBanbanFlavorMenusForSoldOutManage,
   parseBanbanFlavorsFromDisplayName,
   parseBanbanFlavorsFromName,
   resolveBanbanFlavorPairForKitchenPrint,
@@ -197,6 +198,27 @@ describe('getBanbanFlavorMenuList', () => {
     expect(
       getBanbanFlavorMenuList(overlaid, overlaid[0]!, '2026-05-26').map((menu) => menu.name)
     ).toEqual(['Soy Sauce Chicken', 'Supreme Chicken'])
+  })
+
+  it('listBanbanFlavorMenusForSoldOutManage includes sold-out flavors for reopen', () => {
+    const list = listBanbanFlavorMenusForSoldOutManage(
+      [
+        { ...banbanMenu, banbanFlavorMenuIds: ['1', '2'] },
+        { ...soyMenu, soldOutDate: '2026-05-20', soldOutScope: 'store' },
+        supremeMenu,
+      ],
+      '2026-05-26'
+    )
+    expect(list.map((menu) => menu.id).sort()).toEqual(['1', '2'])
+    expect(getBanbanFlavorMenuList(
+      [
+        { ...banbanMenu, banbanFlavorMenuIds: ['1', '2'] },
+        { ...soyMenu, soldOutDate: '2026-05-20', soldOutScope: 'store' },
+        supremeMenu,
+      ],
+      { ...banbanMenu, banbanFlavorMenuIds: ['1', '2'] },
+      '2026-05-26'
+    ).map((menu) => menu.id)).toEqual(['2'])
   })
 })
 

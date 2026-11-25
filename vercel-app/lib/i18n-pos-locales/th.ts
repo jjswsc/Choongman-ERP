@@ -457,9 +457,14 @@ export const I18N_POS_TH: Record<string, string> = {
     posMenuSoldOutManage: 'เปิด-ปิดเมนู',
     posMenuSoldOutManageHint: 'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR หน้าร้าน (Grab ยังขายได้) · ปิดทุกช่องทาง = ปิดรวม Grab ด้วย · ปิดไว้จนกว่าจะกดเปิดเองครับ',
     posMenuSoldOutTabMenus: 'เมนู',
+    posMenuSoldOutTabFlavors: 'รสชาติ Banban',
     posMenuSoldOutTabParts: 'ส่วนชิ้น',
     posOptionPartSoldOutHint:
       'ปิดหน้าร้าน = ปิดเฉพาะ POS และ QR · ปิด/เปิดทุกช่องทาง = รวม Grab (ระบบขอรีเฟรชเมนูให้อัตโนมัติ) · ปิดไว้จนกว่าจะกดเปิดเองครับ',
+    posBanbanFlavorSoldOutHint:
+      'ปิด/เปิดรสชาติ Banban ทีละรสได้ครับ · ปิดหน้าร้าน = POS และ QR · ปิดทุกช่องทาง = รวม Grab · เมนูไก่ชิ้นเดียวของรสนั้นก็ปิดตามด้วยครับ',
+    posBanbanFlavorSoldOutSearchPh: 'ค้นหาชื่อหรือรหัสรสชาติ',
+    posBanbanFlavorSoldOutEmpty: 'ไม่พบรสชาติ Banban ในเมนูสาขานี้ครับ',
     posOptionPartSoldOutSearchPh: 'ค้นหาชื่อส่วนชิ้น',
     posOptionPartSoldOutEmpty: 'ไม่พบตัวเลือกส่วนชิ้นครับ',
     posOptionPartSoldOutNeedStore: 'ต้องมีรหัสสาขา กรุณาเข้าสู่ระบบ POS ด้วยสาขาครับ',
