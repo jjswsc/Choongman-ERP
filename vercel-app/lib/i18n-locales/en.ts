@@ -2732,7 +2732,7 @@ Only matters the employee must handle personally on a working day:
   helpSum_admin_accounting_purchase_order:
     'Create store-billing POs (royalty, delivery/Grab GP) as drafts, then approve or print from history. Drafts can be reopened with the pencil before approval.',
   helpHow_admin_accounting_purchase_order:
-    '① Save billing rates, add lines on the HQ PO tab, then save as Draft.\n② In PO history, the pencil on a Draft row loads it back into the form. Saving keeps the same PO number.\n③ Use the green check to approve. Approved or cancelled POs cannot be edited.\n④ If FlowAccount decimals differ, use the totals pencil to override subtotal, VAT, and total.\n⑤ Excel downloads as an A4 portrait invoice. Open it in Excel and print.',
+    '① Under [Billing rates], save % with an effective start date. If rates change mid-period, PO lines split by business day.\n② Add lines on the HQ PO tab, then save as Draft.\n③ In PO history, the pencil on a Draft row loads it back into the form. Saving keeps the same PO number.\n④ Use the green check to approve. Approved or cancelled POs cannot be edited.\n⑤ If FlowAccount decimals differ, use the totals pencil to override subtotal, VAT, and total.\n⑥ Excel downloads as an A4 portrait invoice. Open it in Excel and print.',
   helpSum_admin_order_create:
     'Create store orders and HQ purchase orders, then approve or print from history. Draft POs can be edited with the pencil before approval.',
   helpHow_admin_order_create:
@@ -2743,6 +2743,14 @@ Only matters the employee must handle personally on a working day:
   poBillingSettingsTitle: 'Per-store billing rates (%)',
   poBillingSettingsHint:
     'Based on completed POS orders. Royalty on total sales; Delivery GP on delivery channel sales; Grab GP on Grab-tagged delivery sales.',
+  poBillingEffectiveFrom: 'Effective from',
+  poBillingEffectiveFromHint:
+    'New rates apply from this date. If rates change mid-period, PO drafts split amounts by business day. Use the history panel below to look up past rates.',
+  poBillingEffectiveFromInvalid: 'Enter the effective date as YYYY-MM-DD.',
+  poBillingHistoryTitle: 'Billing rate history',
+  poBillingHistoryAllStores: 'All stores',
+  poBillingHistoryEmpty: 'No history yet. After applying the versions SQL, saves will appear here.',
+  poBillingHistorySavedAt: 'Saved at (Bangkok)',
   poBillingColRoyalty: 'Royalty %',
   poBillingColDelGp: 'Delivery GP %',
   poBillingColGrabGp: 'Grab GP %',

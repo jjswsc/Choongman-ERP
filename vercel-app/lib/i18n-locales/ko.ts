@@ -2736,7 +2736,7 @@ export const I18N_BASE_KO = {
   helpSum_admin_accounting_purchase_order:
     '매장 청구(로얄티·배달/Grab GP 등)를 PO 초안으로 만들고, 내역에서 승인·인쇄합니다. 승인 전 Draft는 연필 버튼으로 다시 열어 수정할 수 있습니다.',
   helpHow_admin_accounting_purchase_order:
-    '① 청구 비율을 저장한 뒤 본사 발주 탭에서 줄을 넣고 저장하면 Draft가 됩니다.\n② 발주 내역에서 Draft 행의 연필(수정)을 누르면 작성 탭으로 불러옵니다. 고친 뒤 「초안 수정 저장」하면 같은 PO 번호가 유지됩니다.\n③ 초록 체크로 승인합니다. 승인·취소된 PO는 수정할 수 없습니다.\n④ FlowAccount와 소수점이 다르면 합계 연필로 소계·VAT·합계를 맞춥니다.\n⑤ 엑셀은 A4 세로 인쇄용 인보이스 양식으로 내려받습니다. Excel에서 바로 인쇄하면 됩니다.',
+    '① [청구 비율 설정]에서 적용 시작일과 %를 저장합니다. 기간 중 비율이 바뀌면 PO 담기 시 영업일별로 구간이 나뉩니다.\n② 본사 발주 탭에서 줄을 넣고 저장하면 Draft가 됩니다.\n③ 발주 내역에서 Draft 행의 연필(수정)을 누르면 작성 탭으로 불러옵니다. 고친 뒤 「초안 수정 저장」하면 같은 PO 번호가 유지됩니다.\n④ 초록 체크로 승인합니다. 승인·취소된 PO는 수정할 수 없습니다.\n⑤ FlowAccount와 소수점이 다르면 합계 연필로 소계·VAT·합계를 맞춥니다.\n⑥ 엑셀은 A4 세로 인쇄용 인보이스 양식으로 내려받습니다. Excel에서 바로 인쇄하면 됩니다.',
   helpSum_admin_order_create:
     '매장 발주와 본사 발주(PO)를 작성하고, 발주 내역에서 승인·인쇄합니다. 승인 전 Draft PO는 연필 버튼으로 수정할 수 있습니다.',
   helpHow_admin_order_create:
@@ -2745,6 +2745,14 @@ export const I18N_BASE_KO = {
   poBillingSettingsTitle: '매장별 청구 비율 (%)',
   poBillingSettingsHint:
     '완료·결제된 POS 주문 매출 기준입니다. 로얄티=전체 매출, 배달 GP=배달(order_type) 매출, Grab GP=배달 중 Grab 식별 주문 매출에 각 비율을 곱합니다.',
+  poBillingEffectiveFrom: '적용 시작일',
+  poBillingEffectiveFromHint:
+    '적용 시작일부터 새 비율이 쓰입니다. 기간 중 비율이 바뀌면 PO 담기 시 영업일별로 나눠 계산합니다. 이력은 아래 패널에서 조회합니다.',
+  poBillingEffectiveFromInvalid: '적용 시작일을 YYYY-MM-DD 형식으로 입력하세요.',
+  poBillingHistoryTitle: '청구 비율 이력',
+  poBillingHistoryAllStores: '전체 매장',
+  poBillingHistoryEmpty: '이력이 없습니다. SQL(버전 테이블) 적용 후 저장하면 쌓입니다.',
+  poBillingHistorySavedAt: '저장 시각(방콕)',
   poBillingColRoyalty: '로얄티 %',
   poBillingColDelGp: '배달 GP %',
   poBillingColGrabGp: 'Grab GP %',

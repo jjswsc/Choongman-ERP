@@ -16,6 +16,7 @@ export async function GET(_request: NextRequest) {
       label_royalty?: string | null
       label_delivery_gp?: string | null
       label_grab_gp?: string | null
+      effective_from?: string | null
       updated_at?: string
     }[]
     return NextResponse.json({ success: true, list: rows || [] }, { headers })

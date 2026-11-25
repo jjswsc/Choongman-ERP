@@ -3,7 +3,7 @@
 > 이 파일은 `npm run api:inventory`로 생성합니다. 직접 수정하지 마세요.
 > 신규 라우트 규칙: [`.cursor/rules/api-route-conventions.mdc`](../../.cursor/rules/api-route-conventions.mdc) · 검사: `npm run api:check`
 
-- 라우트 수: **922**
+- 라우트 수: **923**
 - 도메인 그룹 수: **178** (평면 camelCase 라우트는 이름에서 동사를 뗀 첫 단어로 추정)
 - 외부 호출(웹훅·크론): **23** — 경로 변경 금지
 
@@ -45,9 +45,9 @@
 - [qr-table](#qr-table) (24)
 - [bank](#bank) (20)
 - [members](#members) (17)
+- [accounting](#accounting) (16)
 - [crm](#crm) (16)
 - [grab](#grab) (16)
-- [accounting](#accounting) (15)
 - [lineOa](#lineoa) (15)
 - [saas](#saas) (15)
 - [attendance](#attendance) (13)
@@ -608,6 +608,27 @@
 | `/api/members/point-line-notify` | GET, POST |  |
 | `/api/members/points-search` | GET |  |
 
+### accounting
+
+| 경로 | 메서드 | 비고 |
+|---|---|---|
+| `/api/accounting/audited-financial-statements` | GET |  |
+| `/api/accounting/backfill` | POST |  |
+| `/api/accounting/po-billing-rate-history` | GET |  |
+| `/api/exportAccountingComplianceAuditCsv` | GET |  |
+| `/api/getAccountingComplianceAuditLogs` | GET |  |
+| `/api/getAccountingComplianceAuditTrend` | GET |  |
+| `/api/getAccountingFilingPreferences` | GET |  |
+| `/api/getAccountingPeriodCloseStatus` | GET |  |
+| `/api/getAccountingPeriods` | GET |  |
+| `/api/getAccountingReconcile` | GET |  |
+| `/api/getAccountingReconciliation` | GET |  |
+| `/api/getAccountingWorkflowReminders` | GET |  |
+| `/api/getAccountingWorkflowStatus` | GET |  |
+| `/api/saveAccountingFilingPreferences` | POST |  |
+| `/api/saveAccountingWorkflowStatus` | POST |  |
+| `/api/setAccountingPeriodClosed` | POST |  |
+
 ### crm
 
 | 경로 | 메서드 | 비고 |
@@ -649,26 +670,6 @@
 | `/api/grab/pauseStore` | PUT |  |
 | `/api/grab/updateMenuNotification` | POST |  |
 | `/api/grab/updateMenuRecord` | PUT |  |
-
-### accounting
-
-| 경로 | 메서드 | 비고 |
-|---|---|---|
-| `/api/accounting/audited-financial-statements` | GET |  |
-| `/api/accounting/backfill` | POST |  |
-| `/api/exportAccountingComplianceAuditCsv` | GET |  |
-| `/api/getAccountingComplianceAuditLogs` | GET |  |
-| `/api/getAccountingComplianceAuditTrend` | GET |  |
-| `/api/getAccountingFilingPreferences` | GET |  |
-| `/api/getAccountingPeriodCloseStatus` | GET |  |
-| `/api/getAccountingPeriods` | GET |  |
-| `/api/getAccountingReconcile` | GET |  |
-| `/api/getAccountingReconciliation` | GET |  |
-| `/api/getAccountingWorkflowReminders` | GET |  |
-| `/api/getAccountingWorkflowStatus` | GET |  |
-| `/api/saveAccountingFilingPreferences` | POST |  |
-| `/api/saveAccountingWorkflowStatus` | POST |  |
-| `/api/setAccountingPeriodClosed` | POST |  |
 
 ### lineOa
 
