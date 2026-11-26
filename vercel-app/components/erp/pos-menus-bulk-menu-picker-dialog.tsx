@@ -9,7 +9,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { formatPosMenuBulkPickLabel } from "@/app/admin/pos-menus/pos-menus-page-helpers"
+import {
+  formatPosMenuBulkPickLabel,
+  formatPosMenuBulkPickOptionValueLabel,
+} from "@/app/admin/pos-menus/pos-menus-page-helpers"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { ADMIN_BTN_XS_CN } from "@/lib/admin-ui-standards"
@@ -60,6 +63,7 @@ export function PosMenusBulkMenuPickerDialogContent({
           <ul className="divide-y">
             {optionsConfigBulkMenuPickerList.map((m) => {
               const line = formatPosMenuBulkPickLabel(m)
+              const optionValue = formatPosMenuBulkPickOptionValueLabel(m)
               const checked = !!optionsConfigBulkMenuPickerChecked[String(m.id)]
               return (
                 <li key={m.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40">
@@ -73,7 +77,7 @@ export function PosMenusBulkMenuPickerDialogContent({
                     }
                     aria-label={line}
                   />
-                  <span className="min-w-0 flex-1 truncate text-sm" title={line}>
+                  <span className="min-w-0 flex-1 truncate text-sm" title={`${line} → ${optionValue}`}>
                     {m.code ? (
                       <>
                         <span className="font-mono text-xs text-muted-foreground">{m.code}</span>
@@ -81,13 +85,16 @@ export function PosMenusBulkMenuPickerDialogContent({
                       </>
                     ) : null}
                     <span>{m.name}</span>
+                    {optionValue !== String(m.name ?? "").trim() ? (
+                      <span className="ml-1 text-[10px] text-muted-foreground">→ {optionValue}</span>
+                    ) : null}
                   </span>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     className={`${ADMIN_BTN_XS_CN} shrink-0 text-[11px]`}
-                    onClick={() => appendOptionsConfigBulkLabels([line])}
+                    onClick={() => appendOptionsConfigBulkLabels([optionValue])}
                   >
                     {t("posOptionBulkMenuPickerRowAdd")}
                   </Button>
@@ -112,7 +119,7 @@ export function PosMenusBulkMenuPickerDialogContent({
             const labels = ids
               .map((id) => menus.find((mm) => String(mm.id) === id))
               .filter((x): x is PosMenu => !!x)
-              .map(formatPosMenuBulkPickLabel)
+              .map(formatPosMenuBulkPickOptionValueLabel)
             appendOptionsConfigBulkLabels(labels)
             setOptionsConfigBulkMenuPickerChecked({})
           }}

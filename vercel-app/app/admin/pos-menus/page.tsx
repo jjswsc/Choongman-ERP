@@ -2701,8 +2701,29 @@ export default function PosMenusPage() {
 
   const handleOptionNameChangeForConfig = (opt: PosMenuOption, value: string) => {
     const name = value
+    const selectedKey =
+      optionsConfigEffectiveGroupKey && optionsConfigEffectiveGroupKey !== "__default__"
+        ? optionsConfigEffectiveGroupKey
+        : ""
     setOptionsConfigMenuOptions((prev) =>
-      prev.map((o) => (o.id === opt.id ? { ...o, name } : o))
+      prev.map((o) => {
+        if (o.id !== opt.id) return o
+        const prevName = String(o.name ?? "").trim()
+        const rawSteps = o.optionStepValues
+        if (!rawSteps || typeof rawSteps !== "object" || Array.isArray(rawSteps)) {
+          return { ...o, name }
+        }
+        const steps = { ...rawSteps }
+        const keys = Object.keys(steps)
+        for (const k of keys) {
+          const cur = String(steps[k] ?? "").trim()
+          // Grab는 step 값을 쓸 수 있어, 이름 변경 시 같은 단계 라벨도 맞춰 둔다.
+          if ((selectedKey && k === selectedKey) || keys.length === 1 || cur === prevName) {
+            steps[k] = name
+          }
+        }
+        return { ...o, name, optionStepValues: steps }
+      })
     )
   }
 

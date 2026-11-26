@@ -66,6 +66,32 @@ describe("resolveGrabModifierAssignments", () => {
     )
     expect(out).toEqual([{ groupName: "part", optionName: "S - Boneless" }])
   })
+
+  it("prefers short option name over long meal_options step value for K menus", () => {
+    const out = resolveGrabModifierAssignments(
+      {
+        name: "Combo",
+        option_step_values: {
+          meal_options: "K044 — Soy Sauce Pork Bulgogi Combo",
+        },
+      },
+      "K037",
+      ["meal_options"]
+    )
+    expect(out).toEqual([{ groupName: "meal_options", optionName: "Combo" }])
+  })
+
+  it("falls back to step value when K-menu option name is empty", () => {
+    const out = resolveGrabModifierAssignments(
+      {
+        name: "",
+        option_step_values: { meal_options: "Set" },
+      },
+      "K037",
+      ["meal_options"]
+    )
+    expect(out).toEqual([{ groupName: "meal_options", optionName: "Set" }])
+  })
 })
 
 describe("grabChickenPartSizeOptionName", () => {

@@ -8,7 +8,10 @@ import {
   type PosOptionSelectionGroupConfig,
   type PosPackagingChecklistOrderType,
 } from "@/lib/api-client"
-import { normalizeOptionGroupsForMenu } from "@/lib/pos-option-selection-groups"
+import {
+  normalizeOptionGroupsForMenu,
+  resolvePosOptionGroupRequired,
+} from "@/lib/pos-option-selection-groups"
 
 /** 원가 분석 화면 이동 후 복귀 시 편집 중이던 메뉴·노출 매장 복원 */
 export const POS_MENUS_EDIT_RESUME_KEY = "cm_pos_menus_edit_resume_v1"
@@ -44,6 +47,23 @@ export function formatPosMenuBulkPickLabel(m: PosMenu): string {
   const n = String(m.name ?? "").trim()
   if (c && n) return `${c} — ${n}`
   return n || c
+}
+
+/**
+ * 옵션 단계 값으로 넣을 짧은 라벨.
+ * 메뉴 검색으로 Combo/Set 등을 넣을 때 `K044 — Soy Sauce … Combo` 전체가 Grab에 나가지 않게 한다.
+ */
+export function formatPosMenuBulkPickOptionValueLabel(m: PosMenu): string {
+  const n = String(m.name ?? "").trim()
+  if (!n) return formatPosMenuBulkPickLabel(m)
+  const typeMatch = n.match(/\b(à\s*la\s*carte|a\s*la\s*cartes?|a\s*la\s*cart|combo|set)\s*$/i)
+  if (typeMatch) {
+    const raw = typeMatch[1]!.replace(/\s+/g, " ").trim()
+    if (/^a\s*la\s*cart/i.test(raw) || /^à\s*la\s*carte/i.test(raw)) return "A La Carte"
+    if (/^combo$/i.test(raw)) return "Combo"
+    if (/^set$/i.test(raw)) return "Set"
+  }
+  return n
 }
 
 export function formatChickenOptionStepDisplayLabel(stepKey: "size" | "part", t: (key: string) => string): string {
@@ -297,7 +317,7 @@ export function normalizeOptionSelectionConfig(
   }
   return groups.map((key) => {
     const prev = byKey.get(key)
-    const required = prev?.required !== false
+    const required = resolvePosOptionGroupRequired(key, prev)
     const audience =
       prev?.audience === "delivery" || prev?.audience === "hall" ? prev.audience : "all"
     const minFromPrev = prev?.minSelect

@@ -262,6 +262,11 @@ export function resolveGrabModifierAssignments(
       return [
         {
           groupName: key,
+          /**
+           * 치킨 size/part: 이름(S - Boneless) 유지.
+           * 그 외(K 메뉴 meal_options 등): 관리자에서 짧게 고친 `name`(Combo/Set)을 우선.
+           * step 값만 쓰면 일괄추가 때 넣은 `K044 — …` 긴 라벨이 Grab에 그대로 남는다.
+           */
           optionName: isChickenMenuCode(menuCode)
             ? grabChickenPartSizeOptionName({
                 originalName,
@@ -270,7 +275,7 @@ export function resolveGrabModifierAssignments(
                 partValue: key.toLowerCase() === "part" ? value : undefined,
                 sizeValue: key.toLowerCase() === "size" ? value : undefined,
               })
-            : value,
+            : originalName || value,
         },
       ]
     }
