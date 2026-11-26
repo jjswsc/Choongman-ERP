@@ -1,7 +1,5 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
-import localFont from "next/font/local"
-import { Geist_Mono, IBM_Plex_Sans_Thai, Inter, Noto_Sans_Thai } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
@@ -11,66 +9,16 @@ import { SwPreregister } from "@/components/sw-preregister"
 import { SwAutoUpdate } from "@/components/sw-auto-update"
 import { AppBrandProvider } from "@/components/app-brand-provider"
 import { getServerAppBrandConfig } from "@/lib/app-brand-server"
+import {
+  geistMono,
+  ibmPlexSansThai,
+  inter,
+  notoSansThai,
+  orbitron,
+  pretendard,
+} from "@/lib/app-root-fonts"
 
 import "./globals.css"
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-})
-const pretendard = localFont({
-  src: "../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
-  variable: "--font-pretendard",
-  display: "swap",
-  preload: true,
-})
-const ibmPlexSansThai = IBM_Plex_Sans_Thai({
-  subsets: ["latin", "thai"],
-  variable: "--font-ibm-plex-sans-thai",
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  preload: false,
-})
-const notoSansThai = Noto_Sans_Thai({
-  subsets: ["latin", "thai"],
-  variable: "--font-noto-sans-thai",
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-  preload: false,
-})
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-geist-mono",
-  preload: false,
-})
-const orbitron = localFont({
-  src: [
-    {
-      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-400-normal.woff2",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-500-normal.woff2",
-      weight: "500",
-      style: "normal",
-    },
-    {
-      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-600-normal.woff2",
-      weight: "600",
-      style: "normal",
-    },
-    {
-      path: "../node_modules/@fontsource/orbitron/files/orbitron-latin-700-normal.woff2",
-      weight: "700",
-      style: "normal",
-    },
-  ],
-  variable: "--font-orbitron",
-  display: "swap",
-  preload: false,
-})
 
 function appMetadataBase(): URL | undefined {
   const raw = process.env.NEXT_PUBLIC_APP_URL?.trim()
