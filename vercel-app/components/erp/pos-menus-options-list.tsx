@@ -44,6 +44,10 @@ export interface PosMenuOptionsListSectionProps {
   handlePriceChangeForConfig: (opt: PosMenuOption, field: "priceModifier" | "priceModifierDelivery" | "priceModifierPackaging", value: string) => void
   handleOptionChannelsChangeForConfig: (opt: PosMenuOption, patch: Partial<Pick<PosMenuOption, "sellHall" | "sellDelivery" | "sellPackaging">>) => void
   handleDeleteOptionForConfig: (opt: PosMenuOption) => Promise<void>
+  handleOptionImageUploadForConfig?: (opt: PosMenuOption, file: File) => Promise<void>
+  handleOptionImageClearForConfig?: (opt: PosMenuOption) => void
+  handleOptionImagePickFromMenuForConfig?: (opt: PosMenuOption) => void
+  optionsConfigOptionImageUploadingId?: string | null
   optionsConfigSaving: boolean
   setOptionsConfigDraggingOptionId: React.Dispatch<React.SetStateAction<string | null>>
   optionsConfigDraggingOptionId: string | null
@@ -77,6 +81,10 @@ export function PosMenuOptionsListSection({
   handlePriceChangeForConfig,
   handleOptionChannelsChangeForConfig,
   handleDeleteOptionForConfig,
+  handleOptionImageUploadForConfig,
+  handleOptionImageClearForConfig,
+  handleOptionImagePickFromMenuForConfig,
+  optionsConfigOptionImageUploadingId,
   optionsConfigSaving,
   setOptionsConfigDraggingOptionId,
   optionsConfigDraggingOptionId,
@@ -227,6 +235,26 @@ export function PosMenuOptionsListSection({
               onDelete={() => void handleDeleteOptionForConfig(o)}
               deleteLabel={t("posOptionDeleteBtn") || "옵션 삭제"}
               deleteDisabled={optionsConfigSaving}
+              imageSectionTitle={t("posOptionImageTitle") || "옵션 사진"}
+              imageUploadLabel={t("posOptionImageUpload") || "업로드"}
+              imageClearLabel={t("posOptionImageClear") || "지우기"}
+              imagePickFromMenuLabel={t("posOptionImageFromMenu") || "메뉴에서 가져오기"}
+              imageUploading={String(optionsConfigOptionImageUploadingId || "") === String(o.id)}
+              onUploadImage={
+                handleOptionImageUploadForConfig
+                  ? (file) => void handleOptionImageUploadForConfig(o, file)
+                  : undefined
+              }
+              onClearImage={
+                handleOptionImageClearForConfig
+                  ? () => handleOptionImageClearForConfig(o)
+                  : undefined
+              }
+              onPickImageFromMenu={
+                handleOptionImagePickFromMenuForConfig
+                  ? () => handleOptionImagePickFromMenuForConfig(o)
+                  : undefined
+              }
               draggable={true}
               onDragStart={() => setOptionsConfigDraggingOptionId(String(o.id))}
               onDragOver={() => undefined}

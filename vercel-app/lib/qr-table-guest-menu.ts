@@ -344,6 +344,7 @@ export type QrGuestMenuOption = {
   sortOrder: number
   optionStepValues?: Record<string, string> | null
   sellHall?: boolean
+  imageUrl?: string
 }
 
 export function hallSubstitutionQrGuestOptions(

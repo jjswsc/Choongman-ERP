@@ -15,6 +15,7 @@ import {
   type ChickenTwoPhasePhase,
 } from "@/lib/pos-chicken-option-picker-plan"
 import { isPosCartOptionLabelMatchPickerEnabled } from "@/lib/pos-cart-option-label-rollout"
+import { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
 
 export type PosChickenOptionPickerPanelProps = {
   menu: PosMenu
@@ -56,6 +57,7 @@ function PosOptionPriceRow(props: {
 }) {
   const { opt, label, priceText, description, onClick, tone } = props
   const guest = tone === 'guest'
+  const thumb = normalizePosMenuImageUrl(String(opt.imageUrl ?? '').trim())
   return (
     <button
       key={opt.id}
@@ -63,10 +65,19 @@ function PosOptionPriceRow(props: {
       onClick={onClick}
       className={
         guest
-          ? 'flex justify-between gap-2 rounded-lg border border-stone-200 bg-[#faf7f2] px-4 py-3 text-left transition hover:border-amber-500 hover:bg-amber-50'
-          : 'flex justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50'
+          ? 'flex items-center justify-between gap-2 rounded-lg border border-stone-200 bg-[#faf7f2] px-3 py-2.5 text-left transition hover:border-amber-500 hover:bg-amber-50'
+          : 'flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50'
       }
     >
+      {thumb ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumb}
+          alt=""
+          className="h-12 w-12 shrink-0 rounded-md object-cover"
+          loading="lazy"
+        />
+      ) : null}
       <span className={`min-w-0 flex-1 ${guest ? 'text-stone-800' : 'text-slate-800'}`}>
         <span className="block font-medium">{label}</span>
         {description ? (

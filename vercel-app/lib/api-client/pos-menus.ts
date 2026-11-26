@@ -112,6 +112,8 @@ export interface PosMenuOption {
   descriptionDefault?: string
   descriptionDelivery?: string | null
   descriptionTable?: string | null
+  /** 옵션 선택 화면 썸네일 (POS/QR). Grab modifier 에는 미전송 */
+  imageUrl?: string
 }
 
 export interface PosOptionGroupItem {
@@ -569,6 +571,7 @@ export async function savePosMenuOption(
     descriptionDefault?: string
     descriptionDelivery?: string | null
     descriptionTable?: string | null
+    imageUrl?: string
   },
   opts?: { requireOnline?: boolean }
 ) : Promise<{ success: boolean; message?: string; optionCode?: string; remappedOptionCode?: boolean }> {
@@ -606,6 +609,7 @@ export async function savePosMenuOptionsBulk(
       sellHall?: boolean
       sellDelivery?: boolean
       sellPackaging?: boolean
+      imageUrl?: string
     }>
     storeCode?: string
   },

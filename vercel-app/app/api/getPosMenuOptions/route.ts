@@ -135,13 +135,15 @@ export async function GET(request: NextRequest) {
     }
 
     const selectCols =
+      'id,menu_id,name,option_code,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging,sell_member,description_default,description_delivery,description_table,image'
+    const selectColsNoImage =
       'id,menu_id,name,option_code,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging,sell_member,description_default,description_delivery,description_table'
     const colsWithoutSellAndStep =
       'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,additive_source_menu_id,quantity,description_default,description_delivery,description_table'
     const colsBaseWithDelivery = 'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order'
     const colsBaseWithDeliveryOnly = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order'
     const minimalCols = 'id,menu_id,name,price_modifier,sort_order'
-    let rows: { id?: number; menu_id?: number; name?: string; option_code?: string | null; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean; sell_member?: boolean; description_default?: string; description_delivery?: string | null; description_table?: string | null }[] | null = null
+    let rows: { id?: number; menu_id?: number; name?: string; option_code?: string | null; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean; sell_member?: boolean; description_default?: string; description_delivery?: string | null; description_table?: string | null; image?: string | null }[] | null = null
 
     const doSelect = async (cols: string) => {
       if (menuId) {
@@ -163,21 +165,25 @@ export async function GET(request: NextRequest) {
       rows = await doSelect(selectCols)
     } catch {
       try {
-        rows = await doSelect(selectColsLegacy)
+        rows = await doSelect(selectColsNoImage)
       } catch {
         try {
-          rows = await doSelect(colsWithoutSellAndStep)
+          rows = await doSelect(selectColsLegacy)
         } catch {
           try {
-            rows = await doSelect(colsWithoutSellAndStepLegacy)
+            rows = await doSelect(colsWithoutSellAndStep)
           } catch {
             try {
-              rows = await doSelect(colsBaseWithDelivery)
+              rows = await doSelect(colsWithoutSellAndStepLegacy)
             } catch {
               try {
-                rows = await doSelect(colsBaseWithDeliveryOnly)
+                rows = await doSelect(colsBaseWithDelivery)
               } catch {
-                rows = await doSelect(minimalCols)
+                try {
+                  rows = await doSelect(colsBaseWithDeliveryOnly)
+                } catch {
+                  rows = await doSelect(minimalCols)
+                }
               }
             }
           }
@@ -247,6 +253,7 @@ export async function GET(request: NextRequest) {
           row.description_delivery == null ? null : String(row.description_delivery),
         descriptionTable:
           row.description_table == null ? null : String(row.description_table),
+        imageUrl: String(row.image ?? '').trim(),
       }
     })
 

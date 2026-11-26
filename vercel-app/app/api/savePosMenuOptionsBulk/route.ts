@@ -23,6 +23,7 @@ type SavePosMenuOptionInput = {
   sellHall?: boolean
   sellDelivery?: boolean
   sellPackaging?: boolean
+  imageUrl?: string
 }
 
 async function getMenuMeta(menuId: number): Promise<{ code: string; categoryMain: string; category: string }> {
@@ -75,6 +76,8 @@ async function saveSingleOption(
   const sellHall = input.sellHall != null ? !!input.sellHall : true
   const sellDelivery = input.sellDelivery != null ? !!input.sellDelivery : true
   const sellPackaging = input.sellPackaging != null ? !!input.sellPackaging : true
+  const hasImageUrl = Object.prototype.hasOwnProperty.call(input, "imageUrl")
+  const imageUrl = hasImageUrl ? String(input.imageUrl ?? "").trim() : undefined
 
   if (!menuId || !name) {
     throw new Error("menuId and name required")
@@ -103,6 +106,16 @@ async function saveSingleOption(
     sell_packaging: sellPackaging,
   }
   if (optionStepValues) row.option_step_values = optionStepValues
+  if (hasImageUrl) row.image = imageUrl ?? ""
+
+  const doUpdate = async (payload: Record<string, unknown>) => {
+    await supabaseUpdateByFilter("pos_menu_options", `id=eq.${id}`, payload)
+  }
+  const doInsert = async (payload: Record<string, unknown>) =>
+    (await supabaseInsert("pos_menu_options", {
+      menu_id: menuId,
+      ...payload,
+    })) as { id?: number }[] | { id?: number }
 
   if (id) {
     const existing = (await supabaseSelectFilter("pos_menu_options", `id=eq.${id}`, {
@@ -146,7 +159,14 @@ async function saveSingleOption(
         }).catch(() => {})
       }
     }
-    await supabaseUpdateByFilter("pos_menu_options", `id=eq.${id}`, row)
+    try {
+      await doUpdate(row)
+    } catch (err) {
+      if (!hasImageUrl) throw err
+      const withoutImage = { ...row }
+      delete withoutImage.image
+      await doUpdate(withoutImage)
+    }
     let allocator = allocatorByMenuId.get(menuId)
     if (!allocator) {
       allocator = await createMenuOptionCodeAllocator(menuId)
@@ -160,10 +180,15 @@ async function saveSingleOption(
     return { optionCode: codeRes.optionCode || undefined, remapped: codeRes.remapped }
   }
 
-  const inserted = (await supabaseInsert("pos_menu_options", {
-    menu_id: menuId,
-    ...row,
-  })) as { id?: number }[] | { id?: number }
+  let inserted: { id?: number }[] | { id?: number }
+  try {
+    inserted = await doInsert(row)
+  } catch (err) {
+    if (!hasImageUrl) throw err
+    const withoutImage = { ...row }
+    delete withoutImage.image
+    inserted = await doInsert(withoutImage)
+  }
   const newRow = Array.isArray(inserted) ? inserted[0] : inserted
   const newId = newRow?.id != null ? String(newRow.id) : null
   if (!newId) return {}

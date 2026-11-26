@@ -1390,6 +1390,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       optionType: o.optionType,
       optionStepValues: o.optionStepValues,
       sellHall: o.sellHall !== false,
+      imageUrl: String(o.imageUrl || '').trim(),
     }))
   }
 

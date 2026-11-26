@@ -72,11 +72,11 @@
 > `npm run sql:index`로 갱신합니다. 이 구역은 직접 수정하지 마세요.
 > 유형은 파일명으로 추정: preview·verify·diagnose(읽기) / apply·backfill·bundle·rpc·rls(변경). `log` = 끝에 `sql_applied_log` 기록 블록 있음.
 
-- `sql/` 최상위: **874**개 · 접두어 그룹 **103**개
+- `sql/` 최상위: **875**개 · 접두어 그룹 **103**개
 - `sql/legacy/` (옛 루트 `supabase_*.sql`): **144**개
 - `sql/archive/` (진단 전용 등 보관): **79**개
 
-<details><summary><code>pos_*</code> (241)</summary>
+<details><summary><code>pos_*</code> (242)</summary>
 
 - [`pos_banban_flavor_links.sql`](../sql/pos_banban_flavor_links.sql)
 - [`pos_banban_flavor_store_sold_out_01_create.sql`](../sql/pos_banban_flavor_store_sold_out_01_create.sql) — log
@@ -188,6 +188,7 @@
 - [`pos_menu_option_groups_autoclean.sql`](../sql/pos_menu_option_groups_autoclean.sql)
 - [`pos_menu_option_selection_config.sql`](../sql/pos_menu_option_selection_config.sql)
 - [`pos_menu_options_additive_source_menu.sql`](../sql/pos_menu_options_additive_source_menu.sql)
+- [`pos_menu_options_image_01_column.sql`](../sql/pos_menu_options_image_01_column.sql) — log
 - [`pos_menu_options_option_code.sql`](../sql/pos_menu_options_option_code.sql)
 - [`pos_menu_packaging_check_items.sql`](../sql/pos_menu_packaging_check_items.sql) — verify
 - [`pos_menu_recover_k_dosirak_codes.sql`](../sql/pos_menu_recover_k_dosirak_codes.sql)

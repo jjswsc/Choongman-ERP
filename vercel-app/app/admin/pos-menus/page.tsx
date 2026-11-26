@@ -17,6 +17,10 @@ import {
 } from "@/components/ui/select"
 import {
   Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -511,6 +515,11 @@ export default function PosMenusPage() {
   const [optionsConfigBulkMenuPickerSearch, setOptionsConfigBulkMenuPickerSearch] = React.useState("")
   const [optionsConfigBulkMenuPickerChecked, setOptionsConfigBulkMenuPickerChecked] = React.useState<Record<string, boolean>>({})
   const [optionsConfigDraggingOptionId, setOptionsConfigDraggingOptionId] = React.useState<string | null>(null)
+  const [optionsConfigOptionImageUploadingId, setOptionsConfigOptionImageUploadingId] = React.useState<
+    string | null
+  >(null)
+  const [optionsConfigImagePickOptionId, setOptionsConfigImagePickOptionId] = React.useState<string | null>(null)
+  const [optionsConfigImagePickSearch, setOptionsConfigImagePickSearch] = React.useState("")
   const [optionsConfigShowAllOptions, setOptionsConfigShowAllOptions] = React.useState(false)
   const [optionsConfigCopySourceMenuId, setOptionsConfigCopySourceMenuId] = React.useState<string>("")
   const [optionsConfigCopying, setOptionsConfigCopying] = React.useState(false)
@@ -2697,6 +2706,85 @@ export default function PosMenusPage() {
     )
   }
 
+  const handleOptionImageUploadForConfig = React.useCallback(
+    async (opt: PosMenuOption, file: File) => {
+      const menuId = String(opt.menuId || optionsConfigSelectedMenuId || "").trim()
+      if (!menuId || !file) return
+      setOptionsConfigOptionImageUploadingId(String(opt.id))
+      try {
+        let toSend = file
+        try {
+          toSend = await preparePosMenuImageFileForUpload(file)
+        } catch (prepErr) {
+          const pmsg = String(prepErr)
+          if (pmsg.includes("POS_MENU_IMAGE_DECODE_FAIL")) {
+            await appAlert(
+              t("posMenuImageDecodeFail") ||
+                "이미지를 열 수 없습니다. JPG·PNG·WebP 등으로 저장 후 다시 시도해 주세요."
+            )
+          } else {
+            await appAlert(pmsg)
+          }
+          return
+        }
+        const res = await uploadPosMenuImage({ file: toSend, menuId })
+        if (res?.success && res?.url) {
+          setOptionsConfigMenuOptions((prev) =>
+            prev.map((o) => (o.id === opt.id ? { ...o, imageUrl: res.url } : o))
+          )
+          return
+        }
+        const msg =
+          res?.message === POS_MENU_UPLOAD_TOO_LARGE
+            ? t("posMenuImageUploadTooLarge") ||
+              "파일이 너무 큽니다. 더 작은 사진을 선택하거나, 이미지 주소(URL)로 등록해 주세요."
+            : res?.message || t("msg_upload_fail") || "업로드 실패"
+        await appAlert(msg)
+      } catch (e) {
+        await appAlert(translateApiMessage(String(e ?? "upload_failed"), t))
+      } finally {
+        setOptionsConfigOptionImageUploadingId(null)
+      }
+    },
+    [optionsConfigSelectedMenuId, t]
+  )
+
+  const handleOptionImageClearForConfig = React.useCallback((opt: PosMenuOption) => {
+    setOptionsConfigMenuOptions((prev) =>
+      prev.map((o) => (o.id === opt.id ? { ...o, imageUrl: "" } : o))
+    )
+  }, [])
+
+  const handleOptionImagePickFromMenuForConfig = React.useCallback((opt: PosMenuOption) => {
+    setOptionsConfigImagePickOptionId(String(opt.id))
+    setOptionsConfigImagePickSearch(String(opt.name || "").trim())
+  }, [])
+
+  const optionsConfigImagePickMenus = React.useMemo(() => {
+    const q = optionsConfigImagePickSearch.trim().toLowerCase()
+    return menus
+      .filter((m) => String(m.imageUrl || "").trim())
+      .filter((m) => {
+        if (!q) return true
+        const hay = `${m.code ?? ""} ${m.name ?? ""} ${m.category ?? ""}`.toLowerCase()
+        return hay.includes(q)
+      })
+      .slice(0, 80)
+  }, [menus, optionsConfigImagePickSearch])
+
+  const applyOptionImageFromMenu = React.useCallback(
+    (menu: PosMenu) => {
+      const url = String(menu.imageUrl || "").trim()
+      const optId = optionsConfigImagePickOptionId
+      if (!optId || !url) return
+      setOptionsConfigMenuOptions((prev) =>
+        prev.map((o) => (String(o.id) === String(optId) ? { ...o, imageUrl: url } : o))
+      )
+      setOptionsConfigImagePickOptionId(null)
+    },
+    [optionsConfigImagePickOptionId]
+  )
+
   const handleOptionReorderForConfig = React.useCallback((dragId: string, dropId: string) => {
     if (!dragId || !dropId || dragId === dropId) return
     const selectedMenuCode = optionsConfigSelectedMenu?.code
@@ -2910,6 +2998,7 @@ export default function PosMenusPage() {
           sellHall: opt.sellHall ?? true,
           sellDelivery: opt.sellDelivery ?? true,
           sellPackaging: opt.sellPackaging ?? true,
+          imageUrl: String(opt.imageUrl ?? "").trim(),
         })),
       })
       if (!saveRes.success) {
@@ -2964,7 +3053,8 @@ export default function PosMenusPage() {
       normalizeStepValues(a) === normalizeStepValues(b) &&
       (a.sellHall ?? true) === (b.sellHall ?? true) &&
       (a.sellDelivery ?? true) === (b.sellDelivery ?? true) &&
-      (a.sellPackaging ?? true) === (b.sellPackaging ?? true)
+      (a.sellPackaging ?? true) === (b.sellPackaging ?? true) &&
+      String(a.imageUrl ?? "").trim() === String(b.imageUrl ?? "").trim()
     )
   }, [])
 
@@ -3045,6 +3135,7 @@ export default function PosMenusPage() {
           sellHall: o.sellHall ?? true,
           sellDelivery: o.sellDelivery ?? true,
           sellPackaging: o.sellPackaging ?? true,
+          imageUrl: String(o.imageUrl ?? "").trim(),
         })),
       })
       if (!res.success) {
@@ -4082,6 +4173,59 @@ export default function PosMenusPage() {
           />
         </Dialog>
 
+        <Dialog
+          open={!!optionsConfigImagePickOptionId}
+          onOpenChange={(open) => {
+            if (!open) setOptionsConfigImagePickOptionId(null)
+          }}
+        >
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{t("posOptionImageFromMenuTitle") || "메뉴 사진 가져오기"}</DialogTitle>
+              <DialogDescription>
+                {t("posOptionImageFromMenuHint") ||
+                  "기존 메뉴(간장 불고기·삼겹살 등) 사진을 옵션에 복사합니다. 저장 버튼을 눌러 DB에 반영하세요."}
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              value={optionsConfigImagePickSearch}
+              onChange={(e) => setOptionsConfigImagePickSearch(e.target.value)}
+              placeholder={t("posOptionImageFromMenuSearch") || "메뉴 코드·이름 검색"}
+              className="h-9 text-sm"
+            />
+            <div className="max-h-72 space-y-1 overflow-y-auto rounded border p-2">
+              {optionsConfigImagePickMenus.length === 0 ? (
+                <p className="px-1 py-3 text-center text-xs text-muted-foreground">
+                  {t("posOptionImageFromMenuEmpty") || "사진이 있는 메뉴가 없습니다."}
+                </p>
+              ) : (
+                optionsConfigImagePickMenus.map((m) => {
+                  const thumb = String(m.imageUrl || "").trim()
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted/60"
+                      onClick={() => applyOptionImageFromMenu(m)}
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/20">
+                        {thumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={thumb} alt="" className="h-full w-full object-cover" />
+                        ) : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{m.name}</span>
+                        <span className="block truncate text-[10px] text-muted-foreground">{m.code}</span>
+                      </span>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className={adminTabsRootCn}>
           <AdminTabsBarWithHelp>
               <TabsList className={adminTabsListRowCn}>
@@ -4523,6 +4667,10 @@ export default function PosMenusPage() {
                       handlePriceChangeForConfig={handlePriceChangeForConfig}
                       handleOptionChannelsChangeForConfig={handleOptionChannelsChangeForConfig}
                       handleDeleteOptionForConfig={handleDeleteOptionForConfig}
+                      handleOptionImageUploadForConfig={handleOptionImageUploadForConfig}
+                      handleOptionImageClearForConfig={handleOptionImageClearForConfig}
+                      handleOptionImagePickFromMenuForConfig={handleOptionImagePickFromMenuForConfig}
+                      optionsConfigOptionImageUploadingId={optionsConfigOptionImageUploadingId}
                       optionsConfigSaving={optionsConfigSaving}
                       setOptionsConfigDraggingOptionId={setOptionsConfigDraggingOptionId}
                       optionsConfigDraggingOptionId={optionsConfigDraggingOptionId}

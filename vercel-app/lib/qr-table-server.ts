@@ -1391,6 +1391,8 @@ async function loadHallOptionsByMenuIds(menuIds: number[]): Promise<Map<number, 
   if (!ids.length) return out
   const chunkSize = 80
   const fullCols =
+    'id,menu_id,name,option_code,price_modifier,sort_order,option_type,option_step_values,sell_hall,image'
+  const fullColsNoImage =
     'id,menu_id,name,option_code,price_modifier,sort_order,option_type,option_step_values,sell_hall'
   const minCols = 'id,menu_id,name,price_modifier,sort_order'
   let cols = fullCols
@@ -1409,6 +1411,7 @@ async function loadHallOptionsByMenuIds(menuIds: number[]): Promise<Map<number, 
       option_type?: string
       option_step_values?: unknown
       sell_hall?: boolean
+      image?: string | null
     }>
 
   for (let i = 0; i < ids.length; i += chunkSize) {
@@ -1417,7 +1420,15 @@ async function loadHallOptionsByMenuIds(menuIds: number[]): Promise<Map<number, 
     try {
       rows = await loadChunk(chunk)
     } catch (e) {
-      if (cols !== minCols) {
+      if (cols === fullCols) {
+        cols = fullColsNoImage
+        try {
+          rows = await loadChunk(chunk)
+        } catch {
+          cols = minCols
+          rows = await loadChunk(chunk)
+        }
+      } else if (cols !== minCols) {
         cols = minCols
         rows = await loadChunk(chunk)
       } else {
@@ -1429,6 +1440,7 @@ async function loadHallOptionsByMenuIds(menuIds: number[]): Promise<Map<number, 
       const menuId = Number(row.menu_id || 0)
       if (!id || !menuId) continue
       if (row.sell_hall === false) continue
+      const imageUrl = String(row.image ?? '').trim()
       const opt: QrGuestMenuOption = {
         id,
         menuId,
@@ -1439,6 +1451,7 @@ async function loadHallOptionsByMenuIds(menuIds: number[]): Promise<Map<number, 
         sortOrder: asNum(row.sort_order),
         optionStepValues: parseOptionStepValues(row.option_step_values),
         sellHall: row.sell_hall != null ? !!row.sell_hall : true,
+        ...(imageUrl ? { imageUrl } : {}),
       }
       const list = out.get(menuId) || []
       list.push(opt)

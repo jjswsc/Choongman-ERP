@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
     const hasDescriptionDefault = 'descriptionDefault' in (body || {})
     const hasDescriptionDelivery = 'descriptionDelivery' in (body || {})
     const hasDescriptionTable = 'descriptionTable' in (body || {})
+    const hasImageUrl = 'imageUrl' in (body || {})
 
     if (!menuId || !name) {
       return NextResponse.json({ success: false, message: 'menuId and name required' }, { headers })
@@ -106,6 +107,9 @@ export async function POST(req: NextRequest) {
     if (!id || hasDescriptionTable) {
       rowFull.description_table =
         body?.descriptionTable == null ? null : String(body.descriptionTable).trim()
+    }
+    if (!id || hasImageUrl) {
+      rowFull.image = String(body?.imageUrl ?? '').trim()
     }
     if (optionStepValues) rowFull.option_step_values = optionStepValues
 
@@ -196,11 +200,18 @@ export async function POST(req: NextRequest) {
       delete rowWithoutNew.description_default
       delete rowWithoutNew.description_delivery
       delete rowWithoutNew.description_table
+      delete rowWithoutNew.image
       if (priceModifierDelivery != null) (rowWithoutNew as Record<string, unknown>).price_modifier_delivery = priceModifierDelivery
       try {
         savedOptionId = await doSave(rowWithoutNew)
       } catch (_err2) {
-        savedOptionId = await doSave(rowMinimal)
+        try {
+          const rowWithImageOnly = { ...rowMinimal }
+          if (hasImageUrl || !id) rowWithImageOnly.image = String(body?.imageUrl ?? '').trim()
+          savedOptionId = await doSave(rowWithImageOnly)
+        } catch {
+          savedOptionId = await doSave(rowMinimal)
+        }
       }
     }
 
