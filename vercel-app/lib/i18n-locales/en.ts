@@ -1794,8 +1794,9 @@ Only matters the employee must handle personally on a working day:
   hrSalesBonus_payout_date: 'Payout date',
   hrSalesBonus_payout_day: 'Payout day (next month)',
   hrSalesBonus_payout_day_opt: 'Next month day {d}',
+  hrSalesBonus_payout_day_follow_payroll: 'Next-month payday',
   hrSalesBonus_payout_day_hint:
-    'Sales are summed for the full calendar month; bonus is finalized on the chosen day next month (separate from the payroll 25th cutoff).',
+    'Sales are summed for the full calendar month. “Next-month payday” follows the payroll-cycle pay day; picking a date finalizes on that day next month.',
   hrSalesBonus_designee: 'Double-bonus designee (1 per store)',
   hrSalesBonus_designee_placeholder: 'Select employee',
   hrSalesBonus_designee_none: 'None (everyone uses staff multiplier)',
@@ -1844,9 +1845,9 @@ Only matters the employee must handle personally on a working day:
   hr_hub_go_sales_bonus: 'Sales bonus',
   pay_sales_bonus: 'Sales bonus',
   helpSum_admin_hr_sales_bonus:
-    'Configure tiers, absence penalty, one designee per store, and next-month payout day. Query is for a single month; Stats sums multiple months. Sales use full calendar months.',
+    'Configure tiers, absence penalty, one designee per store, and payout day (default: next-month payday). Query is for a single month; Stats sums multiple months. Sales use full calendar months.',
   helpHow_admin_hr_sales_bonus:
-    '① Query: one sales month → click a store for staff.\n② Stats: from–to months.\n③ Settings: tiers, designee, payout day, absence %.\n④ Absence penalty: scheduled workdays (≈6/week). Weekly off + approved sick/annual/leave/lakij are excluded. No-show and unpaid leave count against the bonus.',
+    '① Query: one sales month → click a store for staff.\n② Stats: from–to months.\n③ Settings: tiers, designee, payout day (payroll payday or fixed), absence %.\n④ Absence penalty: scheduled workdays (≈6/week); default 10% per day. Weekly off + approved sick/annual/leave/lakij are excluded. No-show and unpaid leave count against the bonus.',
   homeSectionHrPolicies: 'HR policies',
   hrPolicyBodyOrFileRequired: 'Please enter the body or attach a file.',
   hrPolicyDefaultBodyWhenFileOnly: 'Please review the attached file. (Body is optional.)',

@@ -12,9 +12,9 @@ COMMENT ON COLUMN public.store_sales_bonus_settings.double_bonus_employee_id IS
   '배수(기본 ×2)를 받을 직원 employees.id. 역할(매니저)이 아니라 매장당 1명 지정.';
 
 COMMENT ON COLUMN public.store_sales_bonus_settings.payout_day IS
-  '매출 월(달력 1일~말일) 집계 후 익월 지급일(1~28). 예: 5 → 익월 5일 지급.';
+  '0 = 익월 급여일 연동. 1~28 = 익월 고정 지급일. 매출은 달력 1일~말일 집계. (전 매장 일괄 변경은 _04 참고)';
 
--- 기존 행 기본 지급일 5일 유지(DEFAULT). 역할 기반 배수는 앱에서 더 이상 쓰지 않음.
+-- 역할 기반 배수는 앱에서 더 이상 쓰지 않음. 기본값 변경(0·패널티 10%)은 _04.
 
 DO $$ BEGIN
   IF to_regclass('public.sql_applied_log') IS NOT NULL THEN

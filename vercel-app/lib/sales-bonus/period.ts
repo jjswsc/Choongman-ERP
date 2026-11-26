@@ -1,39 +1,63 @@
-import { lastDayOfMonthYmd, ymdForDayOfMonth } from '@/lib/payroll-cycle'
+import {
+  EMPTY_PAYROLL_CYCLE_SETTINGS,
+  lastDayOfMonthYmd,
+  resolvePayrollPeriod,
+  ymdForDayOfMonth,
+  type PayrollCycleSettings,
+} from '@/lib/payroll-cycle'
 import { shiftYearMonth } from '@/lib/payroll-utils'
+
+/** 0 = 급여 주기의 지급일(익월 급여일)에 맞춤 */
+export const SALES_BONUS_PAYOUT_FOLLOW_PAYROLL = 0
 
 export type SalesBonusResolvedPeriod = {
   /** 매출 집계 월 YYYY-MM (달력월) */
   month: string
   start: string
   end: string
-  /** 익월 payoutDay */
+  /** 지급 예정일 YYYY-MM-DD */
   payYmd: string
+  /** 0 = 급여일 연동, 1~28 = 익월 고정일 */
   payoutDay: number
 }
 
-/** 지급일 1~28. 잘못되면 5. */
-export function normalizeSalesBonusPayoutDay(raw: unknown, fallback = 5): number {
+/**
+ * 지급일 정규화. 0 = 익월 급여일 연동, 1~28 = 익월 고정일.
+ * 잘못되면 fallback(기본 0).
+ */
+export function normalizeSalesBonusPayoutDay(
+  raw: unknown,
+  fallback: number = SALES_BONUS_PAYOUT_FOLLOW_PAYROLL
+): number {
   const n = Math.floor(Number(raw))
-  if (!Number.isFinite(n) || n < 1) return fallback
+  if (!Number.isFinite(n) || n < 0) {
+    return normalizeSalesBonusPayoutDay(fallback, SALES_BONUS_PAYOUT_FOLLOW_PAYROLL)
+  }
+  if (n === 0) return SALES_BONUS_PAYOUT_FOLLOW_PAYROLL
   return Math.min(28, n)
 }
 
 /**
  * 매출 보너스 기간 = 달력월 전체(1일~말일).
- * 지급일 = 익월 payoutDay (말일보다 크면 말일).
- * 급여 주기(26~25)와 분리 — 말일까지 매출을 반영하려면 익월 1·5일에 확정.
+ * payoutDay 0 → 급여 주기 설정상의 지급일(익월 급여일).
+ * payoutDay 1~28 → 익월 해당일(말일보다 크면 말일).
  */
 export function resolveSalesBonusCalendarPeriod(
   salesMonth: string,
-  payoutDayRaw?: unknown
+  payoutDayRaw?: unknown,
+  payrollCycle: PayrollCycleSettings = EMPTY_PAYROLL_CYCLE_SETTINGS
 ): SalesBonusResolvedPeriod {
   const month = String(salesMonth || '').trim().slice(0, 7)
-  const payoutDay = normalizeSalesBonusPayoutDay(payoutDayRaw, 5)
+  const payoutDay = normalizeSalesBonusPayoutDay(payoutDayRaw)
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return { month: '', start: '', end: '', payYmd: '', payoutDay }
   }
   const start = `${month}-01`
   const end = lastDayOfMonthYmd(month)
+  if (payoutDay === SALES_BONUS_PAYOUT_FOLLOW_PAYROLL) {
+    const payYmd = resolvePayrollPeriod(month, payrollCycle).payYmd
+    return { month, start, end, payYmd, payoutDay }
+  }
   const next = shiftYearMonth(month, 1)
   const payYmd = next ? ymdForDayOfMonth(next, payoutDay) : ''
   return { month, start, end, payYmd, payoutDay }

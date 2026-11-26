@@ -7,6 +7,7 @@ import {
   saveStoreSalesBonusSettings,
   validateSalesBonusSettingsInput,
 } from '@/lib/sales-bonus/load-store-settings-server'
+import { normalizeSalesBonusPayoutDay } from '@/lib/sales-bonus/period'
 import type { SalesBonusTier } from '@/lib/sales-bonus/types'
 
 export const dynamic = 'force-dynamic'
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
       staffMultiplier: Number(body.staffMultiplier ?? body.staff_multiplier) || 1,
       doubleBonusEmployeeId:
         designeeId != null && Number.isFinite(designeeId) && designeeId > 0 ? designeeId : null,
-      payoutDay: Number(body.payoutDay ?? body.payout_day) || 5,
+      payoutDay: normalizeSalesBonusPayoutDay(body.payoutDay ?? body.payout_day),
       tiers,
     }
     const checked = validateSalesBonusSettingsInput(input)

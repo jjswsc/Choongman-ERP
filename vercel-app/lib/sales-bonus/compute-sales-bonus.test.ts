@@ -167,6 +167,29 @@ describe('resolveSalesBonusCalendarPeriod', () => {
   it('supports payout day 1', () => {
     expect(resolveSalesBonusCalendarPeriod('2026-11', 1).payYmd).toBe('2026-12-01')
   })
+
+  it('follows payroll payday when payoutDay is 0 (default cycle → next month day 5)', () => {
+    const p = resolveSalesBonusCalendarPeriod('2026-11', 0)
+    expect(p.payoutDay).toBe(0)
+    expect(p.start).toBe('2026-11-01')
+    expect(p.end).toBe('2026-11-30')
+    expect(p.payYmd).toBe('2026-12-05')
+  })
+
+  it('follows 26–25 cycle payday when configured', () => {
+    const cycle = {
+      versions: [
+        {
+          effectiveMonth: '2026-01',
+          periodEndDay: 25,
+          payDay: 0,
+          payMonthOffset: 0,
+        },
+      ],
+    }
+    const p = resolveSalesBonusCalendarPeriod('2026-11', 0, cycle)
+    expect(p.payYmd).toBe('2026-11-30')
+  })
 })
 
 describe('isSalesBonusExcusedLeaveType', () => {

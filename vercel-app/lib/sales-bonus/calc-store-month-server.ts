@@ -15,6 +15,7 @@ import {
   resolveSalesBonusCalendarPeriod,
   type SalesBonusResolvedPeriod,
 } from '@/lib/sales-bonus/period'
+import { loadPayrollCycleSettings } from '@/lib/payroll-cycle-settings'
 import type { SalesBonusPersonResult, StoreSalesBonusSettings } from '@/lib/sales-bonus/types'
 import type { SaasTenantScope } from '@/lib/saas-tenant-scope'
 
@@ -299,10 +300,11 @@ export async function calcSalesBonusPreviewForStores(params: {
   if (storeCodes.length === 0) return []
 
   const settingsMap = await loadStoreSalesBonusSettingsMap(storeCodes)
-  // 집계 기간은 달력월. 지급일은 매장 설정(없으면 5일) — 매출 구간은 매장마다 동일.
+  const payrollCycle = await loadPayrollCycleSettings(params.tenantScope)
+  // 집계 기간은 달력월. 지급일만 매장 설정(0=급여일 연동).
   const samplePayoutDay =
-    storeCodes.map((c) => settingsMap.get(c)?.payoutDay).find((d) => d && d > 0) || 5
-  const period = resolveSalesBonusCalendarPeriod(month, samplePayoutDay)
+    storeCodes.map((c) => settingsMap.get(c)?.payoutDay).find((d) => d != null) ?? 0
+  const period = resolveSalesBonusCalendarPeriod(month, samplePayoutDay, payrollCycle)
   const startStr = period.start
   const endStr = period.end
 
@@ -317,7 +319,7 @@ export async function calcSalesBonusPreviewForStores(params: {
 
   for (const storeCode of storeCodes) {
     const settings = settingsMap.get(storeCode) || (await loadStoreSalesBonusSettings(storeCode))
-    const storePeriod = resolveSalesBonusCalendarPeriod(month, settings.payoutDay)
+    const storePeriod = resolveSalesBonusCalendarPeriod(month, settings.payoutDay, payrollCycle)
     const salesTotal = findStoreSalesTotal(salesRows, storeCode)
     const empFilter = `store=eq.${encodeURIComponent(storeCode)}`
     const empRows = (await supabaseSelectFilter('employees', empFilter, {

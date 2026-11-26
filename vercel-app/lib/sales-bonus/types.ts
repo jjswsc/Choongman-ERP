@@ -14,7 +14,7 @@ export type StoreSalesBonusSettings = {
   staffMultiplier: number
   /** 배수 대상 직원 employees.id (역할 무관, 매장당 1명) */
   doubleBonusEmployeeId: number | null
-  /** 익월 지급일 1~28 (매출은 달력월 전체 집계) */
+  /** 0 = 익월 급여일 연동, 1~28 = 익월 고정 지급일 (매출은 달력월 전체 집계) */
   payoutDay: number
   tiers: SalesBonusTier[]
   updatedAt?: string

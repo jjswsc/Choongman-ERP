@@ -101,7 +101,7 @@ export function validateSalesBonusSettingsInput(
   if (!Number.isFinite(staffMultiplier) || staffMultiplier <= 0 || staffMultiplier > 20) {
     return { ok: false, msg: '일반 배수는 0 초과 20 이하여야 합니다.' }
   }
-  const payoutDay = normalizeSalesBonusPayoutDay(input.payoutDay, 5)
+  const payoutDay = normalizeSalesBonusPayoutDay(input.payoutDay)
   let doubleBonusEmployeeId: number | null = null
   if (input.doubleBonusEmployeeId != null && input.doubleBonusEmployeeId !== ('' as unknown)) {
     const id = Math.floor(Number(input.doubleBonusEmployeeId))

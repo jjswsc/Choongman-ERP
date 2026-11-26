@@ -180,7 +180,7 @@ export function parseStoreSalesBonusSettingsRow(
     doubleBonusEmployeeId: parseEmployeeId(
       r.double_bonus_employee_id ?? r.doubleBonusEmployeeId
     ),
-    payoutDay: normalizeSalesBonusPayoutDay(r.payout_day ?? r.payoutDay, 5),
+    payoutDay: normalizeSalesBonusPayoutDay(r.payout_day ?? r.payoutDay),
     tiers: normalizeSalesBonusTiers(r.tiers),
     updatedAt: r.updated_at != null ? String(r.updated_at) : undefined,
   }
@@ -190,11 +190,11 @@ export function defaultStoreSalesBonusSettings(storeCode: string): StoreSalesBon
   return {
     storeCode: String(storeCode || '').trim(),
     enabled: false,
-    absencePenaltyPctPerDay: 0,
+    absencePenaltyPctPerDay: 10,
     managerMultiplier: 2,
     staffMultiplier: 1,
     doubleBonusEmployeeId: null,
-    payoutDay: 5,
+    payoutDay: 0,
     tiers: [],
   }
 }

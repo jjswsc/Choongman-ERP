@@ -1801,8 +1801,9 @@ export const I18N_BASE_KO = {
   hrSalesBonus_payout_date: '지급 예정일',
   hrSalesBonus_payout_day: '지급일(익월)',
   hrSalesBonus_payout_day_opt: '익월 {d}일',
+  hrSalesBonus_payout_day_follow_payroll: '익월 급여일',
   hrSalesBonus_payout_day_hint:
-    '매출은 해당 달 1일~말일까지 집계하고, 보너스는 익월 지정일에 확정·지급합니다. (급여 25일 컷오프와 분리)',
+    '매출은 해당 달 1일~말일까지 집계합니다. 「익월 급여일」은 급여 주기 설정의 지급일에 맞추고, 날짜를 고르면 익월 그날에 확정·지급합니다.',
   hrSalesBonus_designee: '배수 지정자(매장 1명)',
   hrSalesBonus_designee_placeholder: '직원 선택',
   hrSalesBonus_designee_none: '지정 없음(모두 일반 배수)',
@@ -1851,9 +1852,9 @@ export const I18N_BASE_KO = {
   hr_hub_go_sales_bonus: '매출 보너스',
   pay_sales_bonus: '매출 보너스',
   helpSum_admin_hr_sales_bonus:
-    '매장별 매출 구간·결근 패널티·배수 지정자(1명)·익월 지급일을 설정합니다. 조회는 단월 확정용, 통계는 여러 달 합산용입니다. 매출은 달력월 전체로 집계합니다.',
+    '매장별 매출 구간·결근 패널티·배수 지정자(1명)·지급일(기본: 익월 급여일)을 설정합니다. 조회는 단월 확정용, 통계는 여러 달 합산용입니다. 매출은 달력월 전체로 집계합니다.',
   helpHow_admin_hr_sales_bonus:
-    '① 「조회」: 매출 월·매장 → 조회. 매장 클릭 시 직원 상세.\n② 「통계」: 시작~종료 월 합산.\n③ 「설정」: 구간·지정자·익월 지급일·결근 %.\n④ 결근 패널티: 스케줄 근무일(주 6일) 기준. 주휴·승인된 병가·연차/휴가·ลากิจ은 제외. 무단·무급은 차감.',
+    '① 「조회」: 매출 월·매장 → 조회. 매장 클릭 시 직원 상세.\n② 「통계」: 시작~종료 월 합산.\n③ 「설정」: 구간·지정자·지급일(익월 급여일 또는 고정일)·결근 %.\n④ 결근 패널티: 스케줄 근무일(주 6일) 기준. 기본 1일당 10%. 주휴·승인된 병가·연차/휴가·ลากิจ은 제외. 무단·무급은 차감.',
   homeSectionHrPolicies: '인사 규정',
   hrPolicyBodyOrFileRequired: '본문을 입력하거나 파일을 첨부해 주세요.',
   hrPolicyDefaultBodyWhenFileOnly: '첨부 파일을 확인해 주세요. (본문은 선택)',

@@ -66,11 +66,11 @@ function emptySettings(storeCode: string): StoreSalesBonusSettingsDto {
   return {
     storeCode,
     enabled: false,
-    absencePenaltyPctPerDay: 100,
+    absencePenaltyPctPerDay: 10,
     managerMultiplier: 2,
     staffMultiplier: 1,
     doubleBonusEmployeeId: null,
-    payoutDay: 5,
+    payoutDay: 0,
     tiers: [{ threshold: 500000, amount: 1000 }],
   }
 }
@@ -1254,15 +1254,19 @@ export function HrSalesBonusContent() {
                     <div className="space-y-1.5">
                       <Label>{t("hrSalesBonus_payout_day")}</Label>
                       <Select
-                        value={String(settings.payoutDay || 5)}
+                        value={String(settings.payoutDay ?? 0)}
                         onValueChange={(v) =>
-                          setSettings({ ...settings, payoutDay: Math.floor(Number(v)) || 5 })
+                          setSettings({
+                            ...settings,
+                            payoutDay: Math.floor(Number(v)),
+                          })
                         }
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="0">{t("hrSalesBonus_payout_day_follow_payroll")}</SelectItem>
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 28].map((d) => (
                             <SelectItem key={d} value={String(d)}>
                               {t("hrSalesBonus_payout_day_opt").replace("{d}", String(d))}
