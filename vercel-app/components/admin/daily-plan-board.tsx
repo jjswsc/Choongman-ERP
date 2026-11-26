@@ -41,6 +41,8 @@ export function DailyPlanBoard({ t }: { t: T }) {
   const [notReady, setNotReady] = useState(false)
   const [role, setRole] = useState<string>("all")
   const [q, setQ] = useState("")
+  const [storeFilter, setStoreFilter] = useState("")
+  const [deptFilter, setDeptFilter] = useState("")
   const [detail, setDetail] = useState<DailyPlanBundle | null>(null)
 
   const load = useCallback(async () => {
@@ -63,17 +65,38 @@ export function DailyPlanBoard({ t }: { t: T }) {
     setDetail(res.today)
   }, [])
 
+  const storeOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of rows) {
+      const store = (r.store_name || "").trim()
+      if (store) set.add(store)
+      for (const s of r.route_stores || []) {
+        const route = String(s || "").trim()
+        if (route) set.add(route)
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [rows])
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
+    const storeNeedle = storeFilter.trim().toLowerCase()
+    const dept = deptFilter.trim().toLowerCase()
     return rows
       .filter((r) => role === "all" || r.role_scope === role)
+      .filter((r) => {
+        if (!storeNeedle) return true
+        if ((r.store_name || "").trim().toLowerCase() === storeNeedle) return true
+        return (r.route_stores || []).some((s) => String(s || "").trim().toLowerCase() === storeNeedle)
+      })
+      .filter((r) => !dept || String(r.position || "").trim().toLowerCase() === dept)
       .filter((r) => {
         if (!needle) return true
         const hay = `${r.employee_name} ${r.store_name} ${(r.route_stores || []).join(" ")}`.toLowerCase()
         return hay.includes(needle)
       })
       .sort((a, b) => (ROLE_ORDER[a.role_scope] ?? 9) - (ROLE_ORDER[b.role_scope] ?? 9) || a.store_name.localeCompare(b.store_name) || a.employee_name.localeCompare(b.employee_name))
-  }, [rows, role, q])
+  }, [rows, role, q, storeFilter, deptFilter])
 
   const titlesToTranslate = useMemo(() => {
     const out: string[] = []
@@ -130,6 +153,32 @@ export function DailyPlanBoard({ t }: { t: T }) {
         <Button size="sm" variant="ghost" onClick={() => void load()} disabled={loading}>
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         </Button>
+        <select
+          value={storeFilter}
+          onChange={(e) => setStoreFilter(e.target.value)}
+          className="h-8 min-w-[10rem] rounded border bg-background px-2 text-xs"
+          aria-label={t("dp_filter_store")}
+        >
+          <option value="">{t("dp_filter_all_stores")}</option>
+          {storeOptions.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={deptFilter}
+          onChange={(e) => setDeptFilter(e.target.value)}
+          className="h-8 rounded border bg-background px-2 text-xs"
+          aria-label={t("dp_filter_dept")}
+        >
+          <option value="">{t("dp_all")}</option>
+          {(["service", "kitchen", "office"] as const).map((d) => (
+            <option key={d} value={d}>
+              {label.position(d)}
+            </option>
+          ))}
+        </select>
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
