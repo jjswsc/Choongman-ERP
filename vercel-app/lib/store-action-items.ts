@@ -102,6 +102,62 @@ export function storeActionDueDateForHorizon(horizon: string, todayYmd: string):
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
 }
 
+/**
+ * 일정표에 넣을지 — 주간·월간은 반복 업무라 미완료인 동안 매일,
+ * 당일(day)은 기한이 내일까지인 것만(기존 임박 규칙).
+ */
+export function storeActionAppearsOnPlanDate(params: {
+  horizon?: string | null
+  dueDate: string | null | undefined
+  dateYmd: string
+}): boolean {
+  const due = String(params.dueDate || "").trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return false
+  const date = String(params.dateYmd || "").trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false
+  const h = normalizeStoreActionHorizon(params.horizon)
+  if (h === "day") {
+    const [y, m, d] = date.split("-").map((x) => Number(x))
+    const tomorrow = new Date(Date.UTC(y, m - 1, d + 1))
+    const tomorrowYmd = tomorrow.toISOString().slice(0, 10)
+    return due <= tomorrowYmd
+  }
+  // week / month_30 / month_cal: 기한 전·당일·기한초과 모두 매일(미완료인 한)
+  return true
+}
+
+/** 등록 직후 이미 열린 일정표에 넣을 날짜 목록(오늘~기한, day는 오늘·내일·임박만). 최대 31일 */
+export function storeActionPlanSyncDates(params: {
+  horizon?: string | null
+  dueDate: string | null | undefined
+  todayYmd: string
+  maxDays?: number
+}): string[] {
+  const today = String(params.todayYmd || "").trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) return []
+  const due = String(params.dueDate || "").trim().slice(0, 10)
+  const dueOk = /^\d{4}-\d{2}-\d{2}$/.test(due)
+  const maxDays = Math.min(Math.max(1, params.maxDays ?? 31), 62)
+  const h = normalizeStoreActionHorizon(params.horizon)
+  // 주간·월간: 오늘~기한(기한 없으면/지났으면 오늘만). 당일: 오늘·내일 중 임박 규칙 통과분만
+  const end = h === "day" ? "" : dueOk && due >= today ? due : today
+  const out: string[] = []
+  let cur = today
+  for (let i = 0; i < maxDays; i++) {
+    if (h === "day") {
+      if (!storeActionAppearsOnPlanDate({ horizon: h, dueDate: dueOk ? due : today, dateYmd: cur })) break
+      out.push(cur)
+      if (out.length >= 2) break
+    } else {
+      if (cur > end) break
+      out.push(cur)
+    }
+    const [y, m, d] = cur.split("-").map((x) => Number(x))
+    cur = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
+  }
+  return out
+}
+
 export const STORE_ACTION_PRIORITIES = ["긴급", "보통", "낮음"] as const
 
 export const STORE_ACTION_SOURCE_TYPES = ["manual", "visit", "check_fail", "hq"] as const

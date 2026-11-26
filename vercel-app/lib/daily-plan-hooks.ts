@@ -3,11 +3,12 @@ import 'server-only'
 import { getBangkokHmString, getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { storesMatchForGradeLookup } from '@/lib/grade-store-key-variants'
 import { supabaseInsert, supabaseSelect, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { addDaysYmdUtc, computeActualMinutes } from '@/lib/daily-plan-generate'
+import { computeActualMinutes } from '@/lib/daily-plan-generate'
 import {
   listStoreActionAudienceEmployees,
   type StoreActionAudienceFields,
 } from '@/lib/store-action-audience'
+import { storeActionPlanSyncDates } from '@/lib/store-action-items'
 import {
   addActionItemToPlan,
   normalizePlanItemRow,
@@ -167,8 +168,8 @@ export async function syncDailyPlanOnStoreCheck(params: { store: string; date: s
 /**
  * 개선 과제 등록 →
  * 1) 등록한 사람 오늘 일정의 그 매장 「개선 과제 등록」 루틴 항목 완료
- * 2) 담당자의 오늘·내일 일정이 이미 있고 기한이 그 다음 날까지면 과제 항목 추가
- * 3) 일정 대상(매장·직책·권한·개인)이 있으면 해당 인원 오늘·내일 일정에도 추가(기한≤내일+7)
+ * 2) 담당자·일정대상: 당일은 오늘·내일(임박), 주간·월간은 오늘~기한까지 이미 열린 일정에 매일 추가
+ *    (이후 날짜는 일정표 생성/18시 자동생성 시 selectActionsForPlan으로 계속 반영)
  */
 export async function syncDailyPlanOnStoreActionCreated(params: {
   action: ActionForPlan
@@ -182,6 +183,11 @@ export async function syncDailyPlanOnStoreActionCreated(params: {
     const { action } = params
     if (!action.id) return
     const today = getBangkokTodayDateString()
+    const syncDates = storeActionPlanSyncDates({
+      horizon: action.horizon,
+      dueDate: action.dueDate,
+      todayYmd: today,
+    })
     const actorPlans = await findPlansForPerson(today, { name: params.actorName, employeeId: params.actorEmployeeId })
     for (const plan of actorPlans) {
       const rows = (await supabaseSelectFilter(
@@ -199,45 +205,41 @@ export async function syncDailyPlanOnStoreActionCreated(params: {
     }
 
     const ownerId = Number(params.ownerUserId || 0)
-    for (const date of [today, addDaysYmdUtc(today, 1)]) {
-      if (!action.dueDate || action.dueDate > addDaysYmdUtc(date, 1)) continue
+    for (const date of syncDates) {
       const plans = await findPlansForPerson(date, { name: params.ownerName, employeeId: ownerId > 0 ? ownerId : null })
       for (const plan of plans) await addActionItemToPlan(plan, action, 'owner')
     }
 
     const audience = params.audience
-    if (audience) {
-      const weekEnd = addDaysYmdUtc(today, 7)
-      if (action.dueDate && action.dueDate <= weekEnd) {
-        const empRows = ((await supabaseSelect('employees', {
-          select: 'id,store,name,job,role,resign_date',
-          order: 'id.asc',
-          limit: 20000,
-        })) || []) as {
-          id?: number
-          store?: string
-          name?: string
-          job?: string
-          role?: string
-          resign_date?: string
-        }[]
-        const emps = empRows.map((e) => ({
-          id: Number(e.id || 0),
-          store: String(e.store || '').trim(),
-          name: String(e.name || '').trim(),
-          job: String(e.job || '').trim(),
-          role: String(e.role || '').trim(),
-          resignDate: String(e.resign_date || '').trim(),
-        }))
-        const targets = listStoreActionAudienceEmployees(emps, audience, {
-          excludeName: params.ownerName,
-          excludeUserId: params.ownerUserId || '',
-        })
-        for (const emp of targets.slice(0, 80)) {
-          for (const date of [today, addDaysYmdUtc(today, 1)]) {
-            const plans = await findPlansForPerson(date, { name: emp.name, employeeId: emp.id })
-            for (const plan of plans) await addActionItemToPlan(plan, action, 'owner')
-          }
+    if (audience && syncDates.length > 0) {
+      const empRows = ((await supabaseSelect('employees', {
+        select: 'id,store,name,job,role,resign_date',
+        order: 'id.asc',
+        limit: 20000,
+      })) || []) as {
+        id?: number
+        store?: string
+        name?: string
+        job?: string
+        role?: string
+        resign_date?: string
+      }[]
+      const emps = empRows.map((e) => ({
+        id: Number(e.id || 0),
+        store: String(e.store || '').trim(),
+        name: String(e.name || '').trim(),
+        job: String(e.job || '').trim(),
+        role: String(e.role || '').trim(),
+        resignDate: String(e.resign_date || '').trim(),
+      }))
+      const targets = listStoreActionAudienceEmployees(emps, audience, {
+        excludeName: params.ownerName,
+        excludeUserId: params.ownerUserId || '',
+      })
+      for (const emp of targets.slice(0, 80)) {
+        for (const date of syncDates) {
+          const plans = await findPlansForPerson(date, { name: emp.name, employeeId: emp.id })
+          for (const plan of plans) await addActionItemToPlan(plan, action, 'owner')
         }
       }
     }

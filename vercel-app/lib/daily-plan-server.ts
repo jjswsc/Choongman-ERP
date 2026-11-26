@@ -487,6 +487,7 @@ export async function loadOpenActionsLite(): Promise<OpenActionLite[]> {
     title: String(d.title || ''),
     status: String(d.status || 'open'),
     dueDate: d.due_date ? String(d.due_date).slice(0, 10) : '',
+    horizon: d.horizon != null ? String(d.horizon) : undefined,
     ownerName: String(d.owner_name || ''),
     ownerUserId: String(d.owner_user_id || ''),
     verifierName: String(d.verifier_name || ''),
@@ -499,13 +500,13 @@ export async function loadOpenActionsLite(): Promise<OpenActionLite[]> {
   try {
     const rows = ((await supabaseSelectFilter('store_action_items', 'status=in.(open,in_progress,pending_verify)', {
       select:
-        'id,store_name,title,status,due_date,owner_name,owner_user_id,verifier_name,verifier_user_id,target_store,target_role,target_permission_group,target_recipients',
+        'id,store_name,title,status,due_date,horizon,owner_name,owner_user_id,verifier_name,verifier_user_id,target_store,target_role,target_permission_group,target_recipients',
       order: 'due_date.asc.nullslast,id.asc',
       limit: 5000,
     })) || []) as Record<string, unknown>[]
     return rows.map(mapRow)
   } catch (e) {
-    // target_* 컬럼 미적용 DB fallback
+    // horizon / target_* 컬럼 미적용 DB fallback
     try {
       const rows = ((await supabaseSelectFilter('store_action_items', 'status=in.(open,in_progress,pending_verify)', {
         select: 'id,store_name,title,status,due_date,owner_name,owner_user_id,verifier_name,verifier_user_id',
@@ -1226,7 +1227,13 @@ export async function ensureDailyPlanOnDemand(
 
 // ─── 개선 과제 → 일정 추가 ─────────────────────────
 
-export type ActionForPlan = { id: number; store: string; title: string; dueDate: string }
+export type ActionForPlan = {
+  id: number
+  store: string
+  title: string
+  dueDate: string
+  horizon?: string
+}
 
 /** 같은 매장 항목 뒤, 없으면 마지막 고정 시각 항목(마감 보고 등) 앞 */
 function sortOrderNear(items: DailyPlanItemRow[], store: string): number {

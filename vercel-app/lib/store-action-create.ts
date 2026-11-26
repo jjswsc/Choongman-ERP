@@ -174,7 +174,7 @@ export async function createStoreActionItem(
 
   if (newId) {
     await syncDailyPlanOnStoreActionCreated({
-      action: { id: newId, store, title, dueDate },
+      action: { id: newId, store, title, dueDate, horizon },
       ownerName,
       ownerUserId,
       actorName: scope.actorName || createdBy,

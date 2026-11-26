@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { buildStoreActionScorecard, bangkokYmdFromIso } from "@/lib/store-action-scorecard"
 import {
+  storeActionAppearsOnPlanDate,
   storeActionDefaultDueDays,
   storeActionDueDateForHorizon,
   storeActionHorizonDueDays,
+  storeActionPlanSyncDates,
   storeCheckItemKey,
 } from "@/lib/store-action-items"
 
@@ -67,5 +69,21 @@ describe("store action helpers", () => {
 
   it("builds check item key from raw path", () => {
     expect(storeCheckItemKey("주방", "", "냉장고 온도")).toBe("주방 > 냉장고 온도")
+  })
+
+  it("week/month appear every plan day; day only when due by tomorrow", () => {
+    expect(storeActionAppearsOnPlanDate({ horizon: "week", dueDate: "2026-11-30", dateYmd: "2026-11-26" })).toBe(true)
+    expect(storeActionAppearsOnPlanDate({ horizon: "month_30", dueDate: "2026-12-20", dateYmd: "2026-11-26" })).toBe(true)
+    expect(storeActionAppearsOnPlanDate({ horizon: "day", dueDate: "2026-11-26", dateYmd: "2026-11-26" })).toBe(true)
+    expect(storeActionAppearsOnPlanDate({ horizon: "day", dueDate: "2026-12-01", dateYmd: "2026-11-26" })).toBe(false)
+    expect(storeActionPlanSyncDates({ horizon: "week", dueDate: "2026-11-28", todayYmd: "2026-11-26" })).toEqual([
+      "2026-11-26",
+      "2026-11-27",
+      "2026-11-28",
+    ])
+    expect(storeActionPlanSyncDates({ horizon: "day", dueDate: "2026-11-26", todayYmd: "2026-11-26" })).toEqual([
+      "2026-11-26",
+      "2026-11-27",
+    ])
   })
 })

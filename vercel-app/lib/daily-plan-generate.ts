@@ -2,6 +2,7 @@
 
 import { dailyPlanItemTitle, koThText } from "@/lib/daily-plan-i18n"
 import { employeeReceivesStoreActionAudience } from "@/lib/store-action-audience"
+import { storeActionAppearsOnPlanDate } from "@/lib/store-action-items"
 
 export const DAILY_PLAN_ROLES = ["supervisor", "manager", "staff"] as const
 export type DailyPlanRole = (typeof DAILY_PLAN_ROLES)[number]
@@ -193,6 +194,8 @@ export type OpenActionLite = {
   title: string
   status: string
   dueDate: string
+  /** day | week | month_30 | month_cal — 없으면 week로 취급 */
+  horizon?: string
   ownerName: string
   ownerUserId: string
   verifierName: string
@@ -521,7 +524,8 @@ function matchesPerson(
   return n === norm(employee.name) || (!!employee.nick && n === norm(employee.nick))
 }
 
-/** 일정표에 넣을 개선 과제 — 담당·일정대상(매장/직책/개인), SV는 재확인 대기·담당 매장 기한초과 */
+/** 일정표에 넣을 개선 과제 — 담당·일정대상(매장/직책/개인), SV는 재확인 대기·담당 매장 기한초과.
+ * 주간·월간은 미완료인 동안 매일, 당일은 기한≤내일만. */
 export function selectActionsForPlan(params: {
   actions: OpenActionLite[]
   role: DailyPlanRole
@@ -529,7 +533,6 @@ export function selectActionsForPlan(params: {
   dateYmd: string
   routeStores: string[]
 }): { action: OpenActionLite; kind: "owner" | "verify" }[] {
-  const tomorrow = addDaysYmdUtc(params.dateYmd, 1)
   const route = new Set(params.routeStores.map(norm))
   const out: { action: OpenActionLite; kind: "owner" | "verify" }[] = []
   const seen = new Set<number>()
@@ -550,8 +553,11 @@ export function selectActionsForPlan(params: {
     const ownerDue =
       (isOwner || inAudience) &&
       (a.status === "open" || a.status === "in_progress") &&
-      !!a.dueDate &&
-      a.dueDate <= tomorrow
+      storeActionAppearsOnPlanDate({
+        horizon: a.horizon,
+        dueDate: a.dueDate,
+        dateYmd: params.dateYmd,
+      })
     if (ownerDue) {
       out.push({ action: a, kind: "owner" })
       seen.add(a.id)

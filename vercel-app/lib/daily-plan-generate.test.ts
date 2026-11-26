@@ -298,8 +298,8 @@ describe("routineItemAppliesToEmployee / diffPersonalAgainstSharedTemplate", () 
 describe("selectActionsForPlan", () => {
   it("includes owner actions due by tomorrow and SV verify items on route", () => {
     const actions = [
-      action({ id: 1, ownerUserId: "7", dueDate: "2026-10-09" }),
-      action({ id: 2, ownerName: "chai", dueDate: "2026-10-20" }),
+      action({ id: 1, ownerUserId: "7", dueDate: "2026-10-09", horizon: "day" }),
+      action({ id: 2, ownerName: "chai", dueDate: "2026-10-20", horizon: "day" }),
       action({ id: 3, status: "pending_verify", store: "B" }),
       action({ id: 4, status: "pending_verify", store: "Z", verifierName: "Somchai" }),
       action({ id: 5, status: "open", store: "B", dueDate: "2026-10-01" }),
@@ -323,6 +323,7 @@ describe("selectActionsForPlan", () => {
         ownerName: "Other",
         ownerUserId: "99",
         dueDate: "2026-10-09",
+        horizon: "day",
         targetStore: "B",
         targetRole: "Service",
       }),
@@ -330,12 +331,45 @@ describe("selectActionsForPlan", () => {
         id: 12,
         ownerName: "Other",
         dueDate: "2026-10-09",
+        horizon: "day",
         targetStore: "B",
         targetRole: "Kitchen",
       }),
     ]
     const staff = selectActionsForPlan({ actions, role: "staff", employee: emp, dateYmd: "2026-10-08", routeStores: [] })
     expect(staff.map((x) => x.action.id)).toEqual([11])
+  })
+
+  it("puts week/month owner and audience actions on every day until done", () => {
+    const actions = [
+      action({ id: 21, ownerUserId: "7", dueDate: "2026-10-20", horizon: "week" }),
+      action({
+        id: 22,
+        ownerName: "Other",
+        ownerUserId: "99",
+        dueDate: "2026-10-31",
+        horizon: "month_cal",
+        targetStore: "B",
+        targetRole: "Service",
+      }),
+      action({ id: 23, ownerUserId: "7", dueDate: "2026-10-20", horizon: "day" }),
+    ]
+    const mid = selectActionsForPlan({
+      actions,
+      role: "staff",
+      employee: emp,
+      dateYmd: "2026-10-08",
+      routeStores: [],
+    })
+    expect(mid.map((x) => x.action.id).sort((a, b) => a - b)).toEqual([21, 22])
+    const late = selectActionsForPlan({
+      actions,
+      role: "staff",
+      employee: emp,
+      dateYmd: "2026-10-19",
+      routeStores: [],
+    })
+    expect(late.map((x) => x.action.id).sort((a, b) => a - b)).toEqual([21, 22, 23])
   })
 })
 
