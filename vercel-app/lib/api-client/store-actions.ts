@@ -12,6 +12,7 @@ export type StoreActionItem = {
   description: string
   category: string
   priority: string
+  horizon: string
   status: string
   ownerName: string
   ownerUserId: string
@@ -30,6 +31,10 @@ export type StoreActionItem = {
   repeatCount: number
   checkItemId: string
   parentActionId: number | null
+  targetStore: string
+  targetRole: string
+  targetPermissionGroup: string
+  targetRecipients: string
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -44,6 +49,7 @@ export async function getStoreActionItems(params: {
   status?: string
   category?: string
   priority?: string
+  horizon?: string
   owner?: string
   verifier?: string
   sourceType?: string
@@ -62,6 +68,7 @@ export async function getStoreActionItems(params: {
   if (params.status) q.set("status", params.status)
   if (params.category) q.set("category", params.category)
   if (params.priority) q.set("priority", params.priority)
+  if (params.horizon) q.set("horizon", params.horizon)
   if (params.owner) q.set("owner", params.owner)
   if (params.verifier) q.set("verifier", params.verifier)
   if (params.sourceType) q.set("sourceType", params.sourceType)

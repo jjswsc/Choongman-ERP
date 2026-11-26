@@ -3,7 +3,7 @@ import { supabaseSelectFilter } from "@/lib/supabase-server"
 import { getBangkokDateRangeUtc, getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { requireAuth } from "@/lib/verify-auth"
 import { mapStoreActionItemRow, type StoreActionItemRow } from "@/lib/store-action-item-map"
-import { STORE_ACTION_OPEN_STATUSES } from "@/lib/store-action-items"
+import { isStoreActionHorizon, STORE_ACTION_OPEN_STATUSES } from "@/lib/store-action-items"
 import {
   resolveStoreActionScope,
   storeActionScopeFilter,
@@ -36,6 +36,8 @@ export async function GET(request: NextRequest) {
   const statusFilter = searchParams.get("status")?.trim() || ""
   const categoryFilter = searchParams.get("category")?.trim() || ""
   const priorityFilter = searchParams.get("priority")?.trim() || ""
+  const horizonRaw = searchParams.get("horizon")?.trim().toLowerCase() || ""
+  const horizonFilter = isStoreActionHorizon(horizonRaw) ? horizonRaw : ""
   const ownerFilter = searchParams.get("owner")?.trim() || ""
   const verifierFilter = searchParams.get("verifier")?.trim() || ""
   const sourceTypeFilter = searchParams.get("sourceType")?.trim() || ""
@@ -77,6 +79,7 @@ export async function GET(request: NextRequest) {
     if (statusFilter) filters.push(`status=eq.${encodeURIComponent(statusFilter)}`)
     if (categoryFilter) filters.push(`category=eq.${encodeURIComponent(categoryFilter)}`)
     if (priorityFilter) filters.push(`priority=eq.${encodeURIComponent(priorityFilter)}`)
+    if (horizonFilter) filters.push(`horizon=eq.${encodeURIComponent(horizonFilter)}`)
     if (ownerFilter) filters.push(`owner_name=eq.${encodeURIComponent(ownerFilter)}`)
     if (verifierFilter) filters.push(`verifier_name=eq.${encodeURIComponent(verifierFilter)}`)
     if (sourceTypeFilter) filters.push(`source_type=eq.${encodeURIComponent(sourceTypeFilter)}`)

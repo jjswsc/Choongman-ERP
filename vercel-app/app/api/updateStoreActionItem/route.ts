@@ -6,6 +6,7 @@ import {
   STORE_ACTION_PRIORITIES,
   isStoreActionOpenStatus,
   isStoreActionStatus,
+  normalizeStoreActionHorizon,
   normalizeStoreActionPhotoUrls,
 } from "@/lib/store-action-items"
 import type { StoreActionItemRow } from "@/lib/store-action-item-map"
@@ -141,6 +142,40 @@ export async function POST(request: NextRequest) {
       if (data.ownerUserId != null || data.owner_user_id != null) {
         const v = String(data.ownerUserId ?? data.owner_user_id ?? "").trim()
         patch.owner_user_id = v || null
+      }
+      if (data.horizon != null) {
+        patch.horizon = normalizeStoreActionHorizon(data.horizon)
+      }
+      if (data.targetStore != null || data.target_store != null) {
+        const v = String(data.targetStore ?? data.target_store ?? "").trim()
+        patch.target_store = v === "전체" ? "" : v
+      }
+      if (data.targetRole != null || data.target_role != null) {
+        const v = String(data.targetRole ?? data.target_role ?? "").trim()
+        patch.target_role = v === "전체" ? "" : v
+      }
+      if (data.targetPermissionGroup != null || data.target_permission_group != null) {
+        patch.target_permission_group = String(
+          data.targetPermissionGroup ?? data.target_permission_group ?? ""
+        ).trim()
+      }
+      if (data.targetRecipients != null || data.target_recipients != null) {
+        const raw = data.targetRecipients ?? data.target_recipients
+        if (typeof raw === "string") patch.target_recipients = raw.trim()
+        else if (Array.isArray(raw)) {
+          patch.target_recipients = JSON.stringify(
+            raw
+              .map((x) => {
+                if (typeof x === "string") return x
+                if (x && typeof x === "object") {
+                  const o = x as { store?: string; name?: string }
+                  return `${String(o.store || "").trim()}|${String(o.name || "").trim()}`
+                }
+                return ""
+              })
+              .filter((s) => s.includes("|") && !s.startsWith("|") && !s.endsWith("|"))
+          )
+        }
       }
       if (data.dueDate != null || data.due_date != null) {
         const due = String(data.dueDate ?? data.due_date ?? "").trim().slice(0, 10)

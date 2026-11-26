@@ -4,8 +4,11 @@ import {
   STORE_ACTION_CATEGORIES,
   STORE_ACTION_PRIORITIES,
   STORE_ACTION_SOURCE_TYPES,
+  normalizeStoreActionHorizon,
   normalizeStoreActionPhotoUrls,
+  storeActionDueDateForHorizon,
 } from '@/lib/store-action-items'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import {
   appendStoreActionLog,
   computeStoreActionRecurrence,
@@ -38,7 +41,11 @@ export function validateStoreActionInput(
 ): { status: number; message: string } | null {
   const store = String(data.store || data.store_name || '').trim()
   const ownerName = String(data.ownerName || data.owner_name || '').trim()
-  const dueDate = String(data.dueDate || data.due_date || '').trim().slice(0, 10)
+  const horizon = normalizeStoreActionHorizon(data.horizon)
+  let dueDate = String(data.dueDate || data.due_date || '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    dueDate = storeActionDueDateForHorizon(horizon, getBangkokTodayDateString())
+  }
   const verifierName = String(data.verifierName || data.verifier_name || '').trim()
 
   if (!store) return { status: 400, message: '매장을 선택하세요.' }
@@ -64,7 +71,11 @@ export async function createStoreActionItem(
   const store = String(data.store || data.store_name || '').trim()
   const title = String(data.title || '').trim()
   const ownerName = String(data.ownerName || data.owner_name || '').trim()
-  const dueDate = String(data.dueDate || data.due_date || '').trim().slice(0, 10)
+  const horizon = normalizeStoreActionHorizon(data.horizon)
+  let dueDate = String(data.dueDate || data.due_date || '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    dueDate = storeActionDueDateForHorizon(horizon, getBangkokTodayDateString())
+  }
   const verifierName = String(data.verifierName || data.verifier_name || '').trim()
 
   let category = String(data.category || '기타').trim() || '기타'
@@ -92,6 +103,29 @@ export async function createStoreActionItem(
   const ownerUserId = String(data.ownerUserId || data.owner_user_id || '').trim()
   const verifierUserId = String(data.verifierUserId || data.verifier_user_id || '').trim()
   const linkedRaw = data.linkedRepairTicketId ?? data.linked_repair_ticket_id
+  const targetStore = String(data.targetStore ?? data.target_store ?? '').trim()
+  const targetRole = String(data.targetRole ?? data.target_role ?? '').trim()
+  const targetPermissionGroup = String(
+    data.targetPermissionGroup ?? data.target_permission_group ?? ''
+  ).trim()
+  let targetRecipients = String(data.targetRecipients ?? data.target_recipients ?? '').trim()
+  if (Array.isArray(data.targetRecipients) || Array.isArray(data.target_recipients)) {
+    const arr = (Array.isArray(data.targetRecipients)
+      ? data.targetRecipients
+      : data.target_recipients) as unknown[]
+    targetRecipients = JSON.stringify(
+      arr
+        .map((x) => {
+          if (typeof x === 'string') return x
+          if (x && typeof x === 'object') {
+            const o = x as { store?: string; name?: string }
+            return `${String(o.store || '').trim()}|${String(o.name || '').trim()}`
+          }
+          return ''
+        })
+        .filter((s) => s.includes('|') && !s.startsWith('|') && !s.endsWith('|'))
+    )
+  }
 
   const newId = await insertStoreActionItemRow({
     store_name: store,
@@ -99,6 +133,7 @@ export async function createStoreActionItem(
     description: String(data.description || '').trim(),
     category,
     priority,
+    horizon,
     status: 'open',
     owner_name: ownerName,
     owner_user_id: ownerUserId || null,
@@ -115,6 +150,10 @@ export async function createStoreActionItem(
     repeat_count: repeatCount,
     check_item_id: checkItemId,
     parent_action_id: parentId,
+    target_store: targetStore === '전체' ? '' : targetStore,
+    target_role: targetRole === '전체' ? '' : targetRole,
+    target_permission_group: targetPermissionGroup,
+    target_recipients: targetRecipients,
     created_by: createdBy,
     created_at: nowIso,
     updated_at: nowIso,
@@ -127,7 +166,7 @@ export async function createStoreActionItem(
       event: 'create',
       toStatus: 'open',
       note: title,
-      detail: { ownerName, verifierName, dueDate, repeatCount, parentId, sourceType },
+      detail: { ownerName, verifierName, dueDate, horizon, repeatCount, parentId, sourceType },
     })
   }
 
@@ -140,6 +179,12 @@ export async function createStoreActionItem(
       ownerUserId,
       actorName: scope.actorName || createdBy,
       actorEmployeeId: scope.actorEmployeeId,
+      audience: {
+        targetStore: targetStore === '전체' ? '' : targetStore,
+        targetRole: targetRole === '전체' ? '' : targetRole,
+        targetPermissionGroup,
+        targetRecipients,
+      },
     })
   }
 

@@ -80,7 +80,7 @@ function action(p: Partial<OpenActionLite>): OpenActionLite {
   }
 }
 
-const emp = { id: 7, name: "Somchai", nick: "Chai" }
+const emp = { id: 7, name: "Somchai", nick: "Chai", store: "B", job: "Service", role: "staff" }
 
 describe("managerDailyPlanPosition", () => {
   it("maps Service/Kitchen job and leaves others as all", () => {
@@ -314,6 +314,28 @@ describe("selectActionsForPlan", () => {
     ])
     const staff = selectActionsForPlan({ actions, role: "staff", employee: emp, dateYmd: "2026-10-08", routeStores: [] })
     expect(staff.map((x) => x.action.id)).toEqual([1])
+  })
+
+  it("includes audience-matched open actions due by tomorrow", () => {
+    const actions = [
+      action({
+        id: 11,
+        ownerName: "Other",
+        ownerUserId: "99",
+        dueDate: "2026-10-09",
+        targetStore: "B",
+        targetRole: "Service",
+      }),
+      action({
+        id: 12,
+        ownerName: "Other",
+        dueDate: "2026-10-09",
+        targetStore: "B",
+        targetRole: "Kitchen",
+      }),
+    ]
+    const staff = selectActionsForPlan({ actions, role: "staff", employee: emp, dateYmd: "2026-10-08", routeStores: [] })
+    expect(staff.map((x) => x.action.id)).toEqual([11])
   })
 })
 

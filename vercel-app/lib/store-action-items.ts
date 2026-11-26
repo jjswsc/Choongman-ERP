@@ -29,7 +29,7 @@ export const STORE_ACTION_CATEGORIES = [
 
 export type StoreActionCategory = (typeof STORE_ACTION_CATEGORIES)[number]
 
-/** 카테고리별 기본 완료 기한(일) — 신규 등록 시 기한 자동 채움 */
+/** 카테고리별 기본 완료 기한(일) — 레거시·표시용. 신규 자동 채움은 horizon 우선 */
 export const STORE_ACTION_CATEGORY_DUE_DAYS: Record<StoreActionCategory, number> = {
   인력: 3,
   교육: 7,
@@ -43,6 +43,63 @@ export const STORE_ACTION_CATEGORY_DUE_DAYS: Record<StoreActionCategory, number>
 
 export function storeActionDefaultDueDays(category: string): number {
   return STORE_ACTION_CATEGORY_DUE_DAYS[category as StoreActionCategory] ?? 3
+}
+
+/**
+ * 과제 기간 성격
+ * - day: 당일(오늘)
+ * - week: 주간(+7일)
+ * - month_30: 월간·앞으로 30일
+ * - month_cal: 월간·해당 달력 월 말일
+ * 레거시 `month` 값은 normalize 시 month_30으로 본다.
+ */
+export const STORE_ACTION_HORIZONS = ["day", "week", "month_30", "month_cal"] as const
+
+export type StoreActionHorizon = (typeof STORE_ACTION_HORIZONS)[number]
+
+export const STORE_ACTION_HORIZON_DUE_DAYS: Record<"day" | "week" | "month_30", number> = {
+  day: 0,
+  week: 7,
+  month_30: 30,
+}
+
+export function isStoreActionHorizon(v: string): v is StoreActionHorizon {
+  return (STORE_ACTION_HORIZONS as readonly string[]).includes(v)
+}
+
+export function normalizeStoreActionHorizon(v: unknown): StoreActionHorizon {
+  const s = String(v || "").trim().toLowerCase()
+  if (s === "month") return "month_30"
+  return isStoreActionHorizon(s) ? s : "week"
+}
+
+/** 고정 일수 horizon만. month_cal은 NaN(말일 기준). */
+export function storeActionHorizonDueDays(horizon: string): number {
+  const h = normalizeStoreActionHorizon(horizon)
+  if (h === "month_cal") return Number.NaN
+  return STORE_ACTION_HORIZON_DUE_DAYS[h]
+}
+
+/** 방콕 기준 해당 달력 월의 마지막 날 YYYY-MM-DD */
+export function storeActionEndOfCalendarMonth(todayYmd: string): string {
+  const base = String(todayYmd || "").trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return ""
+  const [y, m] = base.split("-").map((x) => Number(x))
+  if (!y || !m) return ""
+  const d = new Date(Date.UTC(y, m, 0, 5, 0, 0))
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+}
+
+/** todayYmd(YYYY-MM-DD, 방콕) + horizon → 완료 기한 */
+export function storeActionDueDateForHorizon(horizon: string, todayYmd: string): string {
+  const base = String(todayYmd || "").trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return ""
+  const h = normalizeStoreActionHorizon(horizon)
+  if (h === "month_cal") return storeActionEndOfCalendarMonth(base)
+  const days = STORE_ACTION_HORIZON_DUE_DAYS[h]
+  const d = new Date(`${base}T12:00:00+07:00`)
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
 }
 
 export const STORE_ACTION_PRIORITIES = ["긴급", "보통", "낮음"] as const

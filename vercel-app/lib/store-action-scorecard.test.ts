@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { buildStoreActionScorecard, bangkokYmdFromIso } from "@/lib/store-action-scorecard"
-import { storeActionDefaultDueDays, storeCheckItemKey } from "@/lib/store-action-items"
+import {
+  storeActionDefaultDueDays,
+  storeActionDueDateForHorizon,
+  storeActionHorizonDueDays,
+  storeCheckItemKey,
+} from "@/lib/store-action-items"
 
 const base = {
   store: "Silom",
@@ -45,6 +50,19 @@ describe("store action helpers", () => {
     expect(storeActionDefaultDueDays("청결")).toBe(1)
     expect(storeActionDefaultDueDays("교육")).toBe(7)
     expect(storeActionDefaultDueDays("unknown")).toBe(3)
+  })
+
+  it("horizon due: day/week/month_30/+legacy month, month_cal=calendar month end", () => {
+    expect(storeActionHorizonDueDays("day")).toBe(0)
+    expect(storeActionHorizonDueDays("week")).toBe(7)
+    expect(storeActionHorizonDueDays("month_30")).toBe(30)
+    expect(storeActionHorizonDueDays("month")).toBe(30)
+    expect(storeActionDueDateForHorizon("day", "2026-11-26")).toBe("2026-11-26")
+    expect(storeActionDueDateForHorizon("week", "2026-11-26")).toBe("2026-12-03")
+    expect(storeActionDueDateForHorizon("month_30", "2026-11-26")).toBe("2026-12-26")
+    expect(storeActionDueDateForHorizon("month", "2026-11-26")).toBe("2026-12-26")
+    expect(storeActionDueDateForHorizon("month_cal", "2026-11-26")).toBe("2026-11-30")
+    expect(storeActionDueDateForHorizon("month_cal", "2026-02-10")).toBe("2026-02-28")
   })
 
   it("builds check item key from raw path", () => {

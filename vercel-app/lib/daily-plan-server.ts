@@ -481,26 +481,42 @@ export function supervisorCandidateStores(emp: PlanEmployee): string[] {
 // ─── 개선 과제 ─────────────────────────────────────
 
 export async function loadOpenActionsLite(): Promise<OpenActionLite[]> {
+  const mapRow = (d: Record<string, unknown>): OpenActionLite => ({
+    id: Number(d.id || 0),
+    store: String(d.store_name || ''),
+    title: String(d.title || ''),
+    status: String(d.status || 'open'),
+    dueDate: d.due_date ? String(d.due_date).slice(0, 10) : '',
+    ownerName: String(d.owner_name || ''),
+    ownerUserId: String(d.owner_user_id || ''),
+    verifierName: String(d.verifier_name || ''),
+    verifierUserId: String(d.verifier_user_id || ''),
+    targetStore: String(d.target_store || ''),
+    targetRole: String(d.target_role || ''),
+    targetPermissionGroup: String(d.target_permission_group || ''),
+    targetRecipients: String(d.target_recipients || ''),
+  })
   try {
     const rows = ((await supabaseSelectFilter('store_action_items', 'status=in.(open,in_progress,pending_verify)', {
-      select: 'id,store_name,title,status,due_date,owner_name,owner_user_id,verifier_name,verifier_user_id',
+      select:
+        'id,store_name,title,status,due_date,owner_name,owner_user_id,verifier_name,verifier_user_id,target_store,target_role,target_permission_group,target_recipients',
       order: 'due_date.asc.nullslast,id.asc',
       limit: 5000,
     })) || []) as Record<string, unknown>[]
-    return rows.map((d) => ({
-      id: Number(d.id || 0),
-      store: String(d.store_name || ''),
-      title: String(d.title || ''),
-      status: String(d.status || 'open'),
-      dueDate: d.due_date ? String(d.due_date).slice(0, 10) : '',
-      ownerName: String(d.owner_name || ''),
-      ownerUserId: String(d.owner_user_id || ''),
-      verifierName: String(d.verifier_name || ''),
-      verifierUserId: String(d.verifier_user_id || ''),
-    }))
+    return rows.map(mapRow)
   } catch (e) {
-    console.warn('loadOpenActionsLite:', e instanceof Error ? e.message : e)
-    return []
+    // target_* 컬럼 미적용 DB fallback
+    try {
+      const rows = ((await supabaseSelectFilter('store_action_items', 'status=in.(open,in_progress,pending_verify)', {
+        select: 'id,store_name,title,status,due_date,owner_name,owner_user_id,verifier_name,verifier_user_id',
+        order: 'due_date.asc.nullslast,id.asc',
+        limit: 5000,
+      })) || []) as Record<string, unknown>[]
+      return rows.map(mapRow)
+    } catch (e2) {
+      console.warn('loadOpenActionsLite:', e2 instanceof Error ? e2.message : e2)
+      return []
+    }
   }
 }
 
@@ -890,7 +906,14 @@ export async function ensureDailyPlan(p: EnsurePlanParams): Promise<{ plan: Dail
     dateYmd: p.date,
     homeStore,
     routeStores,
-    employee: { id: p.employee.id, name: p.employee.name, nick: p.employee.nick },
+    employee: {
+      id: p.employee.id,
+      name: p.employee.name,
+      nick: p.employee.nick,
+      store: p.employee.store,
+      job: p.employee.job,
+      role: p.employee.role,
+    },
     actions: ctx.actions,
     carry,
     hqTasks: p.hqTasks ?? [],

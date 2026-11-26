@@ -15,14 +15,16 @@ import {
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useLang } from "@/lib/lang-context"
-import { addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
+import { STORE_ACTION_HORIZONS, normalizeStoreActionHorizon } from "@/lib/store-action-items"
+import { storeActionLabelers } from "@/lib/store-action-i18n"
 import { useTranslatedTextMap } from "@/lib/use-ui-translate"
 import { cn } from "@/lib/utils"
 import { StoreActionVisitAddDialog } from "@/components/admin/store-action-visit-add-dialog"
 
 type Group = { key: string; title: string; tone: string; rows: StoreActionItem[] }
+type HorizonFilter = "all" | "day" | "week" | "month_30" | "month_cal"
 
-/** 오늘 할 일 — 기한초과·오늘 마감·재확인 대기·이번 주 마감 + 방문 추천 매장 */
+/** 오늘 할 일 — 기한초과·재확인 대기·당일/주간/월간(horizon) + 방문 추천 매장 */
 export function StoreActionTodayBoard(props: {
   t: (k: string) => string
   canVerify: boolean
@@ -32,6 +34,7 @@ export function StoreActionTodayBoard(props: {
   const { t, canVerify, onOpen, refreshKey } = props
   const { lang } = useLang()
   const [mineOnly, setMineOnly] = useState(true)
+  const [horizonFilter, setHorizonFilter] = useState<HorizonFilter>("all")
   const [rows, setRows] = useState<StoreActionItem[]>([])
   const [loading, setLoading] = useState(false)
   const [planLinks, setPlanLinks] = useState<Record<string, StoreActionPlanLink[]>>({})
@@ -39,7 +42,6 @@ export function StoreActionTodayBoard(props: {
   const [visitStore, setVisitStore] = useState<string | null>(null)
   const [coverageKey, setCoverageKey] = useState(0)
   const today = getBangkokTodayDateString()
-  const weekEnd = addDaysYmd(today, 7)
   const label = storeActionLabelers(t)
 
   const load = useCallback(async () => {
@@ -60,20 +62,28 @@ export function StoreActionTodayBoard(props: {
     void load()
   }, [load, refreshKey])
 
+  const scopedRows = useMemo(() => {
+    if (horizonFilter === "all") return rows
+    return rows.filter((r) => normalizeStoreActionHorizon(r.horizon) === horizonFilter)
+  }, [rows, horizonFilter])
+
   const groups: Group[] = useMemo(() => {
-    const overdue = rows.filter((r) => r.overdue)
-    const pending = rows.filter((r) => r.status === "pending_verify")
-    const dueToday = rows.filter((r) => !r.overdue && r.status !== "pending_verify" && r.dueDate === today)
-    const week = rows.filter(
-      (r) => !r.overdue && r.status !== "pending_verify" && r.dueDate > today && r.dueDate <= weekEnd
-    )
+    const overdue = scopedRows.filter((r) => r.overdue)
+    const pending = scopedRows.filter((r) => !r.overdue && r.status === "pending_verify")
+    const rest = scopedRows.filter((r) => !r.overdue && r.status !== "pending_verify")
+    const day = rest.filter((r) => normalizeStoreActionHorizon(r.horizon) === "day")
+    const week = rest.filter((r) => normalizeStoreActionHorizon(r.horizon) === "week")
+    const month30 = rest.filter((r) => normalizeStoreActionHorizon(r.horizon) === "month_30")
+    const monthCal = rest.filter((r) => normalizeStoreActionHorizon(r.horizon) === "month_cal")
     return [
       { key: "overdue", title: t("action_today_overdue"), tone: "border-red-500/50", rows: overdue },
       { key: "pending", title: t("action_today_pending"), tone: "border-amber-500/50", rows: pending },
-      { key: "today", title: t("action_today_due_today"), tone: "border-blue-500/50", rows: dueToday },
-      { key: "week", title: t("action_today_due_week"), tone: "border-slate-400/50", rows: week },
+      { key: "day", title: t("action_today_horizon_day"), tone: "border-blue-500/50", rows: day },
+      { key: "week", title: t("action_today_horizon_week"), tone: "border-slate-400/50", rows: week },
+      { key: "month_30", title: t("action_today_horizon_month_30"), tone: "border-violet-400/50", rows: month30 },
+      { key: "month_cal", title: t("action_today_horizon_month_cal"), tone: "border-indigo-400/50", rows: monthCal },
     ]
-  }, [rows, today, weekEnd, t])
+  }, [scopedRows, t])
 
   const titlesToTranslate = useMemo(
     () =>
@@ -121,8 +131,8 @@ export function StoreActionTodayBoard(props: {
   const copyLine = async () => {
     const lines: string[] = [`${t("action_today_line_head")} (${today})`, ""]
     for (const g of groups) {
-      if (g.key === "week" || g.rows.length === 0) continue
-      lines.push(`**${g.title} ${g.rows.length}**`)
+      if (g.rows.length === 0) continue
+      lines.push(`${g.title} ${g.rows.length}`)
       for (const r of g.rows.slice(0, 15)) {
         lines.push(`- ${r.store} · ${r.title} · ${r.ownerName} (${r.dueDate || "-"})`)
       }
@@ -160,6 +170,25 @@ export function StoreActionTodayBoard(props: {
             </button>
           </div>
         ) : null}
+        <div className="inline-flex flex-wrap rounded-md border p-0.5 text-xs">
+          <button
+            type="button"
+            className={cn("rounded px-2 py-1", horizonFilter === "all" && "bg-primary text-primary-foreground")}
+            onClick={() => setHorizonFilter("all")}
+          >
+            {t("action_filter_all")}
+          </button>
+          {STORE_ACTION_HORIZONS.map((h) => (
+            <button
+              key={h}
+              type="button"
+              className={cn("rounded px-2 py-1", horizonFilter === h && "bg-primary text-primary-foreground")}
+              onClick={() => setHorizonFilter(h)}
+            >
+              {label.horizon(h)}
+            </button>
+          ))}
+        </div>
         <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => void load()} disabled={loading}>
           <RefreshCw className="mr-1 h-3.5 w-3.5" />
           {t("btn_query_go")}

@@ -1,6 +1,7 @@
 /** 일일 일정표 — 템플릿 선택·항목 생성·요약 (순수 함수, DB 없음) */
 
 import { dailyPlanItemTitle, koThText } from "@/lib/daily-plan-i18n"
+import { employeeReceivesStoreActionAudience } from "@/lib/store-action-audience"
 
 export const DAILY_PLAN_ROLES = ["supervisor", "manager", "staff"] as const
 export type DailyPlanRole = (typeof DAILY_PLAN_ROLES)[number]
@@ -196,6 +197,10 @@ export type OpenActionLite = {
   ownerUserId: string
   verifierName: string
   verifierUserId: string
+  targetStore?: string
+  targetRole?: string
+  targetPermissionGroup?: string
+  targetRecipients?: string
 }
 
 export type CarryLite = {
@@ -516,11 +521,11 @@ function matchesPerson(
   return n === norm(employee.name) || (!!employee.nick && n === norm(employee.nick))
 }
 
-/** 일정표에 넣을 개선 과제 — 담당 과제(기한초과·오늘·내일), SV는 재확인 대기·담당 매장 기한초과 */
+/** 일정표에 넣을 개선 과제 — 담당·일정대상(매장/직책/개인), SV는 재확인 대기·담당 매장 기한초과 */
 export function selectActionsForPlan(params: {
   actions: OpenActionLite[]
   role: DailyPlanRole
-  employee: { id: number; name: string; nick?: string }
+  employee: { id: number; name: string; nick?: string; store?: string; job?: string; role?: string }
   dateYmd: string
   routeStores: string[]
 }): { action: OpenActionLite; kind: "owner" | "verify" }[] {
@@ -531,8 +536,19 @@ export function selectActionsForPlan(params: {
   for (const a of params.actions) {
     if (seen.has(a.id)) continue
     const isOwner = matchesPerson(a.ownerUserId, a.ownerName, params.employee)
+    const inAudience =
+      !isOwner &&
+      employeeReceivesStoreActionAudience(
+        {
+          store: String(params.employee.store || ""),
+          name: params.employee.name,
+          job: params.employee.job,
+          role: params.employee.role,
+        },
+        a
+      )
     const ownerDue =
-      isOwner &&
+      (isOwner || inAudience) &&
       (a.status === "open" || a.status === "in_progress") &&
       !!a.dueDate &&
       a.dueDate <= tomorrow

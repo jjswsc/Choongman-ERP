@@ -12,6 +12,7 @@ export type StoreActionItemRow = {
   description?: string
   category?: string
   priority?: string
+  horizon?: string | null
   status?: string
   owner_name?: string
   owner_user_id?: string | null
@@ -30,6 +31,10 @@ export type StoreActionItemRow = {
   repeat_count?: number | null
   check_item_id?: string | null
   parent_action_id?: number | null
+  target_store?: string | null
+  target_role?: string | null
+  target_permission_group?: string | null
+  target_recipients?: string | null
   created_by?: string
   created_at?: string
   updated_at?: string
@@ -43,6 +48,7 @@ export type StoreActionItemDto = {
   description: string
   category: string
   priority: string
+  horizon: string
   status: StoreActionStatus | string
   ownerName: string
   ownerUserId: string
@@ -61,6 +67,10 @@ export type StoreActionItemDto = {
   repeatCount: number
   checkItemId: string
   parentActionId: number | null
+  targetStore: string
+  targetRole: string
+  targetPermissionGroup: string
+  targetRecipients: string
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -78,6 +88,7 @@ export function mapStoreActionItemRow(d: StoreActionItemRow, todayYmd: string): 
     description: String(d.description || ""),
     category: String(d.category || ""),
     priority: String(d.priority || ""),
+    horizon: String(d.horizon || "week").trim() || "week",
     status,
     ownerName: String(d.owner_name || ""),
     ownerUserId: String(d.owner_user_id || ""),
@@ -102,6 +113,10 @@ export function mapStoreActionItemRow(d: StoreActionItemRow, todayYmd: string): 
       d.parent_action_id != null && Number.isFinite(Number(d.parent_action_id))
         ? Number(d.parent_action_id)
         : null,
+    targetStore: String(d.target_store || ""),
+    targetRole: String(d.target_role || ""),
+    targetPermissionGroup: String(d.target_permission_group || ""),
+    targetRecipients: String(d.target_recipients || ""),
     createdBy: String(d.created_by || ""),
     createdAt: d.created_at ? String(d.created_at) : "",
     updatedAt: d.updated_at ? String(d.updated_at) : "",

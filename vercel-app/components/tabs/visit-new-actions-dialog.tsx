@@ -12,8 +12,18 @@ import { appAlert } from "@/lib/app-message"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { saveStoreActionItem, uploadStoreActionPhoto } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
-import { STORE_ACTION_CATEGORIES, storeActionDefaultDueDays } from "@/lib/store-action-items"
-import { STORE_ACTION_CAT_TEMPLATE_I18N, addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
+import {
+  STORE_ACTION_CATEGORIES,
+  STORE_ACTION_HORIZONS,
+  normalizeStoreActionHorizon,
+  storeActionDueDateForHorizon,
+  type StoreActionHorizon,
+} from "@/lib/store-action-items"
+import {
+  STORE_ACTION_CAT_TEMPLATE_I18N,
+  storeActionHorizonOptionLabel,
+  storeActionLabelers,
+} from "@/lib/store-action-i18n"
 import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 
 /** 방문 종료 직후 — 이번 방문에서 발견한 문제를 개선 과제로 바로 등록 */
@@ -33,9 +43,10 @@ export function VisitNewActionsDialog(props: {
   const blank = () => ({
     title: "",
     category: "기타",
+    horizon: "week" as StoreActionHorizon,
     ownerName: "",
     ownerUserId: "",
-    dueDate: addDaysYmd(today, storeActionDefaultDueDays("기타")),
+    dueDate: storeActionDueDateForHorizon("week", today),
     actionPlan: t(STORE_ACTION_CAT_TEMPLATE_I18N["기타"]),
     photoUrls: [] as string[],
   })
@@ -57,10 +68,18 @@ export function VisitNewActionsDialog(props: {
       return {
         ...f,
         category,
-        dueDate: addDaysYmd(today, storeActionDefaultDueDays(category)),
         actionPlan: keepPlan ? f.actionPlan : t(STORE_ACTION_CAT_TEMPLATE_I18N[category] || "action_tpl_etc"),
       }
     })
+  }
+
+  const onHorizon = (horizon: string) => {
+    const h = normalizeStoreActionHorizon(horizon)
+    setForm((f) => ({
+      ...f,
+      horizon: h,
+      dueDate: storeActionDueDateForHorizon(h, today),
+    }))
   }
 
   const onPhoto = async (files: FileList | null) => {
@@ -93,6 +112,7 @@ export function VisitNewActionsDialog(props: {
         title: form.title,
         category: form.category,
         priority: "보통",
+        horizon: form.horizon,
         ownerName: form.ownerName,
         ownerUserId: form.ownerUserId,
         dueDate: form.dueDate,
@@ -151,6 +171,18 @@ export function VisitNewActionsDialog(props: {
                 {STORE_ACTION_CATEGORIES.map((c) => (
                   <SelectItem key={c} value={c}>
                     {label.category(c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={form.horizon} onValueChange={onHorizon}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder={t("action_field_horizon")} />
+              </SelectTrigger>
+              <SelectContent>
+                {STORE_ACTION_HORIZONS.map((h) => (
+                  <SelectItem key={h} value={h}>
+                    {storeActionHorizonOptionLabel(h, t)}
                   </SelectItem>
                 ))}
               </SelectContent>

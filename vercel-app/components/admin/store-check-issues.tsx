@@ -22,11 +22,18 @@ import {
 } from "@/lib/api-client"
 import {
   STORE_ACTION_CATEGORIES,
+  STORE_ACTION_HORIZONS,
   STORE_ACTION_PRIORITIES,
   isStoreActionOpenStatus,
-  storeActionDefaultDueDays,
+  normalizeStoreActionHorizon,
+  storeActionDueDateForHorizon,
+  type StoreActionHorizon,
 } from "@/lib/store-action-items"
-import { STORE_ACTION_CAT_TEMPLATE_I18N, addDaysYmd, storeActionLabelers } from "@/lib/store-action-i18n"
+import {
+  STORE_ACTION_CAT_TEMPLATE_I18N,
+  storeActionHorizonOptionLabel,
+  storeActionLabelers,
+} from "@/lib/store-action-i18n"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import { useLang } from "@/lib/lang-context"
 import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
@@ -567,6 +574,7 @@ type Draft = {
   title: string
   category: string
   priority: string
+  horizon: StoreActionHorizon
   dueDate: string
   ownerName: string
   ownerUserId: string
@@ -600,18 +608,22 @@ export function StoreCheckIssueDialog(props: {
   const fileRef = useRef<HTMLInputElement>(null)
   const uploadFor = useRef<number | null>(null)
 
-  const blank = (prev?: Draft): Draft => ({
-    uid: uidRef.current++,
-    title: "",
-    category: prev?.category || "기타",
-    priority: "보통",
-    dueDate: addDaysYmd(today, storeActionDefaultDueDays(prev?.category || "기타")),
-    ownerName: prev?.ownerName || "",
-    ownerUserId: prev?.ownerUserId || "",
-    actionPlan: t(STORE_ACTION_CAT_TEMPLATE_I18N[prev?.category || "기타"] || "action_tpl_etc"),
-    photoUrls: [],
-    useCheckPhotos: !prev,
-  })
+  const blank = (prev?: Draft): Draft => {
+    const horizon: StoreActionHorizon = prev?.horizon || "week"
+    return {
+      uid: uidRef.current++,
+      title: "",
+      category: prev?.category || "기타",
+      priority: "보통",
+      horizon,
+      dueDate: storeActionDueDateForHorizon(horizon, today),
+      ownerName: prev?.ownerName || "",
+      ownerUserId: prev?.ownerUserId || "",
+      actionPlan: t(STORE_ACTION_CAT_TEMPLATE_I18N[prev?.category || "기타"] || "action_tpl_etc"),
+      photoUrls: [],
+      useCheckPhotos: !prev,
+    }
+  }
 
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [verifier, setVerifier] = useState({ name: "", userId: "" })
@@ -631,8 +643,15 @@ export function StoreCheckIssueDialog(props: {
     const keepPlan = d.actionPlan.trim() && d.actionPlan !== prevTpl
     patch(d.uid, {
       category,
-      dueDate: addDaysYmd(today, storeActionDefaultDueDays(category)),
       actionPlan: keepPlan ? d.actionPlan : t(STORE_ACTION_CAT_TEMPLATE_I18N[category] || "action_tpl_etc"),
+    })
+  }
+
+  const onHorizon = (d: Draft, horizon: string) => {
+    const h = normalizeStoreActionHorizon(horizon)
+    patch(d.uid, {
+      horizon: h,
+      dueDate: storeActionDueDateForHorizon(h, today),
     })
   }
 
@@ -657,6 +676,7 @@ export function StoreCheckIssueDialog(props: {
           description: `${t("action_desc_from_check")} ${itemKey}`,
           category: d.category,
           priority: d.priority,
+          horizon: d.horizon,
           ownerName: d.ownerName,
           ownerUserId: d.ownerUserId,
           dueDate: d.dueDate,
@@ -743,6 +763,21 @@ export function StoreCheckIssueDialog(props: {
                   />
                 </div>
                 <div>
+                  <label className="text-[11px] text-muted-foreground">{t("action_field_horizon")}</label>
+                  <Select value={d.horizon} onValueChange={(v) => onHorizon(d, v)}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_ACTION_HORIZONS.map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {storeActionHorizonOptionLabel(h, t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <label className="text-[11px] text-muted-foreground">{t("action_field_due")}</label>
                   <Input
                     type="date"
@@ -775,7 +810,7 @@ export function StoreCheckIssueDialog(props: {
                     <SelectContent>
                       {STORE_ACTION_CATEGORIES.map((c) => (
                         <SelectItem key={c} value={c}>
-                          {label.category(c)} ({fill(t("action_due_days"), { n: storeActionDefaultDueDays(c) })})
+                          {label.category(c)}
                         </SelectItem>
                       ))}
                     </SelectContent>

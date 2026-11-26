@@ -54,14 +54,18 @@ import { storeActionPhotoThumbUrl } from "@/lib/store-action-photo"
 import { StorePageShell } from "@/components/erp/store-page-shell"
 import {
   STORE_ACTION_CATEGORIES,
+  STORE_ACTION_HORIZONS,
   STORE_ACTION_PRIORITIES,
   STORE_ACTION_STATUSES,
   isStoreActionOpenStatus,
-  storeActionDefaultDueDays,
+  normalizeStoreActionHorizon,
+  storeActionDueDateForHorizon,
+  type StoreActionHorizon,
 } from "@/lib/store-action-items"
 import {
   STORE_ACTION_CAT_TEMPLATE_I18N,
   addDaysYmd,
+  storeActionHorizonOptionLabel,
   storeActionLabelers,
 } from "@/lib/store-action-i18n"
 import {
@@ -77,6 +81,17 @@ import { StoreActionTimeline } from "@/components/admin/store-action-timeline"
 import { StoreActionTodayBoard } from "@/components/admin/store-action-today-board"
 import { StoreActionScorecard } from "@/components/admin/store-action-scorecard"
 import { StoreActionPlanPanel } from "@/components/admin/store-action-plan-panel"
+import {
+  BroadcastTargetPicker,
+  type BroadcastTargetOptionCounts,
+} from "@/components/erp/broadcast-target-picker"
+import {
+  buildBroadcastTargetPayload,
+  emptyBroadcastTargetSelection,
+  broadcastTargetStateFromRow,
+  type BroadcastTargetSelectionState,
+} from "@/lib/broadcast-target-selection"
+import { storeActionAudienceFromPayload } from "@/lib/store-action-audience"
 
 type TabKey = "today" | "dash" | "list" | "process" | "new" | "score"
 const TAB_KEYS: TabKey[] = ["today", "dash", "list", "process", "new", "score"]
@@ -106,6 +121,7 @@ export function AdminStoreActions() {
   const [listStore, setListStore] = useState("All")
   const [listStatus, setListStatus] = useState("__all__")
   const [listCategory, setListCategory] = useState("__all__")
+  const [listHorizon, setListHorizon] = useState("__all__")
   const [listMine, setListMine] = useState(false)
   const [listQ, setListQ] = useState("")
   const [listData, setListData] = useState<StoreActionItem[]>([])
@@ -134,28 +150,48 @@ export function AdminStoreActions() {
   const wStart = weekStartYmd(today)
 
   const blankForm = useCallback(
-    (store: string) => ({
-      store,
-      title: "",
-      description: "",
-      category: "기타",
-      priority: "보통",
-      ownerName: "",
-      ownerUserId: "",
-      dueDate: addDaysYmd(getBangkokTodayDateString(), storeActionDefaultDueDays("기타")),
-      verifierName: canVerify ? writerName : "",
-      verifierUserId: canVerify ? myEmployeeId : "",
-      actionPlan: "",
-      photoUrls: [] as string[],
-      sourceType: "manual",
-      sourceRef: "",
-      checkItemId: "",
-    }),
+    (store: string) => {
+      const todayYmd = getBangkokTodayDateString()
+      return {
+        store,
+        title: "",
+        description: "",
+        category: "기타",
+        priority: "보통",
+        horizon: "week" as StoreActionHorizon,
+        ownerName: "",
+        ownerUserId: "",
+        dueDate: storeActionDueDateForHorizon("week", todayYmd),
+        verifierName: canVerify ? writerName : "",
+        verifierUserId: canVerify ? myEmployeeId : "",
+        actionPlan: "",
+        photoUrls: [] as string[],
+        sourceType: "manual",
+        sourceRef: "",
+        checkItemId: "",
+      }
+    },
     [canVerify, writerName, myEmployeeId]
   )
 
   const [form, setForm] = useState(() => blankForm(""))
   const [edit, setEdit] = useState<StoreActionItem | null>(null)
+  const [targetSelection, setTargetSelection] = useState<BroadcastTargetSelectionState>(
+    emptyBroadcastTargetSelection()
+  )
+  const [optionCounts, setOptionCounts] = useState<BroadcastTargetOptionCounts>({
+    storeOptionCount: 0,
+    positionOptionCount: 0,
+    permissionOptionCount: 0,
+  })
+  const [editTargetSelection, setEditTargetSelection] = useState<BroadcastTargetSelectionState>(
+    emptyBroadcastTargetSelection()
+  )
+  const [editOptionCounts, setEditOptionCounts] = useState<BroadcastTargetOptionCounts>({
+    storeOptionCount: 0,
+    positionOptionCount: 0,
+    permissionOptionCount: 0,
+  })
 
   useEffect(() => {
     if (!auth?.store) return
@@ -205,7 +241,7 @@ export function AdminStoreActions() {
           category,
           priority: priorityParam || f.priority,
           dueDate: categoryParam
-            ? addDaysYmd(getBangkokTodayDateString(), storeActionDefaultDueDays(category))
+            ? storeActionDueDateForHorizon(f.horizon || "week", getBangkokTodayDateString())
             : f.dueDate,
           description: titleParam ? `${t("action_desc_from_check")} ${titleParam}` : f.description,
           sourceType: sourceParam === "check_fail" ? "check_fail" : sourceParam || f.sourceType,
@@ -244,6 +280,7 @@ export function AdminStoreActions() {
         store: listStore && listStore !== "All" ? listStore : undefined,
         status: listStatus && listStatus !== "__all__" ? listStatus : undefined,
         category: listCategory && listCategory !== "__all__" ? listCategory : undefined,
+        horizon: listHorizon && listHorizon !== "__all__" ? listHorizon : undefined,
         mine: listMine || undefined,
         q: listQ.trim() || undefined,
       })
@@ -253,7 +290,7 @@ export function AdminStoreActions() {
     } finally {
       setListLoading(false)
     }
-  }, [listStart, listEnd, listStore, listStatus, listCategory, listMine, listQ])
+  }, [listStart, listEnd, listStore, listStatus, listCategory, listHorizon, listMine, listQ])
 
   const loadDash = useCallback(async () => {
     setDashLoading(true)
@@ -288,23 +325,44 @@ export function AdminStoreActions() {
   useEffect(() => {
     if (selectedId == null) {
       setEdit(null)
+      setEditTargetSelection(emptyBroadcastTargetSelection())
       return
     }
+    const applyEdit = (row: StoreActionItem) => {
+      setEdit({ ...row })
+      setEditTargetSelection(
+        broadcastTargetStateFromRow(
+          {
+            target_store: row.targetStore || "전체",
+            target_role: row.targetRole || "전체",
+            target_permission_group: row.targetPermissionGroup || "",
+            target_recipients: row.targetRecipients || null,
+          },
+          t("noticeFilterAll")
+        )
+      )
+    }
     const found = listData.find((x) => x.id === selectedId) || openData.find((x) => x.id === selectedId)
-    if (found) setEdit({ ...found })
+    if (found) applyEdit(found)
     else {
       void getStoreActionItems({ id: selectedId }).then((rows) => {
-        if (rows[0]) setEdit({ ...rows[0] })
+        if (rows[0]) applyEdit(rows[0])
       })
     }
-  }, [selectedId, listData, openData])
+  }, [selectedId, listData, openData, t])
 
   const stats = useMemo(() => {
     const overdue = openData.filter((x) => x.overdue).length
     const pendingVerify = openData.filter((x) => x.status === "pending_verify").length
     const inProgress = openData.filter((x) => x.status === "in_progress" || x.status === "open").length
     const recur = openData.filter((x) => (x.repeatCount || 0) >= 1).length
-    return { overdue, pendingVerify, inProgress, weekDone: weekDoneCount, recur }
+    const byHorizon = {
+      day: openData.filter((x) => normalizeStoreActionHorizon(x.horizon) === "day").length,
+      week: openData.filter((x) => normalizeStoreActionHorizon(x.horizon) === "week").length,
+      month_30: openData.filter((x) => normalizeStoreActionHorizon(x.horizon) === "month_30").length,
+      month_cal: openData.filter((x) => normalizeStoreActionHorizon(x.horizon) === "month_cal").length,
+    }
+    return { overdue, pendingVerify, inProgress, weekDone: weekDoneCount, recur, byHorizon }
   }, [openData, weekDoneCount])
 
   const overdueByStore = useMemo(() => {
@@ -328,6 +386,7 @@ export function AdminStoreActions() {
       ownerName: isManager ? writerName : "",
       ownerUserId: isManager ? myEmployeeId : "",
     }))
+    setTargetSelection(emptyBroadcastTargetSelection())
   }, [isManager, auth?.store, blankForm, writerName, myEmployeeId])
 
   const onFormCategory = (category: string) => {
@@ -338,10 +397,18 @@ export function AdminStoreActions() {
       return {
         ...f,
         category,
-        dueDate: addDaysYmd(getBangkokTodayDateString(), storeActionDefaultDueDays(category)),
         actionPlan: planUntouched ? nextTpl : f.actionPlan,
       }
     })
+  }
+
+  const onFormHorizon = (horizon: string) => {
+    const h = normalizeStoreActionHorizon(horizon)
+    setForm((f) => ({
+      ...f,
+      horizon: h,
+      dueDate: storeActionDueDateForHorizon(h, getBangkokTodayDateString()),
+    }))
   }
 
   const handleUpload = async (files: FileList | null, target: "form" | "before" | "after") => {
@@ -372,12 +439,20 @@ export function AdminStoreActions() {
     }
     setSaveLoading(true)
     try {
+      const audience = storeActionAudienceFromPayload(
+        buildBroadcastTargetPayload(targetSelection, {
+          storeOptions: optionCounts.storeOptionCount,
+          positionOptions: optionCounts.positionOptionCount,
+          permissionOptions: optionCounts.permissionOptionCount,
+        })
+      )
       const res = await saveStoreActionItem({
         store: form.store,
         title: form.title,
         description: form.description,
         category: form.category,
         priority: form.priority,
+        horizon: form.horizon,
         ownerName: form.ownerName,
         ownerUserId: form.ownerUserId,
         dueDate: form.dueDate,
@@ -389,6 +464,10 @@ export function AdminStoreActions() {
         sourceRef: form.sourceRef,
         checkItemId: form.checkItemId,
         createdBy: writerName,
+        targetStore: audience.targetStore,
+        targetRole: audience.targetRole,
+        targetPermissionGroup: audience.targetPermissionGroup,
+        targetRecipients: audience.targetRecipients,
       })
       if (res.success) {
         const base = translateApiMessage(res.message, t) || t("store_check_saved")
@@ -414,12 +493,20 @@ export function AdminStoreActions() {
     if (!edit?.id) return
     setSaveLoading(true)
     try {
+      const audience = storeActionAudienceFromPayload(
+        buildBroadcastTargetPayload(editTargetSelection, {
+          storeOptions: editOptionCounts.storeOptionCount,
+          positionOptions: editOptionCounts.positionOptionCount,
+          permissionOptions: editOptionCounts.permissionOptionCount,
+        })
+      )
       const res = await updateStoreActionItem(edit.id, {
         store: edit.store,
         title: edit.title,
         description: edit.description,
         category: edit.category,
         priority: edit.priority,
+        horizon: edit.horizon || "week",
         ownerName: edit.ownerName,
         ownerUserId: edit.ownerUserId,
         dueDate: edit.dueDate,
@@ -431,6 +518,10 @@ export function AdminStoreActions() {
         photoUrls: edit.photoUrls,
         afterPhotoUrls: edit.afterPhotoUrls,
         status: edit.status,
+        targetStore: audience.targetStore,
+        targetRole: audience.targetRole,
+        targetPermissionGroup: audience.targetPermissionGroup,
+        targetRecipients: audience.targetRecipients,
       })
       if (res.success) {
         await appAlert(translateApiMessage(res.message, t) || t("store_check_updated"))
@@ -536,6 +627,11 @@ export function AdminStoreActions() {
               </Card>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">
+            {t("action_field_horizon")}: {label.horizon("day")} {stats.byHorizon.day} · {label.horizon("week")}{" "}
+            {stats.byHorizon.week} · {label.horizon("month_30")} {stats.byHorizon.month_30} ·{" "}
+            {label.horizon("month_cal")} {stats.byHorizon.month_cal}
+          </p>
           {overdueByStore.length > 0 ? (
             <Card>
               <CardContent className="space-y-2 p-3">
@@ -620,6 +716,19 @@ export function AdminStoreActions() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={listHorizon} onValueChange={setListHorizon}>
+              <SelectTrigger className="h-9 w-[140px] text-xs">
+                <SelectValue placeholder={t("action_field_horizon")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{t("action_filter_all")}</SelectItem>
+                {STORE_ACTION_HORIZONS.map((h) => (
+                  <SelectItem key={h} value={h}>
+                    {label.horizon(h)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <label className="flex h-9 items-center gap-1.5 rounded-md border px-2 text-xs">
               <input type="checkbox" checked={listMine} onChange={(e) => setListMine(e.target.checked)} />
               {t("action_filter_mine")}
@@ -646,6 +755,7 @@ export function AdminStoreActions() {
                     <th className="p-2">{t("action_field_title")}</th>
                     <th className="p-2">{t("action_field_owner")}</th>
                     <th className="p-2">{t("action_field_verifier")}</th>
+                    <th className="p-2">{t("action_field_horizon")}</th>
                     <th className="p-2">{t("action_field_due")}</th>
                     <th className="p-2">{t("action_field_status")}</th>
                     <th className="p-2">{t("action_field_repeat")}</th>
@@ -662,6 +772,7 @@ export function AdminStoreActions() {
                       <td className="p-2 font-medium">{trAction(row.title)}</td>
                       <td className="p-2">{row.ownerName}</td>
                       <td className="p-2">{row.verifierName}</td>
+                      <td className="p-2">{label.horizon(row.horizon || "week")}</td>
                       <td className={cn("p-2 tabular-nums", row.overdue && "font-semibold text-red-600")}>
                         {row.dueDate || "—"}
                       </td>
@@ -671,7 +782,7 @@ export function AdminStoreActions() {
                   ))}
                   {!listLoading && listData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                      <td colSpan={8} className="p-6 text-center text-muted-foreground">
                         {t("action_empty")}
                       </td>
                     </tr>
@@ -695,7 +806,8 @@ export function AdminStoreActions() {
                     <span className={row.overdue ? "text-red-600 font-semibold" : ""}>{row.dueDate || "—"}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 text-muted-foreground">
-                    {row.store} · {row.ownerName} · {label.status(row.status)} {repeatBadge(row.repeatCount || 0)}
+                    {row.store} · {label.horizon(row.horizon || "week")} · {row.ownerName} · {label.status(row.status)}{" "}
+                    {repeatBadge(row.repeatCount || 0)}
                   </div>
                 </button>
               ))}
@@ -736,9 +848,19 @@ export function AdminStoreActions() {
                     {t("action_check_item")}: {edit.checkItemId}
                   </p>
                 ) : null}
+                <div className="space-y-1.5 rounded-md border p-2">
+                  <p className="text-xs font-semibold">{t("action_audience_title")}</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">{t("action_audience_hint")}</p>
+                  <BroadcastTargetPicker
+                    value={editTargetSelection}
+                    onChange={setEditTargetSelection}
+                    onOptionCountsChange={setEditOptionCounts}
+                    employeeListHeight={90}
+                  />
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs text-muted-foreground">{t("store_filter_store")}</label>
+                    <label className="text-xs text-muted-foreground">{t("action_field_problem_store")}</label>
                     <Input value={edit.store} onChange={(e) => setEdit({ ...edit, store: e.target.value })} className="h-9 text-xs" />
                   </div>
                   <div>
@@ -780,6 +902,31 @@ export function AdminStoreActions() {
                       preferHq
                       onChange={(p) => setEdit({ ...edit, verifierName: p.name, verifierUserId: p.userId })}
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("action_field_horizon")}</label>
+                    <Select
+                      value={normalizeStoreActionHorizon(edit.horizon)}
+                      onValueChange={(v) => {
+                        const h = normalizeStoreActionHorizon(v)
+                        setEdit({
+                          ...edit,
+                          horizon: h,
+                          dueDate: storeActionDueDateForHorizon(h, getBangkokTodayDateString()),
+                        })
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STORE_ACTION_HORIZONS.map((h) => (
+                          <SelectItem key={h} value={h}>
+                            {storeActionHorizonOptionLabel(h, t)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">{t("action_field_due")}</label>
@@ -919,9 +1066,19 @@ export function AdminStoreActions() {
               {t("action_check_item")}: {form.checkItemId}
             </p>
           ) : null}
+          <div className="space-y-1.5 rounded-md border p-2">
+            <p className="text-xs font-semibold">{t("action_audience_title")}</p>
+            <p className="text-[11px] text-muted-foreground leading-snug">{t("action_audience_hint")}</p>
+            <BroadcastTargetPicker
+              value={targetSelection}
+              onChange={setTargetSelection}
+              onOptionCountsChange={setOptionCounts}
+              employeeListHeight={100}
+            />
+          </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <div>
-              <label className="text-xs text-muted-foreground">{t("store_filter_store")}</label>
+              <label className="text-xs text-muted-foreground">{t("action_field_problem_store")}</label>
               <Select value={form.store} onValueChange={(v) => setForm((f) => ({ ...f, store: v }))}>
                 <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder={t("store_filter_store")} />
@@ -944,7 +1101,22 @@ export function AdminStoreActions() {
                 <SelectContent>
                   {STORE_ACTION_CATEGORIES.map((c) => (
                     <SelectItem key={c} value={c}>
-                      {label.category(c)} ({t("action_due_days").replace("{n}", String(storeActionDefaultDueDays(c)))})
+                      {label.category(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">{t("action_field_horizon")}</label>
+              <Select value={form.horizon} onValueChange={onFormHorizon}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STORE_ACTION_HORIZONS.map((h) => (
+                    <SelectItem key={h} value={h}>
+                      {storeActionHorizonOptionLabel(h, t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
