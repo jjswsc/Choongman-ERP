@@ -66,6 +66,8 @@ export function SalesSortableTh({
   align = "right",
   muted,
   className = "",
+  rowSpan,
+  colSpan,
   onClick,
 }: {
   label: React.ReactNode
@@ -74,6 +76,8 @@ export function SalesSortableTh({
   align?: "left" | "right" | "center"
   muted?: boolean
   className?: string
+  rowSpan?: number
+  colSpan?: number
   onClick: () => void
 }) {
   const icon = !active ? (
@@ -89,6 +93,8 @@ export function SalesSortableTh({
     <th
       className={`px-2 py-2 ${alignCn} ${muted ? "text-muted-foreground font-normal" : ""} ${className}`}
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      rowSpan={rowSpan}
+      colSpan={colSpan}
     >
       <button
         type="button"

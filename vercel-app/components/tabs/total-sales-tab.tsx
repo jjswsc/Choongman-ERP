@@ -55,6 +55,11 @@ import {
   prettyChickenPartLibraryLabel,
 } from "@/lib/pos-print-translate"
 import {
+  SalesSortableTh,
+  sortSalesRows,
+  useSalesTableSort,
+} from "@/components/tabs/sales-management-sortable"
+import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -71,6 +76,19 @@ import {
 } from "recharts"
 
 type PeriodPreset = "today" | "month" | "custom"
+
+/** 일반·부위합산 테이블 정렬 키 */
+type TotalSalesSortKey =
+  | "name"
+  | "categoryMain"
+  | "category"
+  | "qty"
+  | "qtyPct"
+  | "sales"
+  | "salesPct"
+
+/** 채널 비교 테이블 정렬 키 (채널별은 `qty:dine_in` / `sales:takeout` 형태) */
+type TotalSalesCompareSortKey = "name" | "totalQty" | "totalSales" | `qty:${PosOrderTypeValue}` | `sales:${PosOrderTypeValue}`
 
 const LEVELS: { id: PosSalesHierarchyLevel; labelKey: string; fallback: string }[] = [
   { id: "main", labelKey: "totalSalesLevelMain", fallback: "대분류" },
@@ -219,6 +237,17 @@ export function TotalSalesTab() {
   )
   const [snapshotToday, setSnapshotToday] = React.useState<{ qty: number; sales: number } | null>(null)
   const [snapshotMonth, setSnapshotMonth] = React.useState<{ qty: number; sales: number } | null>(null)
+
+  const {
+    sortKey,
+    sortDir,
+    toggleSort,
+  } = useSalesTableSort<TotalSalesSortKey>("sales", "desc")
+  const {
+    sortKey: compareSortKey,
+    sortDir: compareSortDir,
+    toggleSort: toggleCompareSort,
+  } = useSalesTableSort<TotalSalesCompareSortKey>("totalSales", "desc")
 
   const [posOptions, setPosOptions] = React.useState<string[]>([])
   const [posOptionsLoading, setPosOptionsLoading] = React.useState(false)
@@ -734,6 +763,50 @@ export function TotalSalesTab() {
     const rows = buildHierarchyChannelCompareRows(level, byOrderTypeLevels, compareChannelsList)
     return filterHierarchyRowsByDrill(rows, level, drillFilter)
   }, [compareChannels, byOrderTypeLevels, level, compareChannelsList, drillFilter])
+
+  const sortedActiveRows = React.useMemo(
+    () =>
+      sortSalesRows(
+        activeRows,
+        sortDir,
+        (r) => {
+          if (sortKey === "name") return r.label
+          if (sortKey === "categoryMain") return r.categoryMain ?? ""
+          if (sortKey === "category") return r.category ?? ""
+          if (sortKey === "qty") return r.qty
+          if (sortKey === "sales") return r.sales
+          if (sortKey === "qtyPct") return (r as OptionGroupRow).qtyPct ?? 0
+          if (sortKey === "salesPct") return (r as OptionGroupRow).salesPct ?? 0
+          return r.sales
+        },
+        (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true })
+      ),
+    [activeRows, sortKey, sortDir]
+  )
+
+  const sortedCompareRows = React.useMemo(
+    () =>
+      sortSalesRows(
+        compareRows,
+        compareSortDir,
+        (r) => {
+          if (compareSortKey === "name") return r.label
+          if (compareSortKey === "totalQty") return r.totalQty
+          if (compareSortKey === "totalSales") return r.totalSales
+          if (compareSortKey.startsWith("qty:")) {
+            const ch = compareSortKey.slice(4) as PosOrderTypeValue
+            return r.channels[ch]?.qty ?? 0
+          }
+          if (compareSortKey.startsWith("sales:")) {
+            const ch = compareSortKey.slice(6) as PosOrderTypeValue
+            return r.channels[ch]?.sales ?? 0
+          }
+          return r.totalSales
+        },
+        (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true })
+      ),
+    [compareRows, compareSortKey, compareSortDir]
+  )
 
   const totals = compareChannels
     ? compareRows.reduce(
@@ -1417,9 +1490,15 @@ export function TotalSalesTab() {
                     <th className="py-2 pl-3 text-left" rowSpan={2}>
                       #
                     </th>
-                    <th className="py-2 pr-2 text-left" rowSpan={2}>
-                      {tr("totalSalesColName", "명칭")}
-                    </th>
+                    <SalesSortableTh
+                      label={tr("totalSalesColName", "명칭")}
+                      active={compareSortKey === "name"}
+                      dir={compareSortDir}
+                      align="left"
+                      className="py-2 pr-2"
+                      rowSpan={2}
+                      onClick={() => toggleCompareSort("name")}
+                    />
                     {compareChannelsList.map((ch) => (
                       <th
                         key={ch}
@@ -1441,44 +1520,109 @@ export function TotalSalesTab() {
                   {!compareChannels || optionGroupMode ? (
                     <>
                       <th className="w-12 py-2 pl-3 text-left">#</th>
-                      <th className="py-2 text-left">{tr("totalSalesColName", "명칭")}</th>
+                      <SalesSortableTh
+                        label={tr("totalSalesColName", "명칭")}
+                        active={sortKey === "name"}
+                        dir={sortDir}
+                        align="left"
+                        className="py-2"
+                        onClick={() => toggleSort("name")}
+                      />
                       {!optionGroupMode && level !== "main" ? (
-                        <th className="hidden py-2 text-left md:table-cell">
-                          {tr("totalSalesLevelMain", "대분류")}
-                        </th>
+                        <SalesSortableTh
+                          label={tr("totalSalesLevelMain", "대분류")}
+                          active={sortKey === "categoryMain"}
+                          dir={sortDir}
+                          align="left"
+                          className="hidden py-2 md:table-cell"
+                          onClick={() => toggleSort("categoryMain")}
+                        />
                       ) : null}
                       {!optionGroupMode && (level === "option" || level === "menu") ? (
-                        <th className="hidden py-2 text-left lg:table-cell">
-                          {tr("totalSalesLevelCategory", "카테고리")}
-                        </th>
+                        <SalesSortableTh
+                          label={tr("totalSalesLevelCategory", "카테고리")}
+                          active={sortKey === "category"}
+                          dir={sortDir}
+                          align="left"
+                          className="hidden py-2 lg:table-cell"
+                          onClick={() => toggleSort("category")}
+                        />
                       ) : null}
-                      <th className="py-2 pr-3 text-right">{tr("salesQuantity", "수량")}</th>
+                      <SalesSortableTh
+                        label={tr("salesQuantity", "수량")}
+                        active={sortKey === "qty"}
+                        dir={sortDir}
+                        className="py-2 pr-3"
+                        onClick={() => toggleSort("qty")}
+                      />
                       {optionGroupMode ? (
-                        <th className="py-2 pr-3 text-right">{tr("totalSalesQtyPct", "수량 비율")}</th>
+                        <SalesSortableTh
+                          label={tr("totalSalesQtyPct", "수량 비율")}
+                          active={sortKey === "qtyPct"}
+                          dir={sortDir}
+                          className="py-2 pr-3"
+                          onClick={() => toggleSort("qtyPct")}
+                        />
                       ) : null}
-                      <th className="py-2 pr-3 text-right">{tr("pL_sales", "매출")}</th>
+                      <SalesSortableTh
+                        label={tr("pL_sales", "매출")}
+                        active={sortKey === "sales"}
+                        dir={sortDir}
+                        className="py-2 pr-3"
+                        onClick={() => toggleSort("sales")}
+                      />
                       {optionGroupMode ? (
-                        <th className="py-2 pr-3 text-right">{tr("totalSalesSalesPct", "매출 비율")}</th>
+                        <SalesSortableTh
+                          label={tr("totalSalesSalesPct", "매출 비율")}
+                          active={sortKey === "salesPct"}
+                          dir={sortDir}
+                          className="py-2 pr-3"
+                          onClick={() => toggleSort("salesPct")}
+                        />
                       ) : null}
                     </>
                   ) : (
                     <>
                       {compareChannelsList.map((ch) => (
                         <React.Fragment key={`${ch}-sub`}>
-                          <th className="border-l border-border/60 px-1.5 py-1 text-center text-[11px] font-normal">
-                            {tr("salesQuantity", "수량")}
-                          </th>
-                          <th className="px-1.5 py-1 text-center text-[11px] font-normal">
-                            {tr("pL_sales", "매출")}
-                          </th>
+                          <SalesSortableTh
+                            label={tr("salesQuantity", "수량")}
+                            active={compareSortKey === `qty:${ch}`}
+                            dir={compareSortDir}
+                            align="center"
+                            muted
+                            className="border-l border-border/60 px-1.5 py-1"
+                            onClick={() => toggleCompareSort(`qty:${ch}`)}
+                          />
+                          <SalesSortableTh
+                            label={tr("pL_sales", "매출")}
+                            active={compareSortKey === `sales:${ch}`}
+                            dir={compareSortDir}
+                            align="center"
+                            muted
+                            className="px-1.5 py-1"
+                            onClick={() => toggleCompareSort(`sales:${ch}`)}
+                          />
                         </React.Fragment>
                       ))}
-                      <th className="border-l border-border/60 px-1.5 py-1 text-center text-[11px] font-normal">
-                        {tr("salesQuantity", "수량")}
-                      </th>
-                      <th className="px-1.5 py-1 pr-2 text-center text-[11px] font-normal">
-                        {tr("pL_sales", "매출")}
-                      </th>
+                      <SalesSortableTh
+                        label={tr("salesQuantity", "수량")}
+                        active={compareSortKey === "totalQty"}
+                        dir={compareSortDir}
+                        align="center"
+                        muted
+                        className="border-l border-border/60 px-1.5 py-1"
+                        onClick={() => toggleCompareSort("totalQty")}
+                      />
+                      <SalesSortableTh
+                        label={tr("pL_sales", "매출")}
+                        active={compareSortKey === "totalSales"}
+                        dir={compareSortDir}
+                        align="center"
+                        muted
+                        className="px-1.5 py-1 pr-2"
+                        onClick={() => toggleCompareSort("totalSales")}
+                      />
                     </>
                   )}
                 </tr>
@@ -1491,14 +1635,14 @@ export function TotalSalesTab() {
                     </td>
                   </tr>
                 ) : compareChannels && !optionGroupMode ? (
-                  compareRows.length === 0 ? (
+                  sortedCompareRows.length === 0 ? (
                     <tr>
                       <td colSpan={compareTableColSpan} className="py-10 text-center text-muted-foreground">
                         {tr("salesDataNone", "데이터 없음")}
                       </td>
                     </tr>
                   ) : (
-                    compareRows.map((row, idx) => (
+                    sortedCompareRows.map((row, idx) => (
                       <tr key={row.key} className="border-b hover:bg-muted/30">
                         <td className="py-2 pl-3 text-muted-foreground tabular-nums">{idx + 1}</td>
                         <td className="max-w-0 py-2 pr-2" title={row.label}>
@@ -1542,14 +1686,14 @@ export function TotalSalesTab() {
                       </tr>
                     ))
                   )
-                ) : activeRows.length === 0 ? (
+                ) : sortedActiveRows.length === 0 ? (
                   <tr>
                     <td colSpan={optionGroupMode ? 6 : 6} className="py-10 text-center text-muted-foreground">
                       {tr("salesDataNone", "데이터 없음")}
                     </td>
                   </tr>
                 ) : (
-                  activeRows.map((row, idx) => {
+                  sortedActiveRows.map((row, idx) => {
                     const pct = optionGroupMode ? (row as OptionGroupRow) : null
                     return (
                     <tr key={row.key} className="border-b hover:bg-muted/30">

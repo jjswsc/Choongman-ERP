@@ -8131,7 +8131,7 @@ orderItemQty: 'Qty',
   helpSum_admin_total_sales:
     'View menu sales in four levels (main category, category, main menu, option). Filter by hall / takeout / delivery, search menus, and see today/this-month summaries.',
   helpHow_admin_total_sales:
-    '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑤ If orders are truncated, split the date range and query again.',
+    '① Choose store (HQ), period, and order type; optional menu search, then Query.\n② Turn on Compare channels to see dine-in, takeout, and delivery side by side for the same items.\n③ Switch tabs for main category, category, main menu, or option breakdown.\n④ Click table headers (name, main category, category, qty, sales, etc.) to sort ascending/descending.\n⑤ With a search term, cards show today vs this-month totals (Bangkok business day).\n⑥ If orders are truncated, split the date range and query again.',
   helpSum_admin_sales_management:
     'Report hub for POS completed-order sales: period, store, channel, menu, discounts, and forecasts. Supports saved filters, Excel export, and offline cache. Channel check matches delivery apps, QR, and card on Bangkok calendar dates (QR uses bank deposit date; delivery/card use recognition date for next-day payout) so you can find mismatched days.',
   helpHow_admin_sales_management:
