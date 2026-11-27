@@ -82,17 +82,22 @@ export function VisitNewActionsDialog(props: {
     }))
   }
 
-  const onPhoto = async (files: FileList | null) => {
-    if (!files?.length) return
+  const onPhoto = async (files: ArrayLike<File> | null) => {
+    const list = files ? Array.from(files) : []
+    if (!list.length) return
     setBusy(true)
     try {
-      for (let i = 0; i < files.length; i++) {
-        const res = await uploadStoreActionPhoto(store, files[i])
-        if (res.success && res.url) {
-          const url = res.url
-          setForm((f) => ({ ...f, photoUrls: [...f.photoUrls, url] }))
-        } else {
-          await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+      for (const file of list) {
+        try {
+          const res = await uploadStoreActionPhoto(store, file)
+          if (res.success && res.url) {
+            const url = res.url
+            setForm((f) => ({ ...f, photoUrls: [...f.photoUrls, url] }))
+          } else {
+            await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+          }
+        } catch (e) {
+          await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
         }
       }
     } finally {
@@ -240,8 +245,9 @@ export function VisitNewActionsDialog(props: {
               multiple
               className="hidden"
               onChange={(e) => {
-                void onPhoto(e.target.files)
+                const picked = Array.from(e.target.files || [])
                 e.target.value = ""
+                void onPhoto(picked)
               }}
             />
           </div>

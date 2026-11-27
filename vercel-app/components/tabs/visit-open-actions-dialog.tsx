@@ -34,17 +34,22 @@ export function VisitOpenActionsDialog(props: {
   const fileRef = useRef<HTMLInputElement>(null)
   const uploadTarget = useRef<number | null>(null)
 
-  const onPickPhoto = async (files: FileList | null) => {
+  const onPickPhoto = async (files: ArrayLike<File> | null) => {
     const id = uploadTarget.current
     uploadTarget.current = null
-    if (!files?.length || id == null) return
+    const list = files ? Array.from(files) : []
+    if (!list.length || id == null) return
     setBusyId(id)
     try {
       const urls: string[] = []
-      for (let i = 0; i < files.length; i++) {
-        const res = await uploadStoreActionPhoto(store, files[i])
-        if (res.success && res.url) urls.push(res.url)
-        else await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+      for (const file of list) {
+        try {
+          const res = await uploadStoreActionPhoto(store, file)
+          if (res.success && res.url) urls.push(res.url)
+          else await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+        } catch (e) {
+          await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+        }
       }
       if (urls.length) setAfterPhotos((m) => ({ ...m, [id]: [...(m[id] || []), ...urls] }))
     } finally {
@@ -175,8 +180,9 @@ export function VisitOpenActionsDialog(props: {
           multiple
           className="hidden"
           onChange={(e) => {
-            void onPickPhoto(e.target.files)
+            const picked = Array.from(e.target.files || [])
             e.target.value = ""
+            void onPickPhoto(picked)
           }}
         />
         <DialogFooter>

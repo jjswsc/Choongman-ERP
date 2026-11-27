@@ -68,12 +68,17 @@ function bkk(iso: string, withTime = false): string {
     : d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
 }
 
-async function uploadPhotos(store: string, files: FileList, t: T): Promise<string[]> {
+async function uploadPhotos(store: string, files: ArrayLike<File>, t: T): Promise<string[]> {
+  const list = Array.from(files)
   const urls: string[] = []
-  for (let i = 0; i < files.length; i++) {
-    const res = await uploadStoreActionPhoto(store, files[i])
-    if (res.success && res.url) urls.push(res.url)
-    else await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+  for (const file of list) {
+    try {
+      const res = await uploadStoreActionPhoto(store, file)
+      if (res.success && res.url) urls.push(res.url)
+      else await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+    } catch (e) {
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+    }
   }
   return urls
 }
@@ -114,9 +119,16 @@ export function StoreCheckIssueCard(props: {
   const [note, setNote] = useState("")
   const [resolution, setResolution] = useState(item.resolutionNote || "")
   const [newAfter, setNewAfter] = useState<string[]>([])
+  const pendingAfterRef = useRef<string[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [historyKey, setHistoryKey] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const server = new Set(item.afterPhotoUrls || [])
+    pendingAfterRef.current = pendingAfterRef.current.filter((u) => !server.has(u))
+    setNewAfter(pendingAfterRef.current)
+  }, [item.id, item.afterPhotoUrls])
 
   const issueTexts = useMemo(
     () =>
@@ -142,6 +154,7 @@ export function StoreCheckIssueCard(props: {
         return
       }
       setNote("")
+      pendingAfterRef.current = []
       setNewAfter([])
       setHistoryKey((k) => k + 1)
       onChanged()
@@ -341,13 +354,32 @@ export function StoreCheckIssueCard(props: {
             multiple
             className="hidden"
             onChange={(e) => {
-              const files = e.target.files
+              // iOS/Safari: value="" 전에 FileList를 복사하지 않으면 파일이 비어 업로드가 조용히 스킵됨
+              const picked = Array.from(e.target.files || [])
               e.target.value = ""
-              if (!files?.length) return
+              if (!picked.length) return
               setBusy(true)
-              void uploadPhotos(item.store, files, t)
-                .then((urls) => setNewAfter((u) => [...u, ...urls]))
-                .finally(() => setBusy(false))
+              void (async () => {
+                try {
+                  const urls = await uploadPhotos(item.store, picked, t)
+                  if (!urls.length) return
+                  pendingAfterRef.current = [...pendingAfterRef.current, ...urls]
+                  setNewAfter(pendingAfterRef.current)
+                  const merged = [...(item.afterPhotoUrls || []), ...pendingAfterRef.current]
+                  // 재확인 전에도 서버에 바로 저장 — 화면 새로고침·카드 remount 후에도 유지
+                  const res = await updateStoreActionItem(item.id, { afterPhotoUrls: merged })
+                  if (!res.success) {
+                    await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail"))
+                    return
+                  }
+                  setHistoryKey((k) => k + 1)
+                  onChanged()
+                } catch (err) {
+                  await appAlert(t("msg_error_prefix") + (err instanceof Error ? err.message : String(err)))
+                } finally {
+                  setBusy(false)
+                }
+              })()
             }}
           />
         </div>
@@ -899,16 +931,20 @@ export function StoreCheckIssueDialog(props: {
           multiple
           className="hidden"
           onChange={(e) => {
-            const files = e.target.files
+            // iOS/Safari: value="" 전에 FileList 스냅샷 필수
+            const picked = Array.from(e.target.files || [])
             const uid = uploadFor.current
             e.target.value = ""
             uploadFor.current = null
-            if (!files?.length || uid == null) return
+            if (!picked.length || uid == null) return
             setBusy(true)
-            void uploadPhotos(store, files, t)
+            void uploadPhotos(store, picked, t)
               .then((urls) =>
                 setDrafts((ds) => ds.map((x) => (x.uid === uid ? { ...x, photoUrls: [...x.photoUrls, ...urls] } : x)))
               )
+              .catch(async (err) => {
+                await appAlert(t("msg_error_prefix") + (err instanceof Error ? err.message : String(err)))
+              })
               .finally(() => setBusy(false))
           }}
         />

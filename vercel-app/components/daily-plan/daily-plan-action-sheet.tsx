@@ -196,7 +196,11 @@ export function DailyPlanActionSheet(props: {
                     accept="image/*"
                     capture="environment"
                     className="hidden"
-                    onChange={(e) => void onPhoto(e.target.files?.[0])}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ""
+                      void onPhoto(file)
+                    }}
                   />
                   <Button
                     size="sm"

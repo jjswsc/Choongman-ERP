@@ -10,17 +10,19 @@ function stripExtension(name: string): string {
 /**
  * 개선과제·방문 사진 업로드 전 축소·JPEG 재인코딩.
  * 실패 시 원본 파일을 그대로 반환(호출측 5MB 한도).
+ * iOS 카메라·앨범은 type이 비어 있거나 HEIC인 경우가 많아 decode를 먼저 시도한다.
  */
 export async function prepareStoreActionPhotoForUpload(file: File): Promise<File> {
   if (typeof window === 'undefined') return file
-  if (!file.type.startsWith('image/')) return file
-  // HEIC 등은 브라우저 decode 실패 많음 → 원본 유지
-  if (/heic|heif/i.test(file.type) || /\.heic$|\.heif$/i.test(file.name)) return file
+  const mime = String(file.type || '').toLowerCase()
+  const nameLooksImage = /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(file.name || '')
+  if (mime && !mime.startsWith('image/') && !nameLooksImage) return file
 
   let bmp: ImageBitmap | undefined
   try {
     bmp = await createImageBitmap(file)
   } catch {
+    // HEIC 등 decode 실패 → 원본 유지(호출측 5MB·MIME 검사)
     return file
   }
 
