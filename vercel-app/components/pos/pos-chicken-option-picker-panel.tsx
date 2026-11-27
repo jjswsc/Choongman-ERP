@@ -14,6 +14,7 @@ import {
   resolveChickenOptionPickerPlan,
   type ChickenTwoPhasePhase,
 } from "@/lib/pos-chicken-option-picker-plan"
+import { resolveMultistepStepDisplayLabel } from "@/lib/pos-chicken-option-inference"
 import { isPosCartOptionLabelMatchPickerEnabled } from "@/lib/pos-cart-option-label-rollout"
 import { normalizePosMenuImageUrl } from "@/lib/pos-menu-image-url"
 
@@ -289,7 +290,14 @@ export function PosChickenOptionPickerPanel({
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {stepValues.map((val) => (
+            {stepValues.map((val) => {
+              const chipLabel = resolveMultistepStepDisplayLabel({
+                stepValue: val,
+                groupKey,
+                menuCode: menu.code,
+                options,
+              })
+              return (
               <button
                 key={val}
                 type="button"
@@ -300,9 +308,10 @@ export function PosChickenOptionPickerPanel({
                     : 'rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-800 transition hover:border-emerald-400 hover:bg-emerald-50'
                 }
               >
-                {translateChickenPartLabel(val)}
+                {translateChickenPartLabel(chipLabel)}
               </button>
-            ))}
+              )
+            })}
           </div>
         )}
         {!groupRequired && (

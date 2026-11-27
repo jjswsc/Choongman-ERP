@@ -190,6 +190,36 @@ export function collectPosOptionPickerStepValues(params: {
 }
 
 /**
+ * 다단계 칩 버튼에 보여줄 라벨.
+ * meal_option 등: 관리자 `name`(Combo/Set)을 우선 — 단계값에 남은 `K044 — Soy Sauce…` 긴 라벨이 QR/POS에 그대로 나오지 않게.
+ * 치킨 size/part 칩은 단계값(S/M/L·Boneless) 유지.
+ */
+export function resolveMultistepStepDisplayLabel(params: {
+  stepValue: string
+  groupKey: string
+  menuCode?: string
+  options: PosMenuOption[]
+}): string {
+  const val = String(params.stepValue ?? "").trim()
+  if (!val) return ""
+  const gk = String(params.groupKey ?? "").trim()
+  const gkLower = gk.toLowerCase()
+  if (
+    isChickenMenuCodeForOptions(params.menuCode) &&
+    (gkLower === "size" || gkLower === "part")
+  ) {
+    return val
+  }
+  const match = params.options.find(
+    (o) =>
+      o.optionType === "substitution" &&
+      String(o.optionStepValues?.[gk] ?? "").trim() === val
+  )
+  const name = String(match?.name ?? "").trim()
+  return name || val
+}
+
+/**
  * 레거시 치킨 옵션(이름: `M - Boneless` 등)이 일부 메뉴만 step 값(part)으로 저장된 경우,
  * 같은 카테고리 메뉴라도 옵션 UI가 `M 목록` vs `part 목록`으로 갈라진다.
  * size 그룹이 없고 M-이름 옵션이 주류인 메뉴는 평면 목록으로 강제해 메뉴 간 UI를 맞춘다.

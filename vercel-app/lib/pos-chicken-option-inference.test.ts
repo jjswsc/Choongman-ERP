@@ -6,10 +6,63 @@ import {
   isChickenSizeOnlyOptionName,
   menuHasChickenSizeProfile,
   resolveChickenDefaultOptionDisplayName,
+  resolveMultistepStepDisplayLabel,
   shouldUseFlatChickenMOptionPicker,
   collectChickenMultistepPriceListRows,
   computeChickenMultistepRowPrice,
 } from "@/lib/pos-chicken-option-inference"
+
+describe("resolveMultistepStepDisplayLabel", () => {
+  it("prefers short option name over long meal_option step value", () => {
+    const opt: PosMenuOption = {
+      id: "658",
+      menuId: "439",
+      name: "Combo",
+      priceModifier: 0,
+      priceModifierDelivery: null,
+      priceModifierPackaging: null,
+      sortOrder: 1,
+      optionType: "substitution",
+      optionStepValues: { meal_option: "K044 — Soy Sauce Pork Bulgogi Combo" },
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+    }
+    expect(
+      resolveMultistepStepDisplayLabel({
+        stepValue: "K044 — Soy Sauce Pork Bulgogi Combo",
+        groupKey: "meal_option",
+        menuCode: "K043",
+        options: [opt],
+      })
+    ).toBe("Combo")
+  })
+
+  it("keeps chicken size/part step chips as step values", () => {
+    const opt: PosMenuOption = {
+      id: "1",
+      menuId: "10",
+      name: "M - Boneless",
+      priceModifier: 30,
+      priceModifierDelivery: null,
+      priceModifierPackaging: null,
+      sortOrder: 0,
+      optionType: "substitution",
+      optionStepValues: { size: "M", part: "Boneless" },
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+    }
+    expect(
+      resolveMultistepStepDisplayLabel({
+        stepValue: "M",
+        groupKey: "size",
+        menuCode: "C008",
+        options: [opt],
+      })
+    ).toBe("M")
+  })
+})
 
 describe("collectPosOptionPickerStepValues", () => {
   it("infers chicken part values when sidedish step exists but legacy rows lack part key", () => {
