@@ -8,10 +8,7 @@ import {
   type PosOptionSelectionGroupConfig,
   type PosPackagingChecklistOrderType,
 } from "@/lib/api-client"
-import {
-  normalizeOptionGroupsForMenu,
-  resolvePosOptionGroupRequired,
-} from "@/lib/pos-option-selection-groups"
+import { normalizeOptionGroupsForMenu } from "@/lib/pos-option-selection-groups"
 
 /** 원가 분석 화면 이동 후 복귀 시 편집 중이던 메뉴·노출 매장 복원 */
 export const POS_MENUS_EDIT_RESUME_KEY = "cm_pos_menus_edit_resume_v1"
@@ -317,7 +314,7 @@ export function normalizeOptionSelectionConfig(
   }
   return groups.map((key) => {
     const prev = byKey.get(key)
-    const required = resolvePosOptionGroupRequired(key, prev)
+    const required = prev?.required !== false
     const audience =
       prev?.audience === "delivery" || prev?.audience === "hall" ? prev.audience : "all"
     const minFromPrev = prev?.minSelect
