@@ -5703,7 +5703,7 @@ Only matters the employee must handle personally on a working day:
   bankRegisterLinkedOrderId: 'Linked order ID (optional)',
   bankRegisterLinkedOrderIdPlaceholder: 'e.g. 12345 (orders.id)',
   pL_purchaseCompositionNote:
-    'Purchases = (1) HQ warehouse outbound to the store, (2) direct inbound when that vendor has inbound in the month, (3) bank purchase payments for vendors with no inbound that month. Bank amounts use the recognition date when set, otherwise the withdrawal date. A vendor with inbound in the same month keeps the inbound amount only. HQ-vendor bank payments and direct inbound are left out so they are not double-counted with outbound.',
+    'Purchases = (1) HQ warehouse outbound to the store, (2) direct inbound amounts staff recorded on the inbound screen. Bank «purchase payment» transfers are for settlement only and are not included in store purchases / product cost. Direct-settlement items (e.g. Jidubang) still count on the store receipt date even without an HQ outbound log. HQ-vendor inbound and bank payments are left out so they are not double-counted with outbound. Petty-cash / cost-account cash purchases may still appear under purchases.',
   pL_purchaseCompositionNoteHq:
     'HQ purchases are external-vendor direct inbound plus bank purchase payments for vendors with no inbound that month. Bank amounts use the recognition date when set, otherwise the withdrawal date. Warehouse outbound to franchise stores is revenue, not purchases.',
   pL_accountUnclassified: 'Account not set',

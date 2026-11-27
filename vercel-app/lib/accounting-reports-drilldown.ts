@@ -458,8 +458,11 @@ export async function computeIncomeStatementPurchaseDrillDown(
   }
 
   const bankAcc: IncomeStatementPurchaseDrillBankRow[] = []
-  /** 그 거래처 직접입고가 있으면 통장 줄은 숨긴다. 입고가 없으면 인식일 기준 매입 대금을 보여 준다. */
-  const includeBankPaymentsInDrill = inboundAcc.length === 0
+  /**
+   * 본사 HQ: 그 거래처 직접입고가 있으면 통장 줄 숨김, 입고 없으면 매입대금 표시.
+   * 매장: 손익 매입이 직원 입고·본사 출고만 — 통장 purchase_payment 드릴 제외.
+   */
+  const includeBankPaymentsInDrill = isHQ && inboundAcc.length === 0
   if (includeBankPaymentsInDrill && accountIds.length > 0) {
     const idList = accountIds.join(',')
     let btRows: {

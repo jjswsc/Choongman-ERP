@@ -1371,7 +1371,7 @@ export const I18N_BASE_MS = {
   pL_diagInboundBankOverlap:
     'Kod pembekal di bawah mempunyai masuk inventori terus dan transaksi bank «bayaran pembelian» pada bulan yang sama. Jika pembelian yang sama direkod di kedua-dua tempat, jumlah pembelian mungkin berganda—kekalkan satu laluan atau laraskan mengikut dasar.',
   pL_purchaseCompositionNote:
-    'Pembelian = (1) jumlah pesanan HQ/logistik diluluskan (paparan cawangan), (2) kos pembekal luar dari masuk terus, (3) pengeluaran bank dikategorikan purchase_payment mengikut pembekal. Perbelanjaan bank biasa (expense) hanya masuk perbelanjaan, bukan pembelian. Elakkan pendua pembelian yang sama antara masuk stok dan bayaran pembelian.',
+    'Pembelian = (1) keluar gudang HQ ke cawangan, (2) jumlah masuk terus yang direkod kakitangan di skrin inbound. Bayaran pembelian bank ialah untuk penyelesaian sahaja dan tidak dimasukkan dalam pembelian/kos barang cawangan. Elakkan pendua dengan outbound HQ.',
   pL_accountUnclassified: 'Akaun tidak ditetapkan',
   pL_clickToExpand: 'Klik untuk kembangkan',
   pL_colAmount: 'Amaun',

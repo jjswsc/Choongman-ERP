@@ -1349,7 +1349,7 @@ export const I18N_BASE_VI = {
   pL_diagInboundBankOverlap:
     'Các mã nhà cung cấp dưới đây vừa có nhập kho trực tiếp vừa có giao dịch ngân hàng loại «thanh toán mua hàng» trong cùng tháng. Nếu cùng một lần mua được ghi hai nơi, tổng mua có thể bị cộng trùng—nên giữ một luồng hoặc điều chỉnh theo quy định.',
   pL_purchaseCompositionNote:
-    'Mua hàng = (1) tổng đơn HQ/logistics đã duyệt (màn cửa hàng), (2) giá vốn NCC ngoài từ nhập trực tiếp, (3) rút ngân hàng phân loại purchase_payment theo NCC. Chi phí ngân hàng thông thường (expense) chỉ vào chi phí, không vào mua hàng. Tránh ghi trùng cùng một giao dịch mua ở nhập kho và thanh toán mua hàng.',
+    'Mua hàng = (1) xuất kho HQ tới cửa hàng, (2) số nhập kho trực tiếp nhân viên ghi trên màn nhập. Thanh toán mua hàng qua ngân hàng chỉ để quyết toán, không đưa vào mua hàng/giá vốn cửa hàng.',
   pL_accountUnclassified: 'Chưa chọn tài khoản',
   pL_clickToExpand: 'Nhấn để mở rộng',
   pL_colAmount: 'Số tiền',

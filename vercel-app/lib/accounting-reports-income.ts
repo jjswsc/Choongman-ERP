@@ -1,4 +1,5 @@
 import {
+  bankPurchasePaymentsForStoreIncomeStatement,
   excludeBankPurchasesWhenDirectInboundPresent,
   normalizeVendorAmountMap,
 } from '@/lib/accounting-purchase-vendor-key'
@@ -731,11 +732,9 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
       bankPayVatByVendorStorePreHq,
       vendorPurchaseKeyIndexStore
     )
-    purchaseInboundBankOverlapVendorKeys = collectInboundBankOverlapVendorKeys(
-      inboundByVendorStoreNorm,
-      bankPayByVendorStoreNorm
-    )
-    const bankPayByVendorStore = excludeBankPurchasesWhenDirectInboundPresent(
+    // 매장: 통장 매입대금은 합계에 안 넣음 → 입고·통장 이중계상 경고도 불필요 (본사 HQ만 overlap 유지)
+    purchaseInboundBankOverlapVendorKeys = []
+    const bankPayByVendorStore = bankPurchasePaymentsForStoreIncomeStatement(
       inboundByVendorStoreNorm,
       bankPayByVendorStoreNorm
     )
@@ -748,7 +747,7 @@ export async function computeIncomeStatementReport(input: IncomeScopeInput): Pro
     mergeVendorAmountMap(purchaseVendorMapStore, cardBillPurchaseVendorMap)
     mergeVendorAmountMap(purchaseVendorVatMapAccum, bankPayVatByVendorStore)
     mergeVendorAmountMap(purchaseVendorVatMapAccum, cardBillPurchaseVendorVatMap)
-    /** 본사 출고 + 직접입고 + 입고 없는 거래처의 통장 매입 대금(인식일, 없으면 출금일) */
+    /** 본사 출고 + 직원 직접입고만. 통장 purchase_payment는 매입 합계 제외(지급 정산) */
     const inboundStoreTotal = Object.values(inboundByVendorStoreNorm).reduce((a, b) => a + b, 0)
     const bankStoreTotal = sumVendorMap(bankPayByVendorStore)
     for (const k of Object.keys(bankPayByVendorStore)) bankPurchaseVendorKeys.add(k)

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bankPurchasePaymentsForStoreIncomeStatement,
   buildVendorPurchaseKeyIndex,
   excludeBankPurchasesWhenDirectInboundPresent,
   normalizeVendorAmountMap,
   purchaseVendorKeyMatchesRaw,
   resolvePurchaseVendorKey,
+  STORE_INCOME_STATEMENT_USES_BANK_PURCHASE_PAYMENTS,
 } from './accounting-purchase-vendor-key'
 
 const index = buildVendorPurchaseKeyIndex([
@@ -37,6 +39,16 @@ describe('excludeBankPurchasesWhenDirectInboundPresent', () => {
     const inbound = { KLEVER: 886_692 }
     const bank = { KLEVER: 394_531, NICE: 12_480 }
     expect(excludeBankPurchasesWhenDirectInboundPresent(inbound, bank)).toEqual({ NICE: 12_480 })
+  })
+})
+
+describe('bankPurchasePaymentsForStoreIncomeStatement', () => {
+  it('never includes bank purchase payments in store PL (inbound-only policy)', () => {
+    expect(STORE_INCOME_STATEMENT_USES_BANK_PURCHASE_PAYMENTS).toBe(false)
+    const inbound = { KLEVER: 100 }
+    const bank = { NICE: 12_480 }
+    expect(bankPurchasePaymentsForStoreIncomeStatement(inbound, bank)).toEqual({})
+    expect(bankPurchasePaymentsForStoreIncomeStatement({}, bank)).toEqual({})
   })
 })
 

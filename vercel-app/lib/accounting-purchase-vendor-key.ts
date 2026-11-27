@@ -47,7 +47,7 @@ export function normalizeVendorAmountMap(
   return out
 }
 
-/** 같은 기간 직접입고가 있으면 통장 매입지급은 미지급 정산 — 손익 매입에서 제외 */
+/** 같은 기간 직접입고가 있으면 통장 매입지급은 미지급 정산 — 손익 매입에서 제외 (본사 HQ 분기용) */
 export function excludeBankPurchasesWhenDirectInboundPresent(
   inboundByVendor: Record<string, number>,
   bankByVendor: Record<string, number>
@@ -60,6 +60,22 @@ export function excludeBankPurchasesWhenDirectInboundPresent(
     out[k] = bankAmt
   }
   return out
+}
+
+/**
+ * 매장 손익 ต้นทุนสินค้า/รายจ่ายซื้อ:
+ * 직원 직접입고(stock_logs Inbound) + 본사 창고 출고만.
+ * 통장 purchase_payment(บัญชีโอนเงิน)는 지급 정산용 — 매입 합계에 넣지 않음.
+ */
+export const STORE_INCOME_STATEMENT_USES_BANK_PURCHASE_PAYMENTS = false
+
+/** 매장 손익에 넣을 통장 매입대금 맵. 정책상 항상 빈 객체. */
+export function bankPurchasePaymentsForStoreIncomeStatement(
+  inboundByVendor: Record<string, number>,
+  bankByVendor: Record<string, number>
+): Record<string, number> {
+  if (!STORE_INCOME_STATEMENT_USES_BANK_PURCHASE_PAYMENTS) return {}
+  return excludeBankPurchasesWhenDirectInboundPresent(inboundByVendor, bankByVendor)
 }
 
 export function purchaseVendorKeyMatchesRaw(

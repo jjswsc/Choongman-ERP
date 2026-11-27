@@ -3271,7 +3271,7 @@ orderItemQty: 'ຈຳນວນ',
   pL_diagInboundBankOverlap:
     'These vendor codes have both direct inbound (inventory) and bank “purchase payment” in the same month. If the same purchase was recorded in both places, purchase totals may be double-counted—keep one path or adjust amounts per your policy.',
   pL_purchaseCompositionNote:
-    'Purchases = (1) approved HQ/logistics order totals for the store view, (2) external-vendor cost from direct inbound, (3) bank withdrawals categorized as purchase_payment by vendor. General bank expenses (expense) hit expenses only, not purchases. HQ orders vs inbound serve different roles (order value vs stock cost); avoid duplicating the same economic purchase across inbound and purchase_payment.',
+    'Purchases = (1) HQ warehouse outbound to the store, (2) direct inbound amounts staff recorded on the inbound screen. Bank purchase payments are for settlement only and are not included in store purchases / product cost.',
   pL_accountUnclassified: 'Account not set',
   pL_clickToExpand: 'Click to expand',
   pL_colAmount: 'Amount',
