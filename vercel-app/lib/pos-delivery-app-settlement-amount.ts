@@ -19,6 +19,11 @@ function roundBaht(n: number): number {
 /**
  * 배달앱 결산 AUTO GROSS — Shopee 등 POS 수동 할인 후에도 payment_delivery_app이
  * 메뉴가(subtotal)로 남는 경우 total·discount_amt로 순매출을 복원한다.
+ *
+ * 웹훅 유입(Shopee 등)은 이미 payment_delivery_app = total_amount(할인 반영 순액)이고
+ * discount_amt는 플랫폼 프로모 역산값이다. 배송·포장비가 있으면 subtotal ≤ total 이라
+ * 예전 분기가 discount를 한 번 더 빼 POS 마감이 앱보다 작아졌다.
+ * → discount 역산은 payment가 여전히 메뉴 총액(subtotal)과 같을 때만 허용한다.
  */
 export function resolvePosDeliveryAppSettlementGross(row: PosDeliveryAppSettlementOrderRow): number {
   const del = Math.max(0, Number(row.payment_delivery_app) || 0)
@@ -32,8 +37,15 @@ export function resolvePosDeliveryAppSettlementGross(row: PosDeliveryAppSettleme
       if (total < del - 0.02) return roundBaht(total)
       if (subtotal > total + 0.02) return roundBaht(total)
     }
+    /** payment가 아직 메뉴가(할인 전)로 남은 수동 할인 케이스만 역산 */
+    const paymentStillLooksLikeMenuGross = subtotal > 0.005 && Math.abs(del - subtotal) <= 0.02
     const inferred = del - discount - coupon
-    if ((discount > 0.005 || coupon > 0.005) && inferred > 0.005 && inferred < del - 0.02) {
+    if (
+      paymentStillLooksLikeMenuGross &&
+      (discount > 0.005 || coupon > 0.005) &&
+      inferred > 0.005 &&
+      inferred < del - 0.02
+    ) {
       return roundBaht(inferred)
     }
     return roundBaht(del)

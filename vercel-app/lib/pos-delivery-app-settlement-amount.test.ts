@@ -63,6 +63,33 @@ describe('resolvePosDeliveryAppSettlementGross', () => {
       })
     ).toBe(106)
   })
+
+  it('keeps Shopee webhook net when fees make subtotal <= total (no double discount)', () => {
+    // subtotal 150 + fees 35 - promo 20 = total_amount 165 already in payment_delivery_app
+    expect(
+      resolvePosDeliveryAppSettlementGross({
+        payment_delivery_app: 165,
+        subtotal: 150,
+        total: 165,
+        discount_amt: 20,
+        delivery_app_code: 'shopee',
+        order_type: 'delivery',
+      })
+    ).toBe(165)
+  })
+
+  it('keeps webhook net when payment already equals discounted total without fees', () => {
+    expect(
+      resolvePosDeliveryAppSettlementGross({
+        payment_delivery_app: 106,
+        subtotal: 129,
+        total: 106,
+        discount_amt: 23,
+        delivery_app_code: 'shopee',
+        order_type: 'delivery',
+      })
+    ).toBe(106)
+  })
 })
 
 describe('syncPosPaymentDeliveryAppToNetTotal', () => {

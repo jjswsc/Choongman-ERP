@@ -116,10 +116,16 @@ AS $$
                   > GREATEST(COALESCE(o.total, 0), 0) + 0.02
               )
             THEN GREATEST(COALESCE(o.total, 0), 0)
+            -- payment가 메뉴가(subtotal)와 같을 때만 할인 역산 (웹훅 순액+프로모 이중차감 방지)
             WHEN (
               GREATEST(COALESCE(o.discount_amt, 0), 0)
               + GREATEST(COALESCE(o.coupon_discount_amt, 0), 0)
             ) > 0.005
+              AND GREATEST(COALESCE(o.subtotal, 0), 0) > 0.005
+              AND ABS(
+                GREATEST(COALESCE(o.payment_delivery_app, 0), 0)
+                - GREATEST(COALESCE(o.subtotal, 0), 0)
+              ) <= 0.02
               AND GREATEST(COALESCE(o.payment_delivery_app, 0), 0)
                 > GREATEST(COALESCE(o.discount_amt, 0), 0)
                   + GREATEST(COALESCE(o.coupon_discount_amt, 0), 0)

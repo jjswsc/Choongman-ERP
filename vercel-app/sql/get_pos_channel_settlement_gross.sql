@@ -1,6 +1,9 @@
 -- POS 채널별 GROSS 집계 (방콕 영업일 기준)
 -- 선행 필수: pos_orders_fee_snapshot.sql (card_fee_amt 컬럼)
 -- 한 번에 배포: pos_channel_settlement_deploy_one_paste.sql
+--
+-- 2026-11-27: 웹훅 순액(payment≠subtotal)에 discount를 재차감하지 않음
+-- (Shopee 앱 ยอดเงินสุทธิ > POS 마감 AUTO 불일치 수정)
 
 CREATE OR REPLACE FUNCTION public.get_pos_channel_settlement_gross(
   p_store_code TEXT,
@@ -39,10 +42,16 @@ AS $$
                   > GREATEST(COALESCE(o.total, 0), 0) + 0.02
               )
             THEN GREATEST(COALESCE(o.total, 0), 0)
+            -- payment가 메뉴가(subtotal)와 같을 때만 할인 역산 (웹훅 순액+프로모 이중차감 방지)
             WHEN (
               GREATEST(COALESCE(o.discount_amt, 0), 0)
               + GREATEST(COALESCE(o.coupon_discount_amt, 0), 0)
             ) > 0.005
+              AND GREATEST(COALESCE(o.subtotal, 0), 0) > 0.005
+              AND ABS(
+                GREATEST(COALESCE(o.payment_delivery_app, 0), 0)
+                - GREATEST(COALESCE(o.subtotal, 0), 0)
+              ) <= 0.02
               AND GREATEST(COALESCE(o.payment_delivery_app, 0), 0)
                 > GREATEST(COALESCE(o.discount_amt, 0), 0)
                   + GREATEST(COALESCE(o.coupon_discount_amt, 0), 0)
@@ -110,3 +119,11 @@ AS $$
     END AS card_fee_total
   FROM orders;
 $$;
+
+DO $$ BEGIN
+  IF to_regclass('public.sql_applied_log') IS NOT NULL THEN
+    INSERT INTO public.sql_applied_log (file_name) VALUES ('get_pos_channel_settlement_gross.sql')
+    ON CONFLICT (file_name) DO UPDATE
+      SET last_applied_at = now(), run_count = public.sql_applied_log.run_count + 1;
+  END IF;
+END $$;
