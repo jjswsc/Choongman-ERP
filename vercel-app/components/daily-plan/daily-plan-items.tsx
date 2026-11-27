@@ -15,6 +15,7 @@ import {
   Undo2,
   UserPlus,
   Wrench,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -312,6 +313,12 @@ export function DailyPlanItems(props: {
     }
   }
 
+  const onRemovePhoto = async (item: DailyPlanItem, photoUrl: string) => {
+    const ok = await appConfirm(t("dp_photo_remove_confirm"))
+    if (!ok) return
+    await run(item, "remove_photo", { photoUrl })
+  }
+
   const nowLine = (
     <div className="flex items-center gap-2 py-0.5" aria-hidden>
       <span className="w-12 shrink-0 text-right text-[10px] font-semibold text-red-600 tabular-nums">
@@ -472,14 +479,31 @@ export function DailyPlanItems(props: {
                 {photos.length > 0 ? (
                   <div className="mt-1 flex gap-1 overflow-x-auto">
                     {photos.map((u) => (
-                      <a key={u} href={u} target="_blank" rel="noreferrer">
-                        <img
-                          src={storeActionPhotoThumbUrl(u)}
-                          alt=""
-                          className="h-12 w-12 rounded object-cover"
-                          loading="lazy"
-                        />
-                      </a>
+                      <div key={u} className="relative shrink-0">
+                        <a href={u} target="_blank" rel="noreferrer">
+                          <img
+                            src={storeActionPhotoThumbUrl(u)}
+                            alt=""
+                            className="h-12 w-12 rounded object-cover"
+                            loading="lazy"
+                          />
+                        </a>
+                        {canAttachEvidence ? (
+                          <button
+                            type="button"
+                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white shadow disabled:opacity-50"
+                            disabled={busy}
+                            aria-label={t("dp_photo_remove_aria")}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              void onRemovePhoto(it, u)
+                            }}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 ) : null}

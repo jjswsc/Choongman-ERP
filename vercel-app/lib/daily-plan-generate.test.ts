@@ -15,6 +15,8 @@ import {
   dailyPlanDeptKey,
   managerDailyPlanPosition,
   mergeDailyPlanPhotoUrls,
+  removeDailyPlanPhotoUrl,
+  storeActionPhotoObjectPathFromPublicUrl,
   mergeRoutineTemplatesForPlan,
   pickRoutineTemplate,
   withAssignedRoutineItems,
@@ -452,6 +454,20 @@ describe("delegate progress helpers", () => {
     expect(isDailyPlanProgressDone("awaiting_verify")).toBe(true)
     expect(mergeDailyPlanPhotoUrls(["a", "b"], ["b", "c"], 6)).toEqual(["a", "b", "c"])
     expect(mergeDailyPlanPhotoUrls(["1", "2", "3"], ["4", "5", "6", "7"], 4)).toEqual(["4", "5", "6", "7"])
+  })
+  it("removeDailyPlanPhotoUrl drops one URL and ignores empty target", () => {
+    expect(removeDailyPlanPhotoUrl(["a", "b", "c"], "b")).toEqual(["a", "c"])
+    expect(removeDailyPlanPhotoUrl(["a", "b"], "z")).toEqual(["a", "b"])
+    expect(removeDailyPlanPhotoUrl(["a"], "")).toEqual(["a"])
+    expect(removeDailyPlanPhotoUrl(null, "a")).toEqual([])
+  })
+  it("storeActionPhotoObjectPathFromPublicUrl parses public storage URL", () => {
+    expect(
+      storeActionPhotoObjectPathFromPublicUrl(
+        "https://x.supabase.co/storage/v1/object/public/store-action-photos/Silom/123-photo.jpg"
+      )
+    ).toBe("Silom/123-photo.jpg")
+    expect(storeActionPhotoObjectPathFromPublicUrl("https://example.com/other.jpg")).toBeNull()
   })
   it("allows delegated-copy finish after plan close so manager can verify", () => {
     expect(canMutateDelegatedCopyWhenPlanClosed({ action: "done", delegatedFromItemId: 9 })).toBe(true)

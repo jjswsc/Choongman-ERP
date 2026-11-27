@@ -97,6 +97,7 @@ export type DailyPlanItemAction =
   | "reopen"
   | "note"
   | "photo"
+  | "remove_photo"
   | "add"
   | "remove"
   | "cancel"

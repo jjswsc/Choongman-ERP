@@ -4,6 +4,7 @@ import {
   supabaseDeleteByFilter,
   supabaseInsert,
   supabaseSelectFilter,
+  supabaseStorageDelete,
   supabaseUpdateByFilterReturning,
 } from '@/lib/supabase-server'
 import {
@@ -12,6 +13,8 @@ import {
   computeActualMinutes,
   isDailyPlanCancelReason,
   mergeDailyPlanPhotoUrls,
+  removeDailyPlanPhotoUrl,
+  storeActionPhotoObjectPathFromPublicUrl,
 } from '@/lib/daily-plan-generate'
 import {
   canAssignDailyPlan,
@@ -53,6 +56,7 @@ const ACTIONS = new Set([
   'reopen',
   'note',
   'photo',
+  'remove_photo',
   'add',
   'remove',
   'cancel',
@@ -61,13 +65,30 @@ const ACTIONS = new Set([
   'verify_reject',
 ])
 const MAX_PHOTOS = 6
+const STORE_ACTION_PHOTO_BUCKET = 'store-action-photos'
+
+async function tryDeleteStoreActionPhoto(photoUrl: string): Promise<void> {
+  const objectPath = storeActionPhotoObjectPathFromPublicUrl(photoUrl)
+  if (!objectPath) return
+  try {
+    await supabaseStorageDelete(STORE_ACTION_PHOTO_BUCKET, objectPath)
+  } catch {
+    // DB URL 제거가 우선 — Storage orphan은 허용
+  }
+}
 
 /** 피위임자 복사본 → 원본(위임자) 상태·증빙 동기화 */
 async function syncDelegatedSourceFromCopy(
   copy: DailyPlanItemRow,
   action: string,
   nowIso: string,
-  extras: { skipReason?: string; actualMinutes?: number | null; photos?: string[]; note?: string } = {}
+  extras: {
+    skipReason?: string
+    actualMinutes?: number | null
+    photos?: string[]
+    note?: string
+    removePhotoUrl?: string
+  } = {}
 ): Promise<number | null> {
   const srcId = copy.delegated_from_item_id
   if (!srcId) return null
@@ -115,6 +136,10 @@ async function syncDelegatedSourceFromCopy(
     if (action === 'photo' || extras.photos) {
       patch.photo_urls = mergeDailyPlanPhotoUrls(src.photo_urls, extras.photos ?? copy.photo_urls, MAX_PHOTOS)
     }
+  } else if (action === 'remove_photo') {
+    const removeUrl = String(extras.removePhotoUrl || '').trim()
+    if (!removeUrl) return src.plan_id
+    patch.photo_urls = removeDailyPlanPhotoUrl(src.photo_urls, removeUrl)
   } else {
     return src.plan_id
   }
@@ -192,8 +217,8 @@ export async function POST(request: NextRequest) {
     if (!canViewDailyPlan(scope, plan)) {
       return NextResponse.json({ success: false, message: '권한이 없습니다.' }, { status: 403 })
     }
-    // 마감 후에도 증빙(사진·메모)·위임 검수(확인/반려)·위임 사본 완료(done/skip/start/reopen)는 허용
-    const evidenceOnly = action === 'photo' || action === 'note'
+    // 마감 후에도 증빙(사진·메모·사진삭제)·위임 검수(확인/반려)·위임 사본 완료(done/skip/start/reopen)는 허용
+    const evidenceOnly = action === 'photo' || action === 'remove_photo' || action === 'note'
     const verifyOnly = action === 'verify_pass' || action === 'verify_reject'
     const delegatedCopyFinish = canMutateDelegatedCopyWhenPlanClosed({
       action,
@@ -473,6 +498,7 @@ export async function POST(request: NextRequest) {
       (item.status === 'delegated' || item.status === 'awaiting_verify') &&
       action !== 'note' &&
       action !== 'photo' &&
+      action !== 'remove_photo' &&
       action !== 'verify_pass' &&
       action !== 'verify_reject'
     ) {
@@ -480,6 +506,51 @@ export async function POST(request: NextRequest) {
         { success: false, messageKey: 'dp_err_delegated_locked', message: '위임된 항목은 수정할 수 없습니다.' },
         { status: 400 }
       )
+    }
+
+    if (action === 'remove_photo') {
+      const removeUrl = String(body.photoUrl || '').trim()
+      if (!removeUrl) {
+        return NextResponse.json({ success: false, message: 'photoUrl required' }, { status: 400 })
+      }
+      if (!(item.photo_urls || []).includes(removeUrl)) {
+        return NextResponse.json({ success: true, item })
+      }
+      const nextPhotos = removeDailyPlanPhotoUrl(item.photo_urls, removeUrl)
+      const updated = (await supabaseUpdateByFilterReturning('daily_plan_items', `id=eq.${item.id}`, {
+        photo_urls: nextPhotos,
+        updated_at: nowIso,
+      })) as Record<string, unknown>[]
+      const updatedItem = updated?.[0] ? normalizePlanItemRow(updated[0]) : null
+      const touchIds = new Set<number>([plan.id])
+
+      if (item.delegated_from_item_id) {
+        const srcPlanId = await syncDelegatedSourceFromCopy(updatedItem || item, 'remove_photo', nowIso, {
+          removePhotoUrl: removeUrl,
+          photos: nextPhotos,
+        })
+        if (srcPlanId) touchIds.add(srcPlanId)
+      } else if (item.delegated_to_employee_id) {
+        const copies = (await supabaseSelectFilter(
+          'daily_plan_items',
+          `delegated_from_item_id=eq.${item.id}`,
+          { limit: 10 }
+        )) as Record<string, unknown>[]
+        for (const row of copies || []) {
+          const copy = normalizePlanItemRow(row)
+          const copyNext = removeDailyPlanPhotoUrl(copy.photo_urls, removeUrl)
+          if (copyNext.length === (copy.photo_urls || []).length) continue
+          await supabaseUpdateByFilterReturning('daily_plan_items', `id=eq.${copy.id}`, {
+            photo_urls: copyNext,
+            updated_at: nowIso,
+          })
+          touchIds.add(copy.plan_id)
+        }
+      }
+
+      await tryDeleteStoreActionPhoto(removeUrl)
+      await Promise.all([...touchIds].map((id) => touchDailyPlanProgress(id)))
+      return NextResponse.json({ success: true, item: updatedItem })
     }
 
     const photoUrl = String(body.photoUrl || '').trim()

@@ -110,6 +110,26 @@ export function mergeDailyPlanPhotoUrls(a: string[] | null | undefined, b: strin
   return out.slice(-max)
 }
 
+/** 잘못 올린 사진 URL 한 장 제거 */
+export function removeDailyPlanPhotoUrl(urls: string[] | null | undefined, photoUrl: string): string[] {
+  const target = String(photoUrl || "").trim()
+  const list = (urls || []).map((u) => String(u || "").trim()).filter(Boolean)
+  if (!target) return list
+  return list.filter((u) => u !== target)
+}
+
+/** store-action-photos public URL → Storage object path (쿼리 제거) */
+export function storeActionPhotoObjectPathFromPublicUrl(url: string): string | null {
+  const raw = String(url || "").trim().split("?")[0]
+  const m = raw.match(/\/object\/public\/store-action-photos\/(.+)$/i)
+  if (!m?.[1]) return null
+  try {
+    return decodeURIComponent(m[1])
+  } catch {
+    return m[1]
+  }
+}
+
 export const DAILY_PLAN_LINK_TYPES = [
   "none",
   "store_check",
