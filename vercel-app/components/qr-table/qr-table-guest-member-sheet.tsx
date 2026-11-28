@@ -14,9 +14,26 @@ export type QrGuestMemberInfo = {
 
 type BirthPart = 'day' | 'month' | 'year'
 
+/** 값이 없을 때 년도 목록을 이 근처에서 연다. 위·아래 연도는 그대로 스크롤된다. */
+const BIRTH_YEAR_OPEN_ANCHOR = '1990'
+
+/**
+ * 목록의 scrollTop만 옮긴다. scrollIntoView는 바깥 시트·창까지 스크롤해
+ * iOS에서 목록이 다시 맨 위로 붙는다.
+ */
+function alignBirthList(list: HTMLElement, part: BirthPart, value: string) {
+  const anchor = value || (part === 'year' ? BIRTH_YEAR_OPEN_ANCHOR : '')
+  if (!anchor) return
+  const target = list.querySelector<HTMLElement>(`[data-value="${anchor}"]`)
+  if (!target) return
+  const next = target.offsetTop - Math.max(0, (list.clientHeight - target.offsetHeight) / 2)
+  list.scrollTop = Math.max(0, next)
+}
+
 /**
  * 네이티브 `<select>`는 iOS Safari에서 transform·overflow 조상(바텀시트) 안이면
  * 탭해도 피커가 열리지 않는다. 버튼 + body 포탈 목록으로 일/월/년을 고른다.
+ * 목록 스크롤은 시트 드래그·선택 항목 재정렬에 빼앗기지 않는다.
  */
 function BirthPartPicker(props: {
   part: BirthPart
@@ -32,6 +49,7 @@ function BirthPartPicker(props: {
   const { part, label, value, options, open, disabled, onOpen, onClose, onChange } = props
   const btnRef = React.useRef<HTMLButtonElement>(null)
   const listRef = React.useRef<HTMLUListElement>(null)
+  const alignedRef = React.useRef(false)
   const [box, setBox] = React.useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
 
   const place = React.useCallback(() => {
@@ -45,28 +63,32 @@ function BirthPartPicker(props: {
     const spaceBelow = window.innerHeight - rect.bottom - margin
     const spaceAbove = rect.top - margin
     const openUp = spaceBelow < 160 && spaceAbove > spaceBelow
-    const maxHeight = Math.max(120, Math.min(280, (openUp ? spaceAbove : spaceBelow) - 6))
+    const maxHeight = Math.max(160, Math.min(320, (openUp ? spaceAbove : spaceBelow) - 6))
     const top = openUp ? Math.max(margin, rect.top - 6 - maxHeight) : rect.bottom + 6
-    setBox({ top, left, width, maxHeight })
+    setBox((prev) => {
+      if (prev && prev.top === top && prev.left === left && prev.width === width && prev.maxHeight === maxHeight) {
+        return prev
+      }
+      return { top, left, width, maxHeight }
+    })
   }, [])
 
   React.useLayoutEffect(() => {
-    if (!open) return
-    place()
-    const onReflow = () => place()
-    window.addEventListener('resize', onReflow)
-    window.addEventListener('scroll', onReflow, true)
-    return () => {
-      window.removeEventListener('resize', onReflow)
-      window.removeEventListener('scroll', onReflow, true)
+    if (!open) {
+      alignedRef.current = false
+      return
     }
+    place()
+    const onResize = () => place()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [open, place])
 
-  React.useEffect(() => {
-    if (!open) return
-    const selected = listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
-    selected?.scrollIntoView?.({ block: 'center' })
-  }, [open, box])
+  React.useLayoutEffect(() => {
+    if (!open || !box || !listRef.current || alignedRef.current) return
+    alignedRef.current = true
+    alignBirthList(listRef.current, part, value)
+  }, [open, box, part, value])
 
   const list =
     open && box && typeof document !== 'undefined'
@@ -83,16 +105,26 @@ function BirthPartPicker(props: {
               role="listbox"
               aria-label={label}
               data-birth-menu={part}
-              className="fixed overflow-y-auto overscroll-contain rounded-xl border border-stone-200 bg-white py-1 shadow-xl touch-pan-y"
-              style={{ top: box.top, left: box.left, width: box.width, maxHeight: box.maxHeight }}
+              className="absolute overflow-y-auto overscroll-contain rounded-xl border border-stone-200 bg-white py-1 shadow-xl touch-pan-y"
+              style={{
+                top: box.top,
+                left: box.left,
+                width: box.width,
+                maxHeight: box.maxHeight,
+                WebkitOverflowScrolling: 'touch',
+                touchAction: 'pan-y',
+              }}
               onClick={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
             >
               <li>
                 <button
                   type="button"
                   role="option"
+                  data-value=""
                   aria-selected={value === ''}
-                  className="min-h-11 w-full px-3 text-left text-[15px] text-stone-400 touch-manipulation"
+                  className="min-h-11 w-full px-3 text-left text-[15px] text-stone-400 touch-pan-y"
                   onClick={() => {
                     onChange('')
                     onClose()
@@ -106,8 +138,9 @@ function BirthPartPicker(props: {
                   <button
                     type="button"
                     role="option"
+                    data-value={opt}
                     aria-selected={value === opt}
-                    className={`min-h-11 w-full px-3 text-left text-[15px] touch-manipulation ${
+                    className={`min-h-11 w-full px-3 text-left text-[15px] touch-pan-y ${
                       value === opt ? 'bg-amber-50 font-semibold text-stone-900' : 'text-stone-800'
                     }`}
                     onClick={() => {
