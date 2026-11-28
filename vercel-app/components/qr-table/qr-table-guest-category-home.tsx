@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { QR_GUEST_HOME_BANNER_HEIGHT_CLASS } from '@/lib/qr-table-guest-category-home'
+import { QrGuestCategoryCircle } from '@/components/qr-table/qr-guest-category-circle'
 
 export type QrGuestCategoryHomeTile = {
   key: string
@@ -156,20 +157,10 @@ export function QrTableGuestCategoryHome(props: {
             onClick={() => onSelectCategory(c.key)}
             className="flex flex-col items-center gap-1.5 rounded-2xl bg-white px-1.5 py-2.5 text-center shadow-sm ring-1 ring-stone-100 touch-manipulation active:scale-[0.98]"
           >
-            {c.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={c.imageUrl}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-[4.25rem] w-[4.25rem] rounded-full object-cover bg-stone-100 ring-2 ring-stone-100"
-              />
-            ) : (
-              <div className="flex h-[4.25rem] w-[4.25rem] items-center justify-center rounded-full bg-stone-100 text-lg font-black text-stone-400">
-                {(c.label || '?').slice(0, 1)}
-              </div>
-            )}
+            <QrGuestCategoryCircle
+              src={c.imageUrl}
+              className="h-[4.25rem] w-[4.25rem] ring-2 ring-stone-100"
+            />
             <span className="line-clamp-2 min-h-[2.25rem] text-[11px] font-semibold leading-tight text-stone-800">
               {c.label}
             </span>

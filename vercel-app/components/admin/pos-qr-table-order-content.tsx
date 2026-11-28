@@ -894,12 +894,12 @@ export function PosQrTableOrderContent() {
               <div className="space-y-2 rounded-md border border-dashed border-amber-300/80 bg-amber-50/40 p-3">
                 <div>
                   <p className="text-xs font-semibold text-amber-900">
-                    {tr('qrTableGuestHomeBanners', '손님 QR 홈 배너 (office 파일럿)')}
+                    {tr('qrTableGuestHomeBanners', '손님 QR 홈 배너')}
                   </p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {tr(
                       'qrTableGuestHomeBannersHint',
-                      'office(본사)만 카테고리 홈이 보입니다. 아래「대표·신메뉴」에서 메뉴를 체크하고, 배너 이미지는 선택입니다.'
+                      '모든 매장 손님 QR이 카테고리 홈으로 시작합니다. 아래「대표·신메뉴」와 배너 이미지는 선택입니다. 비우면 기본 배경이 나옵니다.'
                     )}
                   </p>
                 </div>
@@ -940,7 +940,7 @@ export function PosQrTableOrderContent() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {tr(
                   'qrTableGuestHomeMenusHint',
-                  '체크한 메뉴가 손님 QR 홈의 대표메뉴·신메뉴 배너를 탭하면 나타납니다. office 매장에서만 홈 UI가 켜집니다.'
+                  '체크한 메뉴가 손님 QR 홈의 대표메뉴·신메뉴 배너를 탭하면 나타납니다. 모든 매장에 홈이 켜집니다. 체크가 없으면 배너는 안내 문구만 보입니다.'
                 )}
               </p>
             </div>
@@ -1082,12 +1082,12 @@ export function PosQrTableOrderContent() {
         <section className="space-y-3 rounded-lg border border-amber-200/80 bg-card p-4">
           <div>
             <h2 className="text-sm font-semibold">
-              {tr('qrTableGuestHomeCategoryImages', '카테고리 이미지 (손님 QR 홈)')}
+              {tr('qrTableGuestHomeCategoryImages', '카테고리 이미지 (홈 · 하단 탭)')}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {tr(
                 'qrTableGuestHomeCategoryImagesHint',
-                '대분류별 원형 사진을 업로드합니다. 비우면 그 카테고리 메뉴 사진으로 자동 표시됩니다. office 홈에서만 쓰입니다.'
+                '대분류별 원형 사진을 올립니다. 비우면 그 카테고리의 첫 메뉴 사진, 그것도 없으면 기본 그림이 나와 빈칸이 되지 않습니다. 모든 매장 카테고리 홈과 하단 탭에 같은 사진이 나옵니다. 매장마다 올리거나 오피스에서 전체 매장 적용을 할 수 있습니다.'
               )}
             </p>
           </div>
