@@ -132,14 +132,14 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(new Set())
 
   /**
-   * 드래그 스크롤:
-   * - 가로: scrollEl.scrollLeft (터치·마우스 공통, capture)
-   * - 세로(터치): touch-pan-y 네이티브 — capture/preventDefault 하지 않음
-   * - 세로(마우스): 상위 overflow-y / 문서 scrollTop
+   * 스크롤:
+   * - 터치/펜: 가로·세로 모두 브라우저 네이티브(관성 스크롤). JS 가로 드래그는 금지.
+   * - 마우스: 끌어 가로 스크롤 + 세로(상위 overflow / 문서). 행 클릭과 공존.
    */
   const scheduleHScrollRef = React.useRef<HTMLDivElement>(null)
   const suppressScheduleRowClickRef = React.useRef(false)
   const [scheduleHScrollDragging, setScheduleHScrollDragging] = React.useState(false)
+  const [scheduleHScrolled, setScheduleHScrolled] = React.useState(false)
 
   React.useLayoutEffect(() => {
     const node = scheduleHScrollRef.current
@@ -158,11 +158,14 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     let dragMoved = false
     let uiDragging = false
     let captured = false
-    let pointerType: string = "mouse"
 
     let docMove: ((e: PointerEvent) => void) | null = null
     let docUp: ((e: PointerEvent) => void) | null = null
     let onLostCap: ((e: Event) => void) | null = null
+
+    function syncHScrolled() {
+      setScheduleHScrolled(scrollEl.scrollLeft > 2)
+    }
 
     function removeDocPointerTracking() {
       if (docMove) {
@@ -227,7 +230,6 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       const dx = e.clientX - startX
       const dy = e.clientY - startY
       const canScrollH = scrollEl.scrollWidth > scrollEl.clientWidth + 2
-      const isTouchLike = pointerType === "touch" || pointerType === "pen"
 
       if (!dragArmed) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) < SCHEDULE_SCROLL_DRAG_ARM_PX) return
@@ -239,10 +241,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
           else if (Math.abs(dx) >= Math.abs(dy) + bias) dragAxisLocked = "h"
           else dragAxisLocked = Math.abs(dy) >= Math.abs(dx) ? "v" : "h"
         }
-        // 터치 세로는 네이티브(touch-pan-y). 가로·마우스 세로만 capture
-        if (dragAxisLocked === "h" || !isTouchLike) {
-          capturePointer(e.pointerId)
-        }
+        capturePointer(e.pointerId)
       }
 
       if (dragAxisLocked === null) return
@@ -252,13 +251,10 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         dragMoved = true
         scrollEl.scrollLeft = startScroll - dx
         e.preventDefault()
-      } else if (isTouchLike) {
-        // 네이티브 세로 — preventDefault/capture 금지
-        return
       } else {
         if (Math.abs(dy) <= 2) return
         dragMoved = true
-        // 손가락/마우스를 아래로 → 콘텐츠도 아래 = scrollTop 감소
+        // 마우스를 아래로 → 콘텐츠도 아래 = scrollTop 감소
         if (vScroll) vScroll.setTop(startScrollTop - dy)
         e.preventDefault()
       }
@@ -270,14 +266,32 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
 
     function onPointerDownBubble(e: PointerEvent) {
       if (e.target instanceof Node && !scrollEl.contains(e.target)) return
-      if (e.pointerType === "mouse" && e.button !== 0) return
       const t = e.target
       if (t instanceof Element) {
         const tag = t.tagName
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A") return
       }
+
+      // 터치/펜: 네이티브 스크롤만. 제스처 중 스크롤되면 다음 클릭(접기) 무시.
+      if (e.pointerType !== "mouse") {
+        const touchId = e.pointerId
+        const touchStartLeft = scrollEl.scrollLeft
+        const touchStartTop = window.scrollY || document.documentElement.scrollTop || 0
+        const onTouchUp = (ev: PointerEvent) => {
+          if (ev.pointerId !== touchId) return
+          document.removeEventListener("pointerup", onTouchUp)
+          document.removeEventListener("pointercancel", onTouchUp)
+          const movedH = Math.abs(scrollEl.scrollLeft - touchStartLeft) > 4
+          const movedV = Math.abs((window.scrollY || document.documentElement.scrollTop || 0) - touchStartTop) > 4
+          if (movedH || movedV) suppressScheduleRowClickRef.current = true
+        }
+        document.addEventListener("pointerup", onTouchUp)
+        document.addEventListener("pointercancel", onTouchUp)
+        return
+      }
+
+      if (e.button !== 0) return
       activeId = e.pointerId
-      pointerType = e.pointerType || "mouse"
       startX = e.clientX
       startY = e.clientY
       startScroll = scrollEl.scrollLeft
@@ -295,6 +309,10 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       document.addEventListener("pointercancel", docUp)
     }
 
+    function onNativeScroll() {
+      syncHScrolled()
+    }
+
     function onWheel(e: WheelEvent) {
       if (scrollEl.scrollWidth <= scrollEl.clientWidth + 2) return
       if (e.shiftKey && e.deltaY !== 0) {
@@ -308,13 +326,16 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       }
     }
 
+    syncHScrolled()
     scrollEl.addEventListener("pointerdown", onPointerDownBubble, { capture: true })
+    scrollEl.addEventListener("scroll", onNativeScroll, { passive: true })
     scrollEl.addEventListener("wheel", onWheel, { passive: false })
 
     return () => {
       removeDocPointerTracking()
       activeId = null
       scrollEl.removeEventListener("pointerdown", onPointerDownBubble, { capture: true })
+      scrollEl.removeEventListener("scroll", onNativeScroll)
       scrollEl.removeEventListener("wheel", onWheel)
     }
   }, [hasSearched, schedule.length, loading])
@@ -765,22 +786,27 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 </p>
               </div>
             </div>
-            {/* 가로 스크롤 영역 - 마우스로 끌어 스크롤 (행이 button이라 기본 제스처만으로는 불편함) */}
+            {/* 가로 스크롤: 터치는 네이티브 관성, 마우스는 드래그. 이름 열 sticky */}
             <div
               ref={scheduleHScrollRef}
               className={cn(
-                // touch-pan-y: 휴대폰 세로 스크롤은 네이티브. 가로는 드래그 핸들러가 담당.
-                "min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-4 pb-4 [-webkit-overflow-scrolling:touch] print:overflow-visible print:px-0 touch-pan-y select-none",
+                "min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain pb-4 [-webkit-overflow-scrolling:touch] print:overflow-visible touch-manipulation select-none",
                 scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
               )}
             >
             <div
-              className="w-max print:!min-w-0 print:w-full print:max-w-none print-schedule-wrap select-none"
+              className="w-max pr-4 print:!min-w-0 print:w-full print:max-w-none print:pr-0 print-schedule-wrap select-none"
               style={{ minWidth: "max(720px, max-content, calc(100% + 1px))" }}
             >
               {/* 요일 헤더 */}
               <div className="grid gap-1 mb-2 print-schedule-grid" style={{ gridTemplateColumns: "112px repeat(7, minmax(72px, 80px))" }}>
-                <div className="shrink-0" />
+                <div
+                  className={cn(
+                    "sticky left-0 z-30 shrink-0 bg-card print:static print:shadow-none",
+                    scheduleHScrolled && "shadow-[4px_0_8px_-4px_rgba(15,23,42,0.16)]"
+                  )}
+                  aria-hidden
+                />
                 {dayLabels.map((day, i) => (
                   <div key={day} className="flex flex-col items-center gap-0.5 shrink-0 min-w-[72px]">
                     <span
@@ -811,7 +837,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                   const key = p.personKey
                   const isCollapsed = collapsedRows.has(key)
                   return (
-                    <div key={key} className="rounded-xl border bg-card overflow-hidden print-schedule-card">
+                    <div key={key} className="rounded-xl border bg-card print-schedule-card">
                       {/* button 대신 div: 버튼은 포인터/드래그가 가로 스크롤과 충돌하는 경우가 많음 */}
                       <div
                         role="button"
@@ -833,13 +859,18 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                           toggleRow(key)
                         }}
                         className={cn(
-                          "grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid print-schedule-person outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                          "grid gap-1 w-full items-stretch py-2.5 pr-2 text-left active:bg-muted/30 transition-colors print-schedule-grid print-schedule-person outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                           scheduleHScrollDragging ? "cursor-grabbing" : "cursor-grab"
                         )}
                         style={{ gridTemplateColumns: "112px repeat(7, minmax(72px, 80px))" }}
                       >
-                        {/* 이름 + 부서 + 접기 버튼 */}
-                        <div className="flex flex-col items-start justify-center shrink-0 min-w-[112px]">
+                        {/* 이름 + 부서 — 가로 스크롤 시 고정 */}
+                        <div
+                          className={cn(
+                            "sticky left-0 z-20 flex flex-col items-start justify-center shrink-0 min-w-[112px] bg-card pl-4 pr-1 print:static print:shadow-none print:pl-2",
+                            scheduleHScrolled && "shadow-[4px_0_8px_-4px_rgba(15,23,42,0.16)]"
+                          )}
+                        >
                           <div className="flex items-center gap-1">
                             <span className="text-[13px] font-bold text-card-foreground leading-tight print-schedule-person-name">{displayLabelShort(p.name)}</span>
                             {!isCollapsed && (
