@@ -120,6 +120,64 @@ describe('QR 회원 로그인 생년월일', () => {
     expect(document.body.textContent).toContain('กรุณาเลือกวันเกิดครับ')
   })
 
+  it('목록을 스크롤해도 처음 위치로 되돌아가지 않는다', () => {
+    renderSheet()
+    click(document.body.querySelector('[data-birth-part="day"]'))
+    const list = document.body.querySelector('[data-birth-menu="day"]') as HTMLElement
+    expect(list.querySelector('[data-value="31"]')).toBeTruthy()
+    list.scrollTop = 240
+    act(() => {
+      list.dispatchEvent(new Event('scroll', { bubbles: true }))
+      window.dispatchEvent(new Event('scroll'))
+    })
+    expect(list.scrollTop).toBe(240)
+    expect(document.body.querySelector('[role="dialog"]')).toBeTruthy()
+  })
+
+  it('년도 목록은 1990 근처에서 열고 1940까지 남아 있다', () => {
+    const top = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetTop')
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight')
+    Object.defineProperty(HTMLElement.prototype, 'offsetTop', {
+      configurable: true,
+      get() {
+        const v = this.getAttribute?.('data-value')
+        return v && /^\d{4}$/.test(v) ? (2026 - Number(v)) * 44 : 0
+      },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get() {
+        return 44
+      },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.getAttribute?.('data-birth-menu') ? 220 : client?.get?.call(this) || 0
+      },
+    })
+    try {
+      renderSheet()
+      click(document.body.querySelector('[data-birth-part="year"]'))
+      const list = document.body.querySelector('[data-birth-menu="year"]') as HTMLElement
+      expect(list.querySelector('[data-value="1940"]')).toBeTruthy()
+      expect(list.querySelector('[data-value="1990"]')).toBeTruthy()
+      const anchorTop = (2026 - 1990) * 44
+      const expected = anchorTop - Math.max(0, (220 - 44) / 2)
+      expect(list.scrollTop).toBe(expected)
+      list.scrollTop = expected + 400
+      act(() => {
+        list.dispatchEvent(new Event('scroll', { bubbles: true }))
+      })
+      expect(list.scrollTop).toBe(expected + 400)
+    } finally {
+      if (top) Object.defineProperty(HTMLElement.prototype, 'offsetTop', top)
+      if (height) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height)
+      if (client) Object.defineProperty(HTMLElement.prototype, 'clientHeight', client)
+    }
+  })
+
   it('날짜 목록을 연 상태에서도 시트는 닫히지 않는다', () => {
     const onClose = vi.fn()
     renderSheet({ onClose })
