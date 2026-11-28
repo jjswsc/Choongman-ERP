@@ -8,6 +8,8 @@ type Snap = 'mid' | 'full'
  * QR 게스트용 스와이프 바텀시트.
  * - 핸들·헤더를 위/아래로 드래그하면 mid ↔ full 스냅, 아래로 많이 내리면 닫힘.
  * - 본문 스크롤과 충돌하지 않도록 드래그는 핸들/헤더에서만 시작한다.
+ * - 쉬는 동안에는 transform을 두지 않는다. iOS Safari는 translateY(0)만 있어도
+ *   그 안의 네이티브 `<select>` 피커를 열지 않는다 (회원 로그인 생년월일).
  */
 export function QrTableGuestSwipeSheet(props: {
   open: boolean
@@ -33,67 +35,106 @@ export function QrTableGuestSwipeSheet(props: {
   } = props
 
   const [snap, setSnap] = React.useState<Snap>(initialSnap)
-  const [dragY, setDragY] = React.useState(0)
+  const [liftY, setLiftY] = React.useState(0)
+  const [transformOn, setTransformOn] = React.useState(false)
   const [dragging, setDragging] = React.useState(false)
   const startYRef = React.useRef(0)
   const startSnapRef = React.useRef<Snap>(initialSnap)
-  const dragYRef = React.useRef(0)
+  const liftYRef = React.useRef(0)
+  const draggingRef = React.useRef(false)
+  const transformOnRef = React.useRef(false)
+  const clearTimerRef = React.useRef<number | null>(null)
+
+  const clearTransformTimer = React.useCallback(() => {
+    if (clearTimerRef.current != null) {
+      window.clearTimeout(clearTimerRef.current)
+      clearTimerRef.current = null
+    }
+  }, [])
+
+  const restTransform = React.useCallback(() => {
+    clearTransformTimer()
+    liftYRef.current = 0
+    transformOnRef.current = false
+    setLiftY(0)
+    setTransformOn(false)
+  }, [clearTransformTimer])
 
   React.useEffect(() => {
     if (!open) return
     setSnap(initialSnap)
-    setDragY(0)
-    dragYRef.current = 0
+    draggingRef.current = false
     setDragging(false)
-  }, [open, initialSnap])
+    restTransform()
+  }, [open, initialSnap, restTransform])
+
+  React.useEffect(() => () => clearTransformTimer(), [clearTransformTimer])
 
   const heightClass = snap === 'full' ? 'h-[min(94dvh,40rem)]' : 'h-[min(68dvh,32rem)]'
 
-  const endDrag = React.useCallback(() => {
-    const y = dragYRef.current
+  const finishLift = React.useCallback(() => {
+    const y = liftYRef.current
+    draggingRef.current = false
     setDragging(false)
     const from = startSnapRef.current
     if (y > 110) {
-      setDragY(0)
-      dragYRef.current = 0
+      restTransform()
       onClose()
       return
     }
-    if (y > 48 && from === 'full') {
-      setSnap('mid')
-    } else if (y < -48) {
-      setSnap('full')
+    if (y > 48 && from === 'full') setSnap('mid')
+    else if (y < -48) setSnap('full')
+
+    if (y > 0.5 && transformOnRef.current) {
+      window.requestAnimationFrame(() => {
+        liftYRef.current = 0
+        setLiftY(0)
+        clearTransformTimer()
+        clearTimerRef.current = window.setTimeout(() => {
+          if (!draggingRef.current) restTransform()
+        }, 240)
+      })
+      return
     }
-    setDragY(0)
-    dragYRef.current = 0
-  }, [onClose])
+    restTransform()
+  }, [clearTransformTimer, onClose, restTransform])
+
+  const onPanelTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.propertyName !== 'transform') return
+    if (e.target !== e.currentTarget) return
+    if (draggingRef.current) return
+    if (liftYRef.current > 0.5) return
+    restTransform()
+  }
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button != null && e.button !== 0) return
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
     startYRef.current = e.clientY
     startSnapRef.current = snap
-    dragYRef.current = 0
+    draggingRef.current = true
     setDragging(true)
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragging) return
+    if (!draggingRef.current) return
     const dy = e.clientY - startYRef.current
-    // 위로(음수)는 full 확장용, 아래로(양수)는 축소·닫기
+    if (!transformOnRef.current && Math.abs(dy) < 4) return
     const next = Math.max(-80, dy)
-    dragYRef.current = next
-    setDragY(next)
+    liftYRef.current = next
+    transformOnRef.current = true
+    setTransformOn(true)
+    setLiftY(next)
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (!dragging) return
+    if (!draggingRef.current) return
     try {
       ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
     } catch {
       /* ignore */
     }
-    endDrag()
+    finishLift()
   }
 
   if (!open) return null
@@ -108,11 +149,12 @@ export function QrTableGuestSwipeSheet(props: {
         className={`flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl ${heightClass} ${
           dragging ? '' : 'transition-[height,transform] duration-200 ease-out'
         }`}
-        style={{ transform: `translateY(${Math.max(0, dragY)}px)` }}
+        style={transformOn ? { transform: `translateY(${Math.max(0, liftY)}px)` } : undefined}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
         onClick={(e) => e.stopPropagation()}
+        onTransitionEnd={onPanelTransitionEnd}
       >
         <div
           className="shrink-0 touch-none select-none"
