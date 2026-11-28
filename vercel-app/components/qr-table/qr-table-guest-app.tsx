@@ -59,7 +59,8 @@ import { QrTableGuestCategoryHome } from '@/components/qr-table/qr-table-guest-c
 import { QrTableGuestScrollRow } from '@/components/qr-table/qr-table-guest-scroll-row'
 import {
   formatQrGuestTableLabel,
-  isQrGuestCategoryHomePilotStore,
+  isQrGuestCategoryHomeEnabled,
+  pickQrGuestCategoryImageRaw,
 } from '@/lib/qr-table-guest-category-home'
 import { QrGuestMenuThumb } from '@/components/qr-table/qr-guest-menu-thumb'
 import {
@@ -389,7 +390,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
   const [tab, setTab] = React.useState<'included' | 'extras'>('included')
   const [mainCategory, setMainCategory] = React.useState('')
   const [subCategory, setSubCategory] = React.useState('')
-  /** office 홈 배너: 대표/신메뉴 컬렉션 (카테고리 필터 대신) */
+  /** 카테고리 홈 배너: 대표/신메뉴 컬렉션 (카테고리 필터 대신) */
   const [homeCollection, setHomeCollection] = React.useState<'featured' | 'new' | null>(null)
   const [search, setSearch] = React.useState('')
   const [qrPayload, setQrPayload] = React.useState('')
@@ -448,12 +449,11 @@ export function QrTableGuestApp({ token }: { token: string }) {
 
   const g = React.useCallback((key: string) => qrGuestT(lang, key), [lang])
 
-  const goToOrderingHome = React.useCallback((code?: string) => {
-    if (isQrGuestCategoryHomePilotStore(code ?? storeCode)) setStep('category_home')
-    else setStep('menu')
-  }, [storeCode])
+  const goToOrderingHome = React.useCallback((_code?: string) => {
+    setStep(isQrGuestCategoryHomeEnabled() ? 'category_home' : 'menu')
+  }, [])
 
-  const categoryHomePilot = isQrGuestCategoryHomePilotStore(storeCode)
+  const categoryHomeEnabled = isQrGuestCategoryHomeEnabled(storeCode)
 
   function humanizeApiError(raw: string): string {
     const msg = String(raw || '').trim()
@@ -1233,15 +1233,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
     )
   }, [listRaw, mainCategory, uncategorizedLabel, categoryTabOrder, homeCollectionIdSet])
 
-  const mainCategoryCounts = React.useMemo(() => {
-    const map = new Map<string, number>()
-    for (const m of listRaw) {
-      const main = String(m.categoryMain || '').trim() || uncategorizedLabel
-      map.set(main, (map.get(main) || 0) + 1)
-    }
-    return map
-  }, [listRaw, uncategorizedLabel])
-
   const subCategoryCounts = React.useMemo(() => {
     const map = new Map<string, number>()
     let all = 0
@@ -1420,6 +1411,28 @@ export function QrTableGuestApp({ token }: { token: string }) {
     setSearch('')
   }
 
+  const categoryImageByMain = React.useMemo(() => {
+    const map = new Map<string, string>()
+    const admin = settings?.guestHomeCategoryImageUrls || {}
+    const urlsByCat = new Map<string, string[]>()
+    for (const m of allMenusForHome) {
+      const key = String(m.categoryMain || '').trim() || uncategorizedLabel
+      const url = String(m.imageUrl || '').trim()
+      const list = urlsByCat.get(key)
+      if (list) {
+        if (url) list.push(url)
+      } else {
+        urlsByCat.set(key, url ? [url] : [])
+      }
+    }
+    for (const [key, urls] of urlsByCat) {
+      const raw = pickQrGuestCategoryImageRaw({ categoryKey: key, adminUrls: admin, menuImageUrls: urls })
+      const href = raw ? toQrGuestMenuThumbHref(raw, { width: QR_GUEST_CATEGORY_THUMB_WIDTH }) : ''
+      if (href) map.set(key, href)
+    }
+    return map
+  }, [allMenusForHome, uncategorizedLabel, settings?.guestHomeCategoryImageUrls])
+
   const categoryHomeTiles = React.useMemo(() => {
     const homeMenus = allMenusForHome
     const set = new Set<string>()
@@ -1431,21 +1444,18 @@ export function QrTableGuestApp({ token }: { token: string }) {
     }
     const list = orderPosMainCategoryTabs(set, categoryTabOrder.mains)
     if (hasEmpty) list.push(uncategorizedLabel)
-    const adminImages = settings?.guestHomeCategoryImageUrls || {}
     return list.map((key) => {
-      const items = homeMenus.filter((m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === key)
-      const fromAdmin = String(adminImages[key] || '').trim()
-      const rawImage = fromAdmin || items.find((m) => m.imageUrl)?.imageUrl || ''
+      const count = homeMenus.filter(
+        (m) => (String(m.categoryMain || '').trim() || uncategorizedLabel) === key
+      ).length
       return {
         key,
         label: resolvePosMenuGuestLabel(key),
-        imageUrl: rawImage
-          ? toQrGuestMenuThumbHref(rawImage, { width: QR_GUEST_CATEGORY_THUMB_WIDTH })
-          : '',
-        count: items.length,
+        imageUrl: categoryImageByMain.get(key) || '',
+        count,
       }
     })
-  }, [allMenusForHome, categoryTabOrder, uncategorizedLabel, settings?.guestHomeCategoryImageUrls])
+  }, [allMenusForHome, categoryTabOrder, uncategorizedLabel, categoryImageByMain])
 
   const featuredHomeMenus = React.useMemo(() => {
     const ids = new Set(settings?.guestHomeFeaturedMenuIds || [])
@@ -1529,7 +1539,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="flex items-center justify-between gap-2 px-3 pt-1.5">
           <h1 className="flex min-w-0 items-center gap-1.5 text-[15px] font-semibold leading-tight">
-            {step === 'menu' && categoryHomePilot ? (
+            {step === 'menu' && categoryHomeEnabled ? (
               <button
                 type="button"
                 className="mr-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-700 touch-manipulation"
@@ -1867,7 +1877,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       ) : null}
 
       {step === 'menu' ? (
-        <section className="pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
+        <section className="pb-[calc(11rem+env(safe-area-inset-bottom))]">
           {!useSubSections && subCategories.length > 0 ? (
             <QrTableGuestScrollRow
               className="border-b border-stone-100 bg-white/80"
@@ -2009,18 +2019,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </div>
             {!homeCollection ? (
               <QrTableGuestCategoryNav
-                categories={mainCategories}
+                categories={categoryHomeTiles.map((t) => t.key)}
                 selected={mainCategory}
-                counts={mainCategoryCounts}
+                counts={new Map(categoryHomeTiles.map((t) => [t.key, t.count]))}
+                imageFor={(c) => categoryHomeTiles.find((t) => t.key === c)?.imageUrl || ''}
                 labelFor={guestLabel}
                 ariaLabel={g('mainCategory')}
                 scrollPrevLabel={g('scrollPrevCategories')}
                 scrollNextLabel={g('scrollNextCategories')}
-                onSelect={(c) => {
-                  setHomeCollection(null)
-                  setMainCategory(c)
-                  setSubCategory('')
-                }}
+                onSelect={openCategoryFromHome}
               />
             ) : null}
           </div>
@@ -2295,7 +2302,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         }}
         onMoreMenu={() => {
           setOrderDoneOpen(false)
-          if (categoryHomePilot) backToCategoryHome()
+          if (categoryHomeEnabled) backToCategoryHome()
         }}
         onPayBill={onPayBillHandler}
       />
@@ -2311,7 +2318,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
         onMoreMenu={() => {
           setStatusOpen(false)
           setOrderDoneOpen(false)
-          if (categoryHomePilot) backToCategoryHome()
+          if (categoryHomeEnabled) backToCategoryHome()
         }}
       />
 
