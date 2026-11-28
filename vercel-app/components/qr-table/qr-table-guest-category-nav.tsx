@@ -7,7 +7,7 @@ export function QrTableGuestCategoryNav(props: {
   categories: string[]
   selected: string
   counts?: Map<string, number>
-  /** 카테고리 홈과 같은 원형 사진. 없으면 기본 그림. */
+  /** 카테고리 홈 타일과 같은 원형 사진 URL. 없으면 기본 그림. */
   imageFor?: (raw: string) => string
   labelFor: (raw: string) => string
   ariaLabel: string
@@ -49,14 +49,14 @@ export function QrTableGuestCategoryNav(props: {
               key={c}
               type="button"
               onClick={() => onSelect(c)}
-              className={`flex min-h-16 min-w-[4.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 touch-manipulation transition-colors ${
+              className={`flex min-h-[5.25rem] min-w-[4.75rem] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-2 py-1.5 touch-manipulation transition-colors ${
                 active
                   ? 'bg-[var(--qr-brand,#b45309)]/10 text-[var(--qr-brand,#b45309)]'
                   : 'text-stone-600 active:bg-stone-50'
               }`}
               aria-current={active ? 'page' : undefined}
             >
-              <QrGuestCategoryCircle src={imageUrl} className={`h-8 w-8 shrink-0 ${ring}`} />
+              <QrGuestCategoryCircle src={imageUrl} className={`h-12 w-12 shrink-0 ${ring}`} />
               <span
                 className={`max-w-[6rem] truncate text-[11px] leading-tight ${
                   active ? 'font-bold' : 'font-semibold'

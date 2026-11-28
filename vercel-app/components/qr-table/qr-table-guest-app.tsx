@@ -1233,15 +1233,6 @@ export function QrTableGuestApp({ token }: { token: string }) {
     )
   }, [listRaw, mainCategory, uncategorizedLabel, categoryTabOrder, homeCollectionIdSet])
 
-  const mainCategoryCounts = React.useMemo(() => {
-    const map = new Map<string, number>()
-    for (const m of listRaw) {
-      const main = String(m.categoryMain || '').trim() || uncategorizedLabel
-      map.set(main, (map.get(main) || 0) + 1)
-    }
-    return map
-  }, [listRaw, uncategorizedLabel])
-
   const subCategoryCounts = React.useMemo(() => {
     const map = new Map<string, number>()
     let all = 0
@@ -1886,7 +1877,7 @@ export function QrTableGuestApp({ token }: { token: string }) {
       ) : null}
 
       {step === 'menu' ? (
-        <section className="pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
+        <section className="pb-[calc(11rem+env(safe-area-inset-bottom))]">
           {!useSubSections && subCategories.length > 0 ? (
             <QrTableGuestScrollRow
               className="border-b border-stone-100 bg-white/80"
@@ -2028,19 +2019,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
             </div>
             {!homeCollection ? (
               <QrTableGuestCategoryNav
-                categories={mainCategories}
+                categories={categoryHomeTiles.map((t) => t.key)}
                 selected={mainCategory}
-                counts={mainCategoryCounts}
-                imageFor={(c) => categoryImageByMain.get(c) || ''}
+                counts={new Map(categoryHomeTiles.map((t) => [t.key, t.count]))}
+                imageFor={(c) => categoryHomeTiles.find((t) => t.key === c)?.imageUrl || ''}
                 labelFor={guestLabel}
                 ariaLabel={g('mainCategory')}
                 scrollPrevLabel={g('scrollPrevCategories')}
                 scrollNextLabel={g('scrollNextCategories')}
-                onSelect={(c) => {
-                  setHomeCollection(null)
-                  setMainCategory(c)
-                  setSubCategory('')
-                }}
+                onSelect={openCategoryFromHome}
               />
             ) : null}
           </div>
