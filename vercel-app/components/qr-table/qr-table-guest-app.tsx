@@ -124,6 +124,44 @@ type CartLine = {
 /** 서버 `submitQrCart`도 200자로 자른다. */
 const QR_GUEST_LINE_NOTE_MAX = 200
 
+const qrGuestHeaderActionBtnClass =
+  'inline-flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-center text-[11px] font-bold leading-tight shadow-sm touch-manipulation disabled:opacity-50'
+
+function QrGuestHeaderIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--qr-brand,#b45309)]/12 text-[var(--qr-brand,#b45309)]">
+      {children}
+    </span>
+  )
+}
+
+function QrGuestIconMember() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+      <path d="M20 21a8 8 0 0 0-16 0" strokeLinecap="round" />
+      <circle cx="12" cy="8" r="3.5" />
+    </svg>
+  )
+}
+
+function QrGuestIconOrders() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+      <path d="M8 6h11M8 12h11M8 18h11" strokeLinecap="round" />
+      <path d="M5 6h.01M5 12h.01M5 18h.01" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function QrGuestIconCallStaff() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+      <path d="M6 9a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 21h4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 type OrderSummaryItem = {
   id?: string
   menuId?: string | number
@@ -1564,30 +1602,38 @@ export function QrTableGuestApp({ token }: { token: string }) {
           </h1>
           <GuestLangHeaderButton lang={lang} onClick={() => setLangSheetOpen(true)} />
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5 empty:hidden">
+        <div className="flex items-stretch gap-2 border-t border-[var(--qr-brand,#b45309)]/10 bg-[var(--qr-brand,#b45309)]/[0.06] px-3 py-2 empty:hidden">
           {sessionAuth ? (
             member ? (
               <button
                 type="button"
                 disabled={memberBusy}
-                className="max-w-[8.5rem] truncate rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800"
+                className={`${qrGuestHeaderActionBtnClass} max-w-[9.5rem] border border-emerald-300/80 bg-emerald-50 text-emerald-900`}
                 onClick={() => {
                   void handleMemberLogout().then(() => showToast(g('memberLogout'), 2800))
                 }}
                 title={g('memberLogout')}
               >
-                {g('memberLogout')} · {(member.name || member.memberNo || '').slice(0, 8)}
+                <QrGuestHeaderIcon>
+                  <QrGuestIconMember />
+                </QrGuestHeaderIcon>
+                <span className="line-clamp-2 w-full">
+                  {g('memberLogout')} · {(member.name || member.memberNo || '').slice(0, 8)}
+                </span>
               </button>
             ) : (
               <button
                 type="button"
-                className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
+                className={`${qrGuestHeaderActionBtnClass} border border-[var(--qr-brand,#b45309)]/30 bg-white text-stone-800`}
                 onClick={() => {
                   setMemberError('')
                   setMemberLoginOpen(true)
                 }}
               >
-                {g('memberLogin')}
+                <QrGuestHeaderIcon>
+                  <QrGuestIconMember />
+                </QrGuestHeaderIcon>
+                <span className="line-clamp-2 w-full">{g('memberLogin')}</span>
               </button>
             )
           ) : null}
@@ -1598,20 +1644,28 @@ export function QrTableGuestApp({ token }: { token: string }) {
             <button
               type="button"
               disabled={busy}
-              className="rounded-full bg-[var(--qr-brand,#b45309)] px-2.5 py-1 text-[11px] font-semibold text-white"
+              className={`${qrGuestHeaderActionBtnClass} border border-[var(--qr-brand,#b45309)] bg-[var(--qr-brand,#b45309)] text-white`}
               onClick={() => void openBillPay()}
             >
-              {g('payBill')}
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-[13px] font-black">
+                ฿
+              </span>
+              <span className="line-clamp-2 w-full">{g('payBill')}</span>
             </button>
           ) : null}
           {(step === 'menu' || step === 'category_home') && sessionAuth ? (
             <button
               type="button"
-              className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
+              className={`${qrGuestHeaderActionBtnClass} relative border border-[var(--qr-brand,#b45309)]/30 bg-white text-stone-800`}
               onClick={() => setHistoryOpen(true)}
             >
-              {g('orderHistory')}
-              {sentLines.length > 0 ? ` (${sentLines.reduce((n, l) => n + l.qty, 0)})` : ''}
+              <QrGuestHeaderIcon>
+                <QrGuestIconOrders />
+              </QrGuestHeaderIcon>
+              <span className="line-clamp-2 w-full">
+                {g('orderHistory')}
+                {sentLines.length > 0 ? ` (${sentLines.reduce((n, l) => n + l.qty, 0)})` : ''}
+              </span>
             </button>
           ) : null}
           {(step === 'menu' ||
@@ -1621,10 +1675,15 @@ export function QrTableGuestApp({ token }: { token: string }) {
           sessionAuth ? (
             <button
               type="button"
-              className="rounded-full border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold"
+              className={`${qrGuestHeaderActionBtnClass} border border-[var(--qr-brand,#b45309)]/45 bg-[var(--qr-brand,#b45309)]/12 text-[var(--qr-brand,#b45309)] ${
+                callOpen ? 'ring-2 ring-[var(--qr-brand,#b45309)]/50' : ''
+              }`}
               onClick={() => setCallOpen((v) => !v)}
             >
-              {g('callStaff')}
+              <QrGuestHeaderIcon>
+                <QrGuestIconCallStaff />
+              </QrGuestHeaderIcon>
+              <span className="line-clamp-2 w-full">{g('callStaff')}</span>
             </button>
           ) : null}
         </div>
